@@ -51,4 +51,52 @@ export class WorkflowService {
       },
     });
   }
+
+  async classifyInvoice(workflowId: string, classification: any) {
+    return this.prisma.workflowSession.update({
+      where: { id: workflowId },
+
+      data: {
+        payload: {
+          classification,
+        },
+
+        currentStep: 'ACCOUNT_MAPPING',
+      },
+    });
+  }
+
+  async saveExtractionResult(workflowId: string, extractionResult: any) {
+    return this.prisma.workflowSession.update({
+      where: {
+        id: workflowId,
+      },
+
+      data: {
+        currentStep: 'EXTRACTION_REVIEW',
+
+        payload: {
+          extractionResult,
+        },
+      },
+    });
+  }
+
+  async saveClassificationResult(workflowId: string, classification: any) {
+    return this.prisma.workflowSession.update({
+      where: {
+        id: workflowId,
+      },
+
+      data: {
+        currentStep: 'CLASSIFICATION_REVIEW',
+
+        payload: {
+          extractionResult: (await this.getWorkflow(workflowId))?.payload as any,
+
+          classificationResult: classification,
+        },
+      },
+    });
+  }
 }
