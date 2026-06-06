@@ -1,0 +1,408 @@
+//////////////////////////////////////////////////////
+// 🌍 PUBLIC SCHEMA (Shared across all tenants)
+//////////////////////////////////////////////////////
+
+Table public.plans {
+  id uuid [pk]
+  name varchar // Starter, Professional, Enterprise
+  price decimal(10,2)
+  billing_cycle varchar // monthly, yearly
+  features jsonb // limits, available modules, etc.
+  is_active boolean [default: true]
+  created_at timestamp
+}
+
+Table public.organizations {
+  id uuid [pk]
+  name varchar
+  industry varchar
+  currency varchar // default org currency (ISO 4217)
+  created_at timestamp
+}
+
+Table public.subscriptions {
+  id uuid [pk]
+  organization_id uuid
+  plan_id uuid
+  status varchar // active, past_due, canceled, trialing
+  current_period_start timestamp
+  current_period_end timestamp
+  created_at timestamp
+}
+
+Table public.users {
+  id uuid [pk]
+  full_name varchar
+  email varchar [unique]
+  password_hash varchar
+  global_role varchar [default: 'user'] // 'admin' for platform admin dashboard, 'user' otherwise
+  created_at timestamp
+}
+
+Table public.organization_users {
+  id uuid [pk]
+  organization_id uuid
+  user_id uuid
+  role varchar // owner, accountant, viewer
+  is_active boolean [default: true]
+  invited_by uuid [null]
+  joined_at timestamp [null]
+  created_at timestamp
+}
+
+Table public.invitations {
+  id uuid [pk]
+  organization_id uuid
+  email varchar
+  role varchar
+  token varchar [unique]
+  invited_by uuid
+  expires_at timestamp
+  accepted_at timestamp [null]
+  created_at timestamp
+}
+
+Table public.audit_logs {
+  id uuid [pk]
+  organization_id uuid
+  user_id uuid
+  action varchar
+  entity_type varchar
+  entity_id uuid
+  metadata jsonb
+  created_at timestamp
+}
+
+// Relationships – public schema
+Ref: public.invitations.organization_id > public.organizations.id
+Ref: public.invitations.invited_by > public.users.id
+Ref: public.subscriptions.organization_id > public.organizations.id
+Ref: public.subscriptions.plan_id > public.plans.id
+Ref: public.organization_users.organization_id > public.organizations.id
+Ref: public.organization_users.user_id > public.users.id
+Ref: public.audit_logs.organization_id > public.organizations.id
+Ref: public.audit_logs.user_id > public.users.id
+
+
+//////////////////////////////////////////////////////
+// 🏢 TENANT SCHEMA (One schema per tenant)
+//////////////////////////////////////////////////////
+
+// ----- CHART OF ACCOUNTS -----
+Table tenant.accounts {
+  id uuid [pk]
+  parent_id uuid [null]
+  code varchar
+  name varchar
+  type varchar // Asset, Liability, Equity, Revenue, Expense
+  is_leaf boolean [default: true]
+  level int [default: 1]
+  is_active boolean [default: true]
+  created_at timestamp
+}
+Ref: tenant.accounts.parent_id > tenant.accounts.id
+
+// ----- ONBOARDING RESPONSES -----
+// Captures answers that were used to auto-create the chart of accounts
+Table tenant.onboarding_responses {
+  id uuid [pk]
+  question_key varchar
+  answer text
+  created_at timestamp
+}
+
+// ----- CUSTOMERS & VENDORS -----
+Table tenant.customers {
+  id uuid [pk]
+  name varchar
+  email varchar [null]
+  phone varchar [null]
+  address text [null]
+  payment_terms int [null]
+  currency varchar [null]
+  is_active boolean [default: true]
+  created_at timestamp
+  created_by uuid
+}
+Table tenant.vendors {
+  id uuid [pk]
+  name varchar
+  email varchar [null]
+  phone varchar [null]
+  address text [null]
+  payment_terms int [null]
+  is_active boolean [default: true]
+  created_at timestamp
+  created_by uuid
+}
+Ref: tenant.customers.created_by > public.users.id
+Ref: tenant.vendors.created_by > public.users.id
+
+// ----- BANK ACCOUNTS -----
+Table tenant.bank_accounts {
+  id uuid [pk]
+  name varchar
+  account_number varchar [null]
+  bank_name varchar [null]
+  currency varchar
+  gl_account_id uuid
+  is_active boolean [default: true]
+  created_at timestamp
+}
+Ref: tenant.bank_accounts.gl_account_id > tenant.accounts.id
+
+// ----- GENERAL LEDGER -----
+Table tenant.journal_entries {
+  id uuid [pk]
+  date date
+  description text
+  status varchar // draft, posted, etc.
+  reference_type varchar [null] // 'invoice','vendor_bill','expense','payment', etc.
+  reference_id uuid [null]
+  created_by uuid
+  created_at timestamp
+}
+Table tenant.journal_lines {
+  id uuid [pk]
+  journal_entry_id uuid
+  account_id uuid
+  debit decimal(15,2) [default: 0]
+  credit decimal(15,2) [default: 0]
+  description text [null]
+}
+Ref: tenant.journal_entries.created_by > public.users.id
+Ref: tenant.journal_lines.journal_entry_id > tenant.journal_entries.id
+Ref: tenant.journal_lines.account_id > tenant.accounts.id
+
+// ----- INVOICES (CUSTOMER) -----
+Table tenant.invoices {
+  id uuid [pk]
+  invoice_number varchar
+  customer_id uuid
+  issue_date date
+  due_date date
+  subtotal decimal(15,2)
+  tax_amount decimal(15,2) [default: 0]
+  total decimal(15,2)
+  status varchar // draft, sent, partial, paid, overdue, etc.
+  journal_entry_id uuid [null]
+  created_by uuid
+  created_at timestamp
+}
+Table tenant.invoice_lines {
+  id uuid [pk]
+  invoice_id uuid
+  line_number int
+  description text
+  quantity decimal(15,4) [default: 1]
+  unit_price decimal(15,2)
+  discount_amount decimal(15,2) [default: 0]
+  tax_rate decimal(5,2) [default: 0]
+  line_subtotal decimal(15,2)
+  tax_amount decimal(15,2)
+  line_total decimal(15,2)
+  revenue_account_id uuid [null]
+  created_at timestamp
+}
+Ref: tenant.invoice_lines.invoice_id > tenant.invoices.id
+Ref: tenant.invoice_lines.revenue_account_id > tenant.accounts.id
+Ref: tenant.invoices.customer_id > tenant.customers.id
+Ref: tenant.invoices.journal_entry_id > tenant.journal_entries.id
+Ref: tenant.invoices.created_by > public.users.id
+
+// ----- CUSTOMER PAYMENTS -----
+Table tenant.customer_payments {
+  id uuid [pk]
+  customer_id uuid
+  invoice_id uuid [null] // null if unapplied
+  amount decimal(15,2)
+  payment_method varchar
+  bank_account_id uuid [null]
+  payment_date date
+  reference varchar [null]
+  journal_entry_id uuid [null]
+  notes text [null]
+  created_by uuid
+  created_at timestamp
+}
+Ref: tenant.customer_payments.customer_id > tenant.customers.id
+Ref: tenant.customer_payments.invoice_id > tenant.invoices.id
+Ref: tenant.customer_payments.bank_account_id > tenant.bank_accounts.id
+Ref: tenant.customer_payments.journal_entry_id > tenant.journal_entries.id
+Ref: tenant.customer_payments.created_by > public.users.id
+
+// ----- VENDOR BILLS -----
+Table tenant.vendor_bills {
+  id uuid [pk]
+  bill_number varchar
+  vendor_id uuid
+  issue_date date
+  due_date date
+  subtotal decimal(15,2)
+  tax_amount decimal(15,2) [default: 0]
+  total decimal(15,2)
+  status varchar // draft, received, partial, paid, overdue
+  journal_entry_id uuid [null]
+  created_by uuid
+  created_at timestamp
+}
+Table tenant.vendor_bill_lines {
+  id uuid [pk]
+  vendor_bill_id uuid
+  line_number int
+  description text
+  quantity decimal(15,4) [default: 1]
+  unit_cost decimal(15,2)
+  discount_amount decimal(15,2) [default: 0]
+  tax_rate decimal(5,2) [default: 0]
+  line_subtotal decimal(15,2)
+  tax_amount decimal(15,2)
+  line_total decimal(15,2)
+  expense_account_id uuid [null]
+  created_at timestamp
+}
+Ref: tenant.vendor_bill_lines.vendor_bill_id > tenant.vendor_bills.id
+Ref: tenant.vendor_bill_lines.expense_account_id > tenant.accounts.id
+Ref: tenant.vendor_bills.vendor_id > tenant.vendors.id
+Ref: tenant.vendor_bills.journal_entry_id > tenant.journal_entries.id
+Ref: tenant.vendor_bills.created_by > public.users.id
+
+// ----- VENDOR PAYMENTS -----
+Table tenant.vendor_payments {
+  id uuid [pk]
+  vendor_bill_id uuid
+  vendor_id uuid
+  amount decimal(15,2)
+  payment_method varchar
+  bank_account_id uuid [null]
+  payment_date date
+  reference varchar [null]
+  journal_entry_id uuid [null]
+  notes text [null]
+  created_by uuid
+  created_at timestamp
+}
+Ref: tenant.vendor_payments.vendor_bill_id > tenant.vendor_bills.id
+Ref: tenant.vendor_payments.vendor_id > tenant.vendors.id
+Ref: tenant.vendor_payments.bank_account_id > tenant.bank_accounts.id
+Ref: tenant.vendor_payments.journal_entry_id > tenant.journal_entries.id
+Ref: tenant.vendor_payments.created_by > public.users.id
+
+// ----- DIRECT EXPENSES (out-of-band spend, not through vendor bills) -----
+Table tenant.expenses {
+  id uuid [pk]
+  expense_number varchar
+  expense_date date
+  category varchar [null]
+  description text
+  vendor_id uuid [null]
+  amount decimal(15,2)
+  tax_amount decimal(15,2) [default: 0]
+  total decimal(15,2)
+  expense_account_id uuid
+  payment_method varchar
+  bank_account_id uuid [null]
+  journal_entry_id uuid [null]
+  attachment_url varchar [null]
+  created_by uuid
+  created_at timestamp
+}
+Ref: tenant.expenses.vendor_id > tenant.vendors.id
+Ref: tenant.expenses.expense_account_id > tenant.accounts.id
+Ref: tenant.expenses.bank_account_id > tenant.bank_accounts.id
+Ref: tenant.expenses.journal_entry_id > tenant.journal_entries.id
+Ref: tenant.expenses.created_by > public.users.id
+
+// ----- RECURRING ENTRIES (Automation, e.g., monthly wages) -----
+Table tenant.recurring_entries {
+  id uuid [pk]
+  name varchar
+  frequency varchar // monthly, weekly, yearly
+  start_date date
+  end_date date [null]
+  next_run date
+  is_active boolean [default: true]
+  template jsonb // stores lines: [{account_id, debit, credit, description}]
+  created_by uuid
+  created_at timestamp
+}
+
+Table tenant.recurring_entry_logs {
+  id uuid [pk]
+  recurring_entry_id uuid
+  journal_entry_id uuid
+  generated_date date
+  status varchar // generated, failed
+  created_at timestamp
+}
+Ref: tenant.recurring_entries.created_by > public.users.id
+Ref: tenant.recurring_entry_logs.recurring_entry_id > tenant.recurring_entries.id
+Ref: tenant.recurring_entry_logs.journal_entry_id > tenant.journal_entries.id
+
+// ----- AI & AUTOMATION -----
+Table tenant.ocr_uploads {
+  id uuid [pk]
+  file_url varchar
+  extracted_text text [null]
+  confidence_score decimal(5,2) [null]
+  status varchar
+  result_type varchar [null] // invoice, bill, expense
+  result_id uuid [null] // id of the generated document
+  created_by uuid
+  created_at timestamp
+}
+Table tenant.ai_conversations {
+  id uuid [pk]
+  session_id uuid
+  user_id uuid
+  parent_id uuid [null]
+  question text
+  response text
+  created_at timestamp
+}
+Table tenant.forecasts {
+  id uuid [pk]
+  forecast_month date
+  predicted_revenue decimal(15,2)
+  predicted_expense decimal(15,2)
+  predicted_cashflow decimal(15,2)
+  model_version varchar
+  confidence_low decimal(15,2) [null]
+  confidence_high decimal(15,2) [null]
+  created_at timestamp
+}
+Ref: tenant.ocr_uploads.created_by > public.users.id
+Ref: tenant.ai_conversations.user_id > public.users.id
+
+// ----- ALERTS & NOTIFICATIONS -----
+Table tenant.alerts {
+  id uuid [pk]
+  type varchar // expense_threshold, due_date, etc.
+  severity varchar // info, warning, critical
+  title varchar
+  message text
+  entity_type varchar [null]
+  entity_id uuid [null]
+  is_read boolean [default: false]
+  created_at timestamp
+}
+
+// Configurable alert rules (e.g., expense > X, due within N days)
+Table tenant.alert_rules {
+  id uuid [pk]
+  name varchar
+  rule_type varchar
+  parameters jsonb // e.g. {"threshold": 5000, "account_id": "..."}
+  is_active boolean [default: true]
+  created_at timestamp
+}
+
+// ----- BUDGETING & SUGGESTIONS -----
+Table tenant.suggestions {
+  id uuid [pk]
+  type varchar // cost_optimization, budgeting, cashflow
+  title varchar
+  description text
+  status varchar // active, dismissed, implemented
+  created_at timestamp
+}
