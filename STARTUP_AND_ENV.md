@@ -26,9 +26,17 @@ JWT_EXPIRES_IN=1d
 GOOGLE_EMAIL=
 GOOGLE_APP_PASSWORD=
 GOOGLE_SMTP_REJECT_UNAUTHORIZED=true
+GROQ_API_KEY=
+AI_EMBEDDING_PROVIDER=mock
+HF_TOKEN=
+HF_EMBEDDING_MODEL=BAAI/bge-m3
 ```
 
 `GOOGLE_EMAIL` and `GOOGLE_APP_PASSWORD` are used for signup and forgot-password OTP email. Use a Google app password and restart the backend after changing these values.
+
+`GROQ_API_KEY` enables the tenant financial assistant. Local embeddings default to
+the deterministic `mock` provider. Set `AI_EMBEDDING_PROVIDER=huggingface` and
+provide `HF_TOKEN` to use hosted Hugging Face embeddings.
 
 If your local Windows machine shows `SELF_SIGNED_CERT_IN_CHAIN` while sending OTP, set:
 

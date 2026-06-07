@@ -92,7 +92,7 @@ export function getPendingOtpPurpose() {
   return (localStorage.getItem("hesbtak-pending-otp-purpose") as "signup" | "password_reset" | null) ?? "signup";
 }
 
-export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
+function authenticatedHeaders(options: RequestInit) {
   const session = getSession();
   const headers = new Headers(options.headers);
   if (!headers.has("Content-Type") && options.body) {
@@ -104,8 +104,18 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   if (session?.activeTenantId) {
     headers.set("x-tenant-id", session.activeTenantId);
   }
+  return headers;
+}
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+async function authenticatedFetch(path: string, options: RequestInit = {}) {
+  return fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: authenticatedHeaders(options),
+  });
+}
+
+export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const res = await authenticatedFetch(path, options);
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
   if (!res.ok) {
@@ -117,6 +127,24 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     throw new Error(message);
   }
   return data as T;
+}
+
+export async function apiBlob(path: string): Promise<Blob> {
+  const res = await authenticatedFetch(path);
+  if (!res.ok) {
+    const text = await res.text();
+    let message = "Download failed";
+    try {
+      const data = text ? JSON.parse(text) : null;
+      message = Array.isArray(data?.message)
+        ? data.message.join(", ")
+        : data?.message ?? message;
+    } catch {
+      message = text || message;
+    }
+    throw new Error(message);
+  }
+  return res.blob();
 }
 
 export const money = (value: number | string | null | undefined) =>
