@@ -13,6 +13,8 @@ import {
   Zap,
   Globe,
 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { getSession } from "@/lib/api";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -30,6 +32,15 @@ export const Route = createFileRoute("/")({
 
 function Landing() {
   const { t, dir } = useI18n();
+  const [loggedIn, setLoggedIn] = useState(false);
+
+  useEffect(() => {
+    setLoggedIn(!!getSession());
+  }, []);
+
+  const appTarget = loggedIn ? "/dashboard" : "/login";
+  const startTarget = loggedIn ? "/dashboard" : "/register";
+
   return (
     <div dir={dir} className="min-h-screen bg-surface text-on-surface">
       {/* Nav */}
@@ -44,10 +55,10 @@ function Landing() {
           <div className="flex items-center gap-2">
             <LangToggle />
             <ThemeToggle />
-            <Link to="/login">
+            <Link to={appTarget}>
               <Button variant="ghost" size="sm">{t("signIn")}</Button>
             </Link>
-            <Link to="/register">
+            <Link to={startTarget}>
               <Button size="sm" className="bg-gradient-primary">{t("getStarted")}</Button>
             </Link>
           </div>
@@ -66,12 +77,12 @@ function Landing() {
             </h1>
             <p className="mt-5 text-lg text-on-surface-variant max-w-xl">{t("heroSubtitle")}</p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link to="/register">
+              <Link to={startTarget}>
                 <Button size="lg" className="bg-gradient-primary gap-2">
                   {t("getStarted")} <ArrowRight className="h-4 w-4 rtl:rotate-180" />
                 </Button>
               </Link>
-              <Link to="/dashboard">
+              <Link to={loggedIn ? "/dashboard" : "/login"}>
                 <Button size="lg" variant="outline">{t("seeDemo")}</Button>
               </Link>
             </div>
@@ -192,7 +203,7 @@ function Landing() {
           {t("ctaSubtitle")}
         </p>
         <div className="mt-8 flex justify-center gap-3">
-          <Link to="/register">
+          <Link to={startTarget}>
             <Button size="lg" className="bg-gradient-primary gap-2">
               {t("getStarted")} <ArrowRight className="h-4 w-4 rtl:rotate-180" />
             </Button>

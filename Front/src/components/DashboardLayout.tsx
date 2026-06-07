@@ -96,6 +96,10 @@ export default function DashboardLayout() {
             <Button variant="ghost" size="icon">
               <Bell className="h-4 w-4" />
             </Button>
+            <div className="hidden sm:block text-end">
+              <p className="text-sm font-medium leading-tight">{session?.user.fullName ?? "Account"}</p>
+              <p className="text-xs text-on-surface-variant leading-tight">{session?.tenants.find((t) => t.organizationId === session.activeTenantId)?.organizationName ?? "Onboarding"}</p>
+            </div>
             <div className="h-9 w-9 rounded-full bg-gradient-primary text-primary-foreground grid place-items-center text-sm font-semibold">
               {session?.user.fullName?.[0] ?? "A"}
             </div>

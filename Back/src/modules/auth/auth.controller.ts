@@ -10,6 +10,7 @@ import {
   LoginDto,
   OnboardingAnswerDto,
   RegisterDto,
+  ResendOtpDto,
   ResetPasswordDto,
   VerifyOtpDto,
 } from './dto';
@@ -31,6 +32,11 @@ export class AuthController {
   @Post('auth/forgot-password')
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.auth.forgotPassword(dto);
+  }
+
+  @Post('auth/resend-otp')
+  resendOtp(@Body() dto: ResendOtpDto) {
+    return this.auth.resendOtp(dto);
   }
 
   @Post('auth/verify-otp')
@@ -60,6 +66,15 @@ export class AuthController {
     @Body() dto: OnboardingAnswerDto,
   ) {
     return this.auth.answerOnboarding(organizationId, user.sub, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('onboarding/complete')
+  completeNewOrganization(
+    @CurrentUser() user: JwtUser,
+    @Body() dto: CompleteOnboardingDto,
+  ) {
+    return this.auth.completeOnboarding(undefined, user.sub, dto);
   }
 
   @UseGuards(JwtAuthGuard)

@@ -6,6 +6,8 @@ export type TenantContext = {
   organizationId: string;
   schemaName?: string;
   organizationName: string;
+  industry?: string;
+  currency?: string;
   role: string;
 };
 
@@ -16,6 +18,7 @@ export type Session = {
     fullName: string;
     email: string;
     globalRole: string;
+    emailVerifiedAt?: string | null;
   };
   tenants: TenantContext[];
   activeTenantId?: string;
@@ -44,6 +47,8 @@ export function saveSession(data: {
             organizationId: data.organization.id,
             schemaName: data.organization.schemaName,
             organizationName: data.organization.name,
+            industry: (data.organization as any).industry,
+            currency: (data.organization as any).currency,
             role: "owner",
           },
         ]
@@ -58,6 +63,14 @@ export function saveSession(data: {
   return session;
 }
 
+export function updateSession(patch: Partial<Session>) {
+  const current = getSession();
+  if (!current) return null;
+  const session = { ...current, ...patch };
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  return session;
+}
+
 export function clearSession() {
   localStorage.removeItem(SESSION_KEY);
 }
@@ -68,6 +81,14 @@ export function setPendingEmail(email: string) {
 
 export function getPendingEmail() {
   return localStorage.getItem(PENDING_EMAIL_KEY) ?? "";
+}
+
+export function setPendingOtpPurpose(purpose: "signup" | "password_reset") {
+  localStorage.setItem("hesbtak-pending-otp-purpose", purpose);
+}
+
+export function getPendingOtpPurpose() {
+  return (localStorage.getItem("hesbtak-pending-otp-purpose") as "signup" | "password_reset" | null) ?? "signup";
 }
 
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {

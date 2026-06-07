@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
-import { api, saveSession, setPendingEmail } from "@/lib/api";
+import { api, saveSession, setPendingEmail, setPendingOtpPurpose } from "@/lib/api";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -18,12 +18,9 @@ function RegisterPage() {
     fullName: "",
     email: "",
     password: "",
-    organizationName: "",
-    industry: "Retail",
-    currency: "USD",
   });
 
-  const update = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+  const update = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((current) => ({ ...current, [key]: e.target.value }));
 
   const submit = async (e: React.FormEvent) => {
@@ -36,8 +33,9 @@ function RegisterPage() {
       });
       saveSession(data);
       setPendingEmail(form.email);
-      toast.success("Account created");
-      nav({ to: "/onboarding" });
+      setPendingOtpPurpose("signup");
+      toast.success("Account created. Check your email for the OTP code.");
+      nav({ to: "/verify-otp" });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Registration failed");
     } finally {
@@ -60,29 +58,7 @@ function RegisterPage() {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="password">{t("password")}</Label>
-          <Input id="password" type="password" value={form.password} onChange={update("password")} required />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="org">Organization</Label>
-          <Input id="org" value={form.organizationName} onChange={update("organizationName")} required />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="industry">Industry</Label>
-            <select id="industry" value={form.industry} onChange={update("industry")} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
-              {["Retail", "Restaurant", "Consulting", "E-commerce", "Manufacturing", "Healthcare", "Real Estate", "Tech / SaaS"].map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="currency">Currency</Label>
-            <select id="currency" value={form.currency} onChange={update("currency")} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
-              {["USD", "EUR", "EGP", "SAR", "AED"].map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
-          </div>
+          <Input id="password" type="password" value={form.password} onChange={update("password")} minLength={8} required />
         </div>
         <Button className="w-full bg-gradient-primary h-11" disabled={loading}>
           {loading ? "..." : t("createAccount")}

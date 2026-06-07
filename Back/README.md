@@ -4,9 +4,9 @@ NestJS API for a multi-tenant SMB ERP/accounting system. The platform uses one s
 
 ## Implemented Flows
 
-- Auth: registration, login, JWT guards, forgot-password OTP, OTP verification, password reset, invitations, invitation acceptance.
-- Multi-tenancy: shared public `users`, `organizations`, `organization_users`, `invitations`, `plans`, `subscriptions`, `audit_logs`, and `password_reset_otps`; tenant schema provisioning at registration.
-- Onboarding: single-answer endpoint remains available, plus frontend-priority batch completion endpoint.
+- Auth: registration, signup OTP verification, login, JWT guards, forgot-password OTP, password reset, invitations, invitation acceptance.
+- Multi-tenancy: shared public `users`, `organizations`, `organization_users`, `invitations`, `plans`, `subscriptions`, `audit_logs`, and `password_reset_otps`; tenant schema provisioning during onboarding.
+- Onboarding: frontend-priority batch completion endpoint can create the organization and tenant schema after signup.
 - Accounting: chart of accounts, customers, vendors, journal entries, invoices, customer payments, vendor bills, vendor payments, direct expenses.
 - Automation and insight: recurring entries, scheduled recurring processing, dashboard KPIs, baseline forecasts, chatbot ledger summary, alerts, suggestions.
 - Frontend contract: protected tenant endpoints require `Authorization: Bearer <token>` and `x-tenant-id: <organizationId>`.
@@ -29,6 +29,8 @@ REDIS_PORT=6379
 REDIS_URL=redis://:redis@localhost:6379
 JWT_SECRET=replace-with-a-long-random-secret
 JWT_EXPIRES_IN=1d
+GOOGLE_EMAIL=
+GOOGLE_APP_PASSWORD=
 ```
 
 ## Setup
@@ -56,7 +58,7 @@ TOKEN=<paste-access-token>
 TENANT=<paste-organization-id>
 ```
 
-### Register
+### Register User
 
 ```bash
 curl -X POST "$BASE/auth/register" \
@@ -64,11 +66,18 @@ curl -X POST "$BASE/auth/register" \
   -d '{
     "fullName": "Mona Owner",
     "email": "owner@example.com",
-    "password": "Password123!",
-    "organizationName": "Nile Retail",
-    "industry": "Retail",
-    "currency": "EGP"
+    "password": "Password123!"
   }'
+```
+
+### Verify Signup OTP
+
+Set `GOOGLE_EMAIL` and `GOOGLE_APP_PASSWORD` to send the code through Gmail SMTP.
+
+```bash
+curl -X POST "$BASE/auth/verify-otp" \
+  -H "Content-Type: application/json" \
+  -d '{ "email": "owner@example.com", "code": "<dev-code>", "purpose": "signup" }'
 ```
 
 ### Login
@@ -81,7 +90,7 @@ curl -X POST "$BASE/auth/login" \
 
 ### Forgot Password OTP
 
-In development, the response includes `devCode` so the flow is testable without email infrastructure.
+The OTP is sent by email using the configured Gmail SMTP credentials.
 
 ```bash
 curl -X POST "$BASE/auth/forgot-password" \
@@ -101,7 +110,28 @@ curl -X POST "$BASE/auth/reset-password" \
   -d '{ "email": "owner@example.com", "code": "<dev-code>", "password": "NewPassword123!" }'
 ```
 
-### Complete Onboarding In One Request
+### Complete Onboarding And Create Tenant
+
+For a newly registered user with no tenant yet, call:
+
+```bash
+curl -X POST "$BASE/onboarding/complete" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "organizationName": "Nile Retail",
+    "industry": "Retail",
+    "currency": "EGP",
+    "answers": [
+      { "questionKey": "company_name", "answer": "Nile Retail" },
+      { "questionKey": "industry", "answer": "Retail" },
+      { "questionKey": "currency", "answer": "EGP" },
+      { "questionKey": "chart_preferences", "answer": "{\"qProducts\":true,\"qEmployees\":true}" }
+    ]
+  }'
+```
+
+For an existing tenant, use:
 
 ```bash
 curl -X POST "$BASE/onboarding/$TENANT/complete" \
@@ -310,5 +340,5 @@ curl "$BASE/admin/dashboard" \
 
 - Tenant schema names are generated as `tenant_<organization_uuid_with_underscores>` and validated before raw SQL use.
 - Public/shared tables are Prisma models. Tenant schema tables are provisioned and queried with guarded raw SQL because schemas are dynamic.
-- Email sending is stubbed. Development OTP responses expose `devCode`; replace this with a real email provider before production.
+- Signup and forgot-password OTP emails use Gmail SMTP when `GOOGLE_EMAIL` and `GOOGLE_APP_PASSWORD` are set.
 - Forecast and chatbot services are deterministic baselines ready for real ML/LLM integrations.

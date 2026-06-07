@@ -7,6 +7,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { randomBytes, randomUUID } from 'crypto';
+import * as tls from 'node:tls';
 import { DataBaseService } from '../../database/database.service';
 import { TenantService } from '../tenant/tenant.service';
 import {
@@ -17,6 +18,7 @@ import {
   LoginDto,
   OnboardingAnswerDto,
   RegisterDto,
+  ResendOtpDto,
   ResetPasswordDto,
   VerifyOtpDto,
 } from './dto';
@@ -36,6 +38,7 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
+    this.assertEmailConfigured();
     const exists = await this.db.user.findUnique({
       where: {
         email: dto.email,
@@ -46,47 +49,51 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
-    const organizationId = randomUUID();
-    const schemaName = this.tenant.schemaNameForOrganization(organizationId);
-    const result = await this.db.$transaction(async (tx) => {
-      const user = await tx.user.create({
-        data: {
-          fullName: dto.fullName,
-          email: dto.email.toLowerCase(),
-          passwordHash,
-        },
-      });
-      const organization = await tx.organization.create({
-        data: {
-          id: organizationId,
-          name: dto.organizationName,
-          industry: dto.industry,
-          currency: dto.currency ?? 'USD',
-          schemaName,
-        },
-      });
-      await tx.organizationUser.create({
-        data: {
-          organizationId: organization.id,
-          userId: user.id,
-          role: 'owner',
-          joinedAt: new Date(),
-        },
-      });
-      return { user, organization };
+    const user = await this.db.user.create({
+      data: {
+        fullName: dto.fullName,
+        email: dto.email.toLowerCase(),
+        passwordHash,
+      },
     });
 
-    await this.tenant.provisionTenantSchema(result.organization.schemaName);
-    await this.tenant.seedChartOfAccounts(
-      result.organization.schemaName,
-      result.organization.industry,
+    let organization:
+      | { id: string; name: string; industry: string; currency: string; schemaName: string }
+      | undefined;
+
+    if (dto.organizationName && dto.industry) {
+      organization = await this.createOrganizationForUser(user.id, {
+        organizationName: dto.organizationName,
+        industry: dto.industry,
+        currency: dto.currency,
+      });
+    }
+
+    const otp = await this.issueOtp(user.id, 'signup');
+    await this.sendOtpEmail(
+      user.email,
+      otp.code,
+      'Verify your Hesbtk.AI account',
     );
 
     return {
-      accessToken: this.sign(result.user),
-      user: this.publicUser(result.user),
-      organization: result.organization,
+      accessToken: this.sign(user),
+      user: this.publicUser(user),
+      tenants: organization
+        ? [
+            {
+              organizationId: organization.id,
+              schemaName: organization.schemaName,
+              organizationName: organization.name,
+              industry: organization.industry,
+              currency: organization.currency,
+              role: 'owner',
+            },
+          ]
+        : [],
+      organization,
       onboarding: { nextQuestion: this.onboardingQuestions[0] },
+      otpSent: true,
     };
   }
 
@@ -110,6 +117,8 @@ export class AuthService {
         organizationId: tenant.organizationId,
         schemaName: tenant.organization.schemaName,
         organizationName: tenant.organization.name,
+        industry: tenant.organization.industry,
+        currency: tenant.organization.currency,
         role: tenant.role,
       })),
     };
@@ -148,19 +157,36 @@ export class AuthService {
 
     return {
       stored: true,
-      nextQuestion: await this.getNextOnboardingQuestion(organizationId, userId),
+      nextQuestion: await this.getNextOnboardingQuestion(
+        context.organizationId,
+        userId,
+      ),
     };
   }
 
   async completeOnboarding(
-    organizationId: string,
+    organizationId: string | undefined,
     userId: string,
     dto: CompleteOnboardingDto,
   ) {
-    const context = await this.tenant.fromOrganizationId(organizationId, userId, [
-      'owner',
-      'accountant',
-    ]);
+    const organization =
+      organizationId
+        ? undefined
+        : await this.createOrganizationForUser(userId, {
+            organizationName: dto.organizationName,
+            industry: dto.industry,
+            currency: dto.currency,
+          });
+    const context = organization
+      ? {
+          organizationId: organization.id,
+          schemaName: organization.schemaName,
+          role: 'owner',
+        }
+      : await this.tenant.fromOrganizationId(organizationId!, userId, [
+          'owner',
+          'accountant',
+        ]);
     const schema = this.tenant.quote(context.schemaName);
     for (const answer of dto.answers) {
       await this.db.$executeRawUnsafe(
@@ -173,11 +199,32 @@ export class AuthService {
 
     return {
       completed: true,
-      nextQuestion: await this.getNextOnboardingQuestion(organizationId, userId),
+      organization: organization
+        ? {
+            id: organization.id,
+            name: organization.name,
+            industry: organization.industry,
+            currency: organization.currency,
+            schemaName: organization.schemaName,
+          }
+        : undefined,
+      tenant: {
+        organizationId: context.organizationId,
+        schemaName: context.schemaName,
+        organizationName: organization?.name,
+        industry: organization?.industry,
+        currency: organization?.currency,
+        role: context.role,
+      },
+      nextQuestion: await this.getNextOnboardingQuestion(
+        context.organizationId,
+        userId,
+      ),
     };
   }
 
   async forgotPassword(dto: ForgotPasswordDto) {
+    this.assertEmailConfigured();
     const user = await this.db.user.findUnique({
       where: { email: dto.email.toLowerCase() },
     });
@@ -185,21 +232,36 @@ export class AuthService {
       return { sent: true };
     }
 
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    const codeHash = await bcrypt.hash(code, 12);
-    await this.db.passwordResetOtp.create({
-      data: {
-        userId: user.id,
-        codeHash,
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-      },
-    });
+    const otp = await this.issueOtp(user.id, 'password_reset');
+    await this.sendOtpEmail(
+      user.email,
+      otp.code,
+      'Reset your Hesbtk.AI password',
+    );
 
     return {
       sent: true,
       expiresInMinutes: 10,
-      devCode: process.env.NODE_ENV === 'production' ? undefined : code,
     };
+  }
+
+  async resendOtp(dto: ResendOtpDto) {
+    this.assertEmailConfigured();
+    const user = await this.db.user.findUnique({
+      where: { email: dto.email.toLowerCase() },
+    });
+    if (!user) {
+      return { sent: true };
+    }
+
+    const purpose = dto.purpose as 'signup' | 'password_reset';
+    const otp = await this.issueOtp(user.id, purpose);
+    const subject =
+      purpose === 'signup'
+        ? 'Verify your Hesbtk.AI account'
+        : 'Reset your Hesbtk.AI password';
+    await this.sendOtpEmail(user.email, otp.code, subject);
+    return { sent: true, expiresInMinutes: 10 };
   }
 
   async verifyOtp(dto: VerifyOtpDto) {
@@ -209,7 +271,20 @@ export class AuthService {
     if (!user) {
       throw new BadRequestException('Invalid or expired code');
     }
-    await this.findValidOtp(user.id, dto.code);
+    const purpose = dto.purpose ?? 'signup';
+    const otp = await this.findValidOtp(user.id, dto.code, purpose);
+    if (purpose === 'signup') {
+      await this.db.$transaction([
+        this.db.user.update({
+          where: { id: user.id },
+          data: { emailVerifiedAt: new Date() },
+        }),
+        this.db.passwordResetOtp.update({
+          where: { id: otp.id },
+          data: { usedAt: new Date() },
+        }),
+      ]);
+    }
     return { verified: true };
   }
 
@@ -221,7 +296,7 @@ export class AuthService {
       throw new BadRequestException('Invalid or expired code');
     }
 
-    const otp = await this.findValidOtp(user.id, dto.code);
+    const otp = await this.findValidOtp(user.id, dto.code, 'password_reset');
     const passwordHash = await bcrypt.hash(dto.password, 12);
     await this.db.$transaction([
       this.db.user.update({
@@ -315,19 +390,40 @@ export class AuthService {
     fullName: string;
     email: string;
     globalRole: string;
+    emailVerifiedAt?: Date | null;
   }) {
     return {
       id: user.id,
       fullName: user.fullName,
       email: user.email,
       globalRole: user.globalRole,
+      emailVerifiedAt: user.emailVerifiedAt,
     };
   }
 
-  private async findValidOtp(userId: string, code: string) {
+  private async issueOtp(userId: string, purpose: 'signup' | 'password_reset') {
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const codeHash = await bcrypt.hash(code, 12);
+    await this.db.passwordResetOtp.create({
+      data: {
+        userId,
+        codeHash,
+        purpose,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      },
+    });
+    return { code };
+  }
+
+  private async findValidOtp(
+    userId: string,
+    code: string,
+    purpose: string,
+  ) {
     const otps = await this.db.passwordResetOtp.findMany({
       where: {
         userId,
+        purpose,
         usedAt: null,
         expiresAt: { gt: new Date() },
       },
@@ -342,4 +438,155 @@ export class AuthService {
     }
     throw new BadRequestException('Invalid or expired code');
   }
+
+  private async createOrganizationForUser(
+    userId: string,
+    dto: {
+      organizationName?: string;
+      industry?: string;
+      currency?: string;
+    },
+  ) {
+    if (!dto.organizationName || !dto.industry) {
+      throw new BadRequestException('Organization name and industry are required');
+    }
+
+    const organizationId = randomUUID();
+    const schemaName = this.tenant.schemaNameForOrganization(organizationId);
+    const organization = await this.db.organization.create({
+      data: {
+        id: organizationId,
+        name: dto.organizationName,
+        industry: dto.industry,
+        currency: dto.currency ?? 'USD',
+        schemaName,
+        members: {
+          create: {
+            userId,
+            role: 'owner',
+            joinedAt: new Date(),
+          },
+        },
+      },
+    });
+
+    await this.tenant.provisionTenantSchema(organization.schemaName);
+    await this.tenant.seedChartOfAccounts(
+      organization.schemaName,
+      organization.industry,
+    );
+    return organization;
+  }
+
+  private async sendOtpEmail(email: string, code: string, subject: string) {
+    this.assertEmailConfigured();
+    const googleEmail = process.env.GOOGLE_EMAIL!;
+    const googleAppPassword = process.env.GOOGLE_APP_PASSWORD!;
+
+    const message = [
+      `From: Hesbtk.AI <${googleEmail}>`,
+      `To: ${email}`,
+      `Subject: ${subject}`,
+      'MIME-Version: 1.0',
+      'Content-Type: text/plain; charset=utf-8',
+      '',
+      `Your verification code is ${code}. It expires in 10 minutes.`,
+    ].join('\r\n');
+
+    try {
+      await this.smtpSend({
+        host: 'smtp.gmail.com',
+        port: 465,
+        user: googleEmail,
+        pass: googleAppPassword,
+        to: email,
+        message,
+        rejectUnauthorized: process.env.GOOGLE_SMTP_REJECT_UNAUTHORIZED !== 'false',
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unknown SMTP error';
+      throw new BadRequestException(`Could not send OTP email: ${message}`);
+    }
+    return { sent: true };
+  }
+
+  private assertEmailConfigured() {
+    if (!process.env.GOOGLE_EMAIL || !process.env.GOOGLE_APP_PASSWORD) {
+      throw new BadRequestException(
+        'Email OTP is not configured. Set GOOGLE_EMAIL and GOOGLE_APP_PASSWORD.',
+      );
+    }
+  }
+
+  private smtpSend(options: {
+    host: string;
+    port: number;
+    user: string;
+    pass: string;
+    to: string;
+    message: string;
+    rejectUnauthorized: boolean;
+  }) {
+    return new Promise<void>((resolve, reject) => {
+      const socket = tls.connect(options.port, options.host, {
+        servername: options.host,
+        rejectUnauthorized: options.rejectUnauthorized,
+      });
+      let buffer = '';
+
+      const waitFor = (expected: number[]) =>
+        new Promise<string>((res, rej) => {
+          const onData = (chunk: Buffer) => {
+            buffer += chunk.toString('utf8');
+            const lines = buffer.split(/\r?\n/).filter(Boolean);
+            const last = lines.at(-1);
+            if (!last || /^\d{3}-/.test(last)) return;
+            const code = Number(last.slice(0, 3));
+            if (expected.includes(code)) {
+              socket.off('data', onData);
+              const response = buffer;
+              buffer = '';
+              res(response);
+            } else if (code >= 400) {
+              socket.off('data', onData);
+              rej(new Error(responseForLog(buffer)));
+            }
+          };
+          socket.on('data', onData);
+          socket.once('error', rej);
+        });
+
+      const send = async (command: string, expected: number[]) => {
+        socket.write(`${command}\r\n`);
+        await waitFor(expected);
+      };
+
+      socket.once('error', reject);
+      socket.once('secureConnect', async () => {
+        try {
+          await waitFor([220]);
+          await send('EHLO hesbtk.ai', [250]);
+          await send('AUTH LOGIN', [334]);
+          await send(Buffer.from(options.user).toString('base64'), [334]);
+          await send(Buffer.from(options.pass).toString('base64'), [235]);
+          await send(`MAIL FROM:<${options.user}>`, [250]);
+          await send(`RCPT TO:<${options.to}>`, [250, 251]);
+          await send('DATA', [354]);
+          socket.write(`${options.message}\r\n.\r\n`);
+          await waitFor([250]);
+          await send('QUIT', [221]);
+          socket.end();
+          resolve();
+        } catch (error) {
+          socket.destroy();
+          reject(error);
+        }
+      });
+    });
+  }
+}
+
+function responseForLog(response: string) {
+  return response.split(/\r?\n/).filter(Boolean).at(-1) ?? 'SMTP error';
 }

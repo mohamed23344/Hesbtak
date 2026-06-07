@@ -24,12 +24,12 @@ export class RegisterDto {
   password!: string;
 
   @IsString()
-  @IsNotEmpty()
-  organizationName!: string;
+  @IsOptional()
+  organizationName?: string;
 
   @IsString()
-  @IsNotEmpty()
-  industry!: string;
+  @IsOptional()
+  industry?: string;
 
   @IsString()
   @IsOptional()
@@ -56,6 +56,18 @@ export class OnboardingAnswerDto {
 }
 
 export class CompleteOnboardingDto {
+  @IsString()
+  @IsOptional()
+  organizationName?: string;
+
+  @IsString()
+  @IsOptional()
+  industry?: string;
+
+  @IsString()
+  @IsOptional()
+  currency?: string;
+
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
@@ -82,6 +94,14 @@ export class ForgotPasswordDto {
   email!: string;
 }
 
+export class ResendOtpDto {
+  @IsEmail()
+  email!: string;
+
+  @IsIn(['signup', 'password_reset'])
+  purpose!: string;
+}
+
 export class VerifyOtpDto {
   @IsEmail()
   email!: string;
@@ -89,6 +109,10 @@ export class VerifyOtpDto {
   @IsString()
   @IsNotEmpty()
   code!: string;
+
+  @IsIn(['signup', 'password_reset'])
+  @IsOptional()
+  purpose?: string;
 }
 
 export class ResetPasswordDto extends VerifyOtpDto {

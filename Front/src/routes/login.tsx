@@ -26,7 +26,13 @@ function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
       saveSession(data);
-      nav({ to: data.user.globalRole === "admin" ? "/admin" : "/dashboard" });
+      nav({
+        to: data.user.globalRole === "admin"
+          ? "/admin"
+          : data.tenants?.length
+            ? "/dashboard"
+            : "/onboarding",
+      });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Login failed");
     } finally {

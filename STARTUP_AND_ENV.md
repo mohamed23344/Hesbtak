@@ -23,7 +23,20 @@ POSTGRES_DB=hesbtk
 POSTGRES_PORT=5432
 JWT_SECRET=replace-with-a-long-random-secret
 JWT_EXPIRES_IN=1d
+GOOGLE_EMAIL=
+GOOGLE_APP_PASSWORD=
+GOOGLE_SMTP_REJECT_UNAUTHORIZED=true
 ```
+
+`GOOGLE_EMAIL` and `GOOGLE_APP_PASSWORD` are used for signup and forgot-password OTP email. Use a Google app password and restart the backend after changing these values.
+
+If your local Windows machine shows `SELF_SIGNED_CERT_IN_CHAIN` while sending OTP, set:
+
+```bash
+GOOGLE_SMTP_REJECT_UNAUTHORIZED=false
+```
+
+Use that only for local development. In production, keep it `true` and install the correct trusted CA certificate instead.
 
 Currently optional/reserved:
 
@@ -95,7 +108,7 @@ npm run build
 
 ## Missing Production Integrations
 
-- Real email provider for OTP and invitation emails. Development forgot-password returns `devCode` so the flow can be tested.
+- Invitation emails are still queued/stubbed. Signup and forgot-password OTP can send through Gmail SMTP when `GOOGLE_EMAIL` and `GOOGLE_APP_PASSWORD` are set.
 - Real payment/subscription provider. The public `plans` and `subscriptions` models exist, but billing automation is not integrated.
 - Real OCR extraction pipeline. The frontend OCR page is still a UI stub.
 - Real ML/LLM services. Forecasting and chatbot currently use deterministic baseline logic from tenant ledger data.

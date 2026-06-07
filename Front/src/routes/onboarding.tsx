@@ -16,7 +16,7 @@ import {
 import { BrandMark, LangToggle, ThemeToggle } from "@/components/Brand";
 import { toast } from "sonner";
 import { useCOA, DEFAULT_COA, COANode } from "@/lib/useCOA";
-import { api, getSession } from "@/lib/api";
+import { api, getSession, updateSession } from "@/lib/api";
 
 export const Route = createFileRoute("/onboarding")({ component: Onboarding });
 
@@ -93,12 +93,28 @@ function Onboarding() {
 
   const finishOnboarding = async (coaToSave: COANode[]) => {
     const session = getSession();
-    if (!session?.activeTenantId) {
+    if (!session) {
       throw new Error("Please login before onboarding");
     }
-    await api(`/onboarding/${session.activeTenantId}/complete`, {
+    const endpoint = session.activeTenantId
+      ? `/onboarding/${session.activeTenantId}/complete`
+      : "/onboarding/complete";
+    const result = await api<{
+      tenant?: {
+        organizationId: string;
+        schemaName?: string;
+        organizationName?: string;
+        industry?: string;
+        currency?: string;
+        role: string;
+      };
+      organization?: { id: string; name: string; industry: string; currency: string; schemaName?: string };
+    }>(endpoint, {
       method: "POST",
       body: JSON.stringify({
+        organizationName: company,
+        industry,
+        currency,
         answers: [
           { questionKey: "company_name", answer: company || session.tenants[0]?.organizationName || "Company" },
           { questionKey: "industry", answer: industry || "Retail" },
@@ -110,6 +126,24 @@ function Onboarding() {
         ],
       }),
     });
+
+    const createdTenant = result.tenant ?? (result.organization ? {
+      organizationId: result.organization.id,
+      schemaName: result.organization.schemaName,
+      organizationName: result.organization.name,
+      industry: result.organization.industry,
+      currency: result.organization.currency,
+      role: "owner",
+    } : undefined);
+    if (createdTenant && !session.activeTenantId) {
+      updateSession({
+        tenants: [{
+          ...createdTenant,
+          organizationName: createdTenant.organizationName ?? company,
+        }],
+        activeTenantId: createdTenant.organizationId,
+      });
+    }
 
     const flatten = (nodes: COANode[], parentId?: string): Array<COANode & { parentId?: string }> =>
       nodes.flatMap((node) => [

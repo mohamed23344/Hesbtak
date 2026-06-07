@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { useState } from "react";
 import { useI18n } from "@/lib/i18n";
-import { api, getPendingEmail, getSession } from "@/lib/api";
+import { api, getPendingEmail, getPendingOtpPurpose, getSession, updateSession } from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/verify-otp")({ component: VerifyOTP });
@@ -16,8 +16,10 @@ function VerifyOTP() {
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
   const session = getSession();
-  const isPasswordReset = !session;
+  const purpose = getPendingOtpPurpose();
+  const isPasswordReset = purpose === "password_reset";
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,16 +35,52 @@ function VerifyOTP() {
         toast.success("Password reset");
         nav({ to: "/login" });
       } else {
-        await api("/auth/verify-otp", {
+        await api<{ verified: boolean }>("/auth/verify-otp", {
           method: "POST",
-          body: JSON.stringify({ email, code }),
-        }).catch(() => null);
+          body: JSON.stringify({ email, code, purpose: "signup" }),
+        });
+        if (session) {
+          updateSession({
+            user: {
+              ...session.user,
+              emailVerifiedAt: new Date().toISOString(),
+            },
+          });
+        }
+        toast.success("Email verified");
         nav({ to: "/onboarding" });
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Verification failed");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const resend = async () => {
+    const email = getPendingEmail();
+    if (!email) {
+      toast.error("No email is waiting for verification");
+      return;
+    }
+    setResending(true);
+    try {
+      if (isPasswordReset) {
+        await api("/auth/forgot-password", {
+          method: "POST",
+          body: JSON.stringify({ email }),
+        });
+      } else {
+        await api("/auth/resend-otp", {
+          method: "POST",
+          body: JSON.stringify({ email, purpose: "signup" }),
+        });
+      }
+      toast.success("A new code was sent to your email.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not resend code");
+    } finally {
+      setResending(false);
     }
   };
 
@@ -71,6 +109,12 @@ function VerifyOTP() {
         <Button className="w-full bg-gradient-primary h-11" disabled={code.length < 6 || loading || (isPasswordReset && password.length < 8)}>
           {loading ? "..." : t("verifyAndContinue")}
         </Button>
+        <p className="text-center text-sm text-on-surface-variant">
+          {t("didntGetIt")}{" "}
+          <button type="button" onClick={resend} disabled={resending} className="text-primary hover:underline disabled:opacity-60">
+            {resending ? "Sending..." : t("resend")}
+          </button>
+        </p>
       </form>
     </AuthLayout>
   );
