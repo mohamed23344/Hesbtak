@@ -40,6 +40,10 @@ export class TenantService {
       throw new NotFoundException('Tenant context not found for user');
     }
 
+    if (!membership.organization.isActive) {
+      throw new ForbiddenException('Tenant is deactivated');
+    }
+
     if (!allowedRoles.includes(membership.role)) {
       throw new ForbiddenException('Insufficient tenant role');
     }

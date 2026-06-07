@@ -33,13 +33,16 @@ export const Route = createFileRoute("/")({
 function Landing() {
   const { t, dir } = useI18n();
   const [loggedIn, setLoggedIn] = useState(false);
+  const [admin, setAdmin] = useState(false);
 
   useEffect(() => {
-    setLoggedIn(!!getSession());
+    const session = getSession();
+    setLoggedIn(!!session);
+    setAdmin(session?.user.globalRole === "admin");
   }, []);
 
-  const appTarget = loggedIn ? "/dashboard" : "/login";
-  const startTarget = loggedIn ? "/dashboard" : "/register";
+  const appTarget = loggedIn ? (admin ? "/admin" : "/dashboard") : "/login";
+  const startTarget = loggedIn ? (admin ? "/admin" : "/dashboard") : "/register";
 
   return (
     <div dir={dir} className="min-h-screen bg-surface text-on-surface">
@@ -56,7 +59,7 @@ function Landing() {
             <LangToggle />
             <ThemeToggle />
             {loggedIn ? (
-              <Link to="/dashboard">
+              <Link to={appTarget}>
                 <Button size="sm" className="bg-gradient-primary gap-2">
                   {t("goToDashboard")} <ArrowRight className="h-4 w-4 rtl:rotate-180" />
                 </Button>
@@ -92,7 +95,7 @@ function Landing() {
                   {t("getStarted")} <ArrowRight className="h-4 w-4 rtl:rotate-180" />
                 </Button>
               </Link>
-              <Link to={loggedIn ? "/dashboard" : "/login"}>
+              <Link to={appTarget}>
                 <Button size="lg" variant="outline">{t("seeDemo")}</Button>
               </Link>
             </div>

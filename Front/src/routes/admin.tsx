@@ -1,20 +1,44 @@
 import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { useI18n } from "@/lib/i18n";
 import { BrandMark, LangToggle, ThemeToggle } from "@/components/Brand";
-import { LayoutDashboard, LogOut, Menu, X, ShieldAlert } from "lucide-react";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { BadgeCheck, BarChart3, Building, LogOut, Menu, ShieldAlert, Users, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { clearSession, getSession } from "@/lib/api";
 
 export const Route = createFileRoute("/admin")({ component: AdminLayout });
+
+const ADMIN_SECTIONS = [
+  { id: "users", label: "Users", icon: Users },
+  { id: "organizations", label: "Organizations", icon: Building },
+  { id: "insights", label: "Usage & Insights", icon: BarChart3 },
+  { id: "plans", label: "Plans", icon: BadgeCheck },
+] as const;
 
 function AdminLayout() {
   const { t, dir } = useI18n();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const [open, setOpen] = useState(false);
+  const session = getSession();
+  const [section, setSection] = useState(() =>
+    typeof window === "undefined" ? "users" : window.location.hash.replace("#", "") || "users"
+  );
 
-  const NAV = [
-    { to: "/admin", label: t("adminDashboard"), icon: LayoutDashboard },
-  ];
+  useEffect(() => {
+    if (!session) {
+      window.location.replace("/login");
+      return;
+    }
+    if (session.user.globalRole !== "admin") {
+      window.location.replace("/dashboard");
+    }
+  }, [session]);
+
+  useEffect(() => {
+    const syncSection = () => setSection(window.location.hash.replace("#", "") || "users");
+    syncSection();
+    window.addEventListener("hashchange", syncSection);
+    return () => window.removeEventListener("hashchange", syncSection);
+  }, []);
 
   return (
     <div dir={dir} className="min-h-screen flex bg-surface">
@@ -34,14 +58,17 @@ function AdminLayout() {
           <ShieldAlert className="h-5 w-5" />
           <span className="font-semibold text-sm">Admin Portal</span>
         </div>
-        <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
-          {NAV.map((item) => {
-            const active = path === item.to || (item.to !== "/admin" && path.startsWith(item.to));
+        <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+          {ADMIN_SECTIONS.map((item) => {
+            const active = path.startsWith("/admin") && section === item.id;
             return (
-              <Link
-                key={item.to}
-                to={item.to}
-                onClick={() => setOpen(false)}
+              <a
+                key={item.id}
+                href={`/admin#${item.id}`}
+                onClick={() => {
+                  setSection(item.id);
+                  setOpen(false);
+                }}
                 className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition ${
                   active
                     ? "bg-primary/10 text-primary font-medium"
@@ -50,13 +77,14 @@ function AdminLayout() {
               >
                 <item.icon className="h-4 w-4 shrink-0" />
                 <span className="truncate">{item.label}</span>
-              </Link>
+              </a>
             );
           })}
         </nav>
         <div className="border-t border-border-default p-3">
           <Link
             to="/login"
+            onClick={() => clearSession()}
             className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-on-surface-variant hover:bg-surface-container"
           >
             <LogOut className="h-4 w-4" /> {t("logout")}

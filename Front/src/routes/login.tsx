@@ -26,10 +26,12 @@ function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
       saveSession(data);
+      if (data.user.globalRole === "admin") {
+        window.location.assign("/admin#users");
+        return;
+      }
       nav({
-        to: data.user.globalRole === "admin"
-          ? "/admin"
-          : data.tenants?.length
+        to: data.tenants?.length
             ? "/dashboard"
             : "/onboarding",
       });

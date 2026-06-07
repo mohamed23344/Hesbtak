@@ -28,6 +28,7 @@ model Organization {
   name      String
   industry  String
   currency  String
+  isActive  Boolean  @default(true) @map("is_active")
   schemaName String  @unique @map("schema_name")
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -60,6 +61,7 @@ model User {
   email        String   @unique
   passwordHash String   @map("password_hash")
   globalRole   String   @default("user") @map("global_role")
+  isActive     Boolean  @default(true) @map("is_active")
   emailVerifiedAt DateTime? @map("email_verified_at")
   createdAt    DateTime @default(now()) @map("created_at")
 

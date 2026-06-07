@@ -57,7 +57,8 @@ export function saveSession(data: {
     accessToken: data.accessToken,
     user: data.user,
     tenants,
-    activeTenantId: tenants[0]?.organizationId,
+    activeTenantId:
+      data.user.globalRole === "admin" ? undefined : tenants[0]?.organizationId,
   };
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   return session;

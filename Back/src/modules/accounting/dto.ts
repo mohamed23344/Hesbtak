@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsDateString,
+  IsIn,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -62,6 +63,11 @@ export class JournalEntryDto {
 
   @IsString()
   description!: string;
+
+  @IsString()
+  @IsOptional()
+  @IsIn(['draft', 'posted'])
+  status?: 'draft' | 'posted';
 
   @IsArray()
   @ValidateNested({ each: true })

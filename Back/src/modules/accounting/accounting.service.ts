@@ -76,11 +76,12 @@ export class AccountingService {
     this.ensureBalanced(dto.lines);
     const schema = this.tenant.quote(ctx.schemaName);
     const entries = await this.db.$queryRawUnsafe<IdRow[]>(
-      `INSERT INTO ${schema}.journal_entries (date, description, reference_type, reference_id, created_by)
-       VALUES ($1::date, $2, $3, $4::uuid, $5::uuid)
+      `INSERT INTO ${schema}.journal_entries (date, description, status, reference_type, reference_id, created_by)
+       VALUES ($1::date, $2, $3, $4, $5::uuid, $6::uuid)
        RETURNING id`,
       dto.date,
       dto.description,
+      dto.status ?? 'posted',
       referenceType ?? null,
       referenceId ?? null,
       userId,

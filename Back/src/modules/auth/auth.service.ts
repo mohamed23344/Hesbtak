@@ -104,6 +104,9 @@ export class AuthService {
     if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
       throw new UnauthorizedException('Invalid email or password');
     }
+    if (!user.isActive) {
+      throw new UnauthorizedException('This account is deactivated');
+    }
 
     const tenants = await this.db.organizationUser.findMany({
       where: { userId: user.id, isActive: true },
@@ -113,14 +116,16 @@ export class AuthService {
     return {
       accessToken: this.sign(user),
       user: this.publicUser(user),
-      tenants: tenants.map((tenant) => ({
-        organizationId: tenant.organizationId,
-        schemaName: tenant.organization.schemaName,
-        organizationName: tenant.organization.name,
-        industry: tenant.organization.industry,
-        currency: tenant.organization.currency,
-        role: tenant.role,
-      })),
+      tenants: tenants
+        .filter((tenant) => tenant.organization.isActive)
+        .map((tenant) => ({
+          organizationId: tenant.organizationId,
+          schemaName: tenant.organization.schemaName,
+          organizationName: tenant.organization.name,
+          industry: tenant.organization.industry,
+          currency: tenant.organization.currency,
+          role: tenant.role,
+        })),
     };
   }
 

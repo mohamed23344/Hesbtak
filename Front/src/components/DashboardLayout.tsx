@@ -5,7 +5,7 @@ import {
   LayoutDashboard, ArrowLeftRight, Receipt, FileText, Network,
   BookOpenText, Bot, TrendingUp, ScanLine, Bell, Settings, Search, LogOut, Menu, X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { clearSession, getSession } from "@/lib/api";
@@ -15,6 +15,12 @@ export default function DashboardLayout() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const [open, setOpen] = useState(false);
   const session = getSession();
+
+  useEffect(() => {
+    if (session?.user.globalRole === "admin") {
+      window.location.replace("/admin#users");
+    }
+  }, [session?.user.globalRole]);
 
   const NAV = [
     { to: "/dashboard", label: t("dashboard"), icon: LayoutDashboard },

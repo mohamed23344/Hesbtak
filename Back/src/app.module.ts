@@ -5,6 +5,7 @@ import { ConfigModule } from '@nestjs/config';
 import { DataBaseModule } from './database/database.module';
 import { LoggerModule } from 'nestjs-pino';
 import * as path from 'path';
+import { IncomingMessage, ServerResponse } from 'http';
 import { AuthModule } from './modules/auth/auth.module';
 import { TenantModule } from './modules/tenant/tenant.module';
 import { AccountingModule } from './modules/accounting/accounting.module';
@@ -20,11 +21,18 @@ import { OrganizationsModule } from './modules/organizations/organizations.modul
       pinoHttp: {
         autoLogging: true,
         timestamp: () => `,"time":"${new Date().toISOString()}"`,
-        customSuccessMessage: function (req, res) {
+        customSuccessMessage: function (
+          req: IncomingMessage,
+          res: ServerResponse,
+        ) {
           return `✅ [${req.method}] ${req.url} - Status: ${res.statusCode}`;
         },
 
-        customErrorMessage: function (req, res, err) {
+        customErrorMessage: function (
+          req: IncomingMessage,
+          res: ServerResponse,
+          err: Error,
+        ) {
           return `❌ [${req.method}] ${req.url} - Failed with error: ${err.message}`;
         },
 
