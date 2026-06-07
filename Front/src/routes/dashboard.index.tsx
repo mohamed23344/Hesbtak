@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useI18n } from "@/lib/i18n";
 import { TrendingUp, TrendingDown, DollarSign, Wallet, AlertTriangle, Sparkles, Lightbulb } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
-import { api, money } from "@/lib/api";
+import { api, money, getSession } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -18,7 +18,13 @@ type Kpis = {
 };
 
 function DashboardHome() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const session = getSession();
+  const firstName = session?.user.fullName?.split(" ")[0] ?? "";
+  const greeting =
+    lang === "ar"
+      ? `مرحباً بعودتك${firstName ? "، " + firstName : ""} `
+      : `Welcome back${firstName ? ", " + firstName : ""} `;
   const [kpis, setKpis] = useState<Kpis>({
     cash: 0,
     revenue: 0,
@@ -54,7 +60,7 @@ function DashboardHome() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">{t("welcomeBack")}</h1>
+        <h1 className="text-2xl font-bold">{greeting}</h1>
         <p className="text-on-surface-variant text-sm">{t("dashboardDesc")}</p>
       </div>
 

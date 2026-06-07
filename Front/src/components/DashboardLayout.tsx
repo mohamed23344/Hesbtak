@@ -39,7 +39,7 @@ export default function DashboardLayout() {
         }`}
       >
         <div className="h-16 flex items-center justify-between px-5 border-b border-border-default">
-          <BrandMark />
+          <BrandMark to="/dashboard" />
           <button onClick={() => setOpen(false)} className="lg:hidden text-on-surface-variant">
             <X className="h-5 w-5" />
           </button>

@@ -27,6 +27,7 @@ const dict = {
 
     // Auth
     signIn: "Sign in",
+    goToDashboard: "Go to Dashboard",
     signUp: "Sign up",
     email: "Email",
     password: "Password",
@@ -105,7 +106,7 @@ const dict = {
     settings: "Settings",
 
     // Dashboard Home
-    welcomeBack: "Welcome back, Ahmad 👋",
+    welcomeBack: "Welcome back, Ahmad ",
     dashboardDesc: "Here's how your business is doing today.",
     revenue: "Revenue",
     netProfit: "Net Profit",
@@ -132,6 +133,11 @@ const dict = {
     category: "Category",
     status: "Status",
     amount: "Amount",
+    dateFrom: "From date",
+    dateTo: "To date",
+    refType: "Type",
+    allTypes: "All types",
+    allAccounts: "All accounts",
 
     // Expenses
     expTitle: "Expenses",
@@ -175,6 +181,25 @@ const dict = {
     account: "Account",
     debit: "Debit",
     credit: "Credit",
+    addJournalEntry: "New Journal Entry",
+    newManualInvoice: "New Manual Invoice",
+    deleteEntry: "Delete entry",
+    confirmDelete: "Are you sure you want to delete this entry? This cannot be undone.",
+    addLine: "Add line",
+    removeLine: "Remove",
+    notBalanced: "Debits and credits must be equal",
+    balanced: "Balanced ✓",
+    searchAccount: "Search accounts…",
+    noAccountFound: "No account found",
+    quickAddAccount: "Quick add account",
+    selectCustomer: "Select customer",
+    searchCustomer: "Search customers…",
+    noCustomerFound: "No customer found. Type to add new.",
+    quickAddCustomer: "Add customer",
+    taxRate: "Tax rate (%)",
+    subtotal: "Subtotal",
+    lineItems: "Line items",
+    newCustomer: "New customer name",
 
     // Assistant
     astTitle: "AI Assistant",
@@ -263,6 +288,7 @@ const dict = {
 
     // Auth
     signIn: "تسجيل الدخول",
+    goToDashboard: "الذهاب إلى لوحة التحكم",
     signUp: "إنشاء حساب",
     email: "البريد الإلكتروني",
     password: "كلمة المرور",
@@ -341,7 +367,7 @@ const dict = {
     settings: "الإعدادات",
 
     // Dashboard Home
-    welcomeBack: "مرحباً بعودتك، أحمد 👋",
+    welcomeBack: "مرحباً بعودتك، أحمد ",
     dashboardDesc: "إليك كيف يسير عملك اليوم.",
     revenue: "الإيرادات",
     netProfit: "صافي الربح",
@@ -368,6 +394,11 @@ const dict = {
     category: "الفئة",
     status: "الحالة",
     amount: "المبلغ",
+    dateFrom: "من تاريخ",
+    dateTo: "إلى تاريخ",
+    refType: "النوع",
+    allTypes: "جميع الأنواع",
+    allAccounts: "جميع الحسابات",
 
     // Expenses
     expTitle: "المصروفات",
@@ -411,6 +442,25 @@ const dict = {
     account: "الحساب",
     debit: "مدين",
     credit: "دائن",
+    addJournalEntry: "قيد يومية جديد",
+    newManualInvoice: "فاتورة يدوية جديدة",
+    deleteEntry: "حذف القيد",
+    confirmDelete: "هل أنت متأكد من حذف هذا القيد؟ لا يمكن التراجع.",
+    addLine: "إضافة سطر",
+    removeLine: "حذف",
+    notBalanced: "يجب أن يتساوى إجمالي المدين والدائن",
+    balanced: "متوازن ✓",
+    searchAccount: "البحث في الحسابات…",
+    noAccountFound: "لم يُعثر على حساب",
+    quickAddAccount: "إضافة حساب سريع",
+    selectCustomer: "اختر العميل",
+    searchCustomer: "البحث في العملاء…",
+    noCustomerFound: "لم يُعثر على عميل. اكتب لإضافة جديد.",
+    quickAddCustomer: "إضافة عميل",
+    taxRate: "نسبة الضريبة (%)",
+    subtotal: "المجموع قبل الضريبة",
+    lineItems: "بنود الفاتورة",
+    newCustomer: "اسم العميل الجديد",
 
     // Assistant
     astTitle: "المساعد الذكي",

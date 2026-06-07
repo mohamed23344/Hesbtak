@@ -55,12 +55,22 @@ function Landing() {
           <div className="flex items-center gap-2">
             <LangToggle />
             <ThemeToggle />
-            <Link to={appTarget}>
-              <Button variant="ghost" size="sm">{t("signIn")}</Button>
-            </Link>
-            <Link to={startTarget}>
-              <Button size="sm" className="bg-gradient-primary">{t("getStarted")}</Button>
-            </Link>
+            {loggedIn ? (
+              <Link to="/dashboard">
+                <Button size="sm" className="bg-gradient-primary gap-2">
+                  {t("goToDashboard")} <ArrowRight className="h-4 w-4 rtl:rotate-180" />
+                </Button>
+              </Link>
+            ) : (
+              <>
+                <Link to="/login">
+                  <Button variant="ghost" size="sm">{t("signIn")}</Button>
+                </Link>
+                <Link to="/register">
+                  <Button size="sm" className="bg-gradient-primary">{t("getStarted")}</Button>
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </header>

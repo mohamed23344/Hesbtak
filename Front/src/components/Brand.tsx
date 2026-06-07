@@ -4,15 +4,20 @@ import { useTheme } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
 import { Languages, Sun, Moon } from "lucide-react";
 
-export function BrandMark({ withText = true }: { withText?: boolean }) {
+export function BrandMark({
+  withText = true,
+  to = "/",
+}: {
+  withText?: boolean;
+  to?: string;
+}) {
   const { t } = useI18n();
   return (
-    <Link to="/" className="flex items-center gap-2 group">
-      <div className="h-8 w-8 rounded-lg bg-gradient-primary grid place-items-center text-primary-foreground font-bold shadow-soft">
-        ح
-      </div>
+    <Link to={to} className="flex items-center gap-2 group">
+      {/* <div className="h-8 w-8 rounded-lg bg-gradient-primary grid place-items-center text-primary-foreground font-bold shadow-soft">
+      </div> */}
       {withText && (
-        <span className="font-semibold text-on-surface tracking-tight">{t("appName")}</span>
+        <span className="font-bold text-on-surface tracking-tight">{t("appName")}</span>
       )}
     </Link>
   );
