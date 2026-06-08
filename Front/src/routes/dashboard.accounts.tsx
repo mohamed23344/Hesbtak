@@ -3,11 +3,21 @@ import { Header } from "./dashboard.transactions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, FileText, Pencil } from "lucide-react";
+import { ChevronRight, FileText, Folder, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useI18n } from "@/lib/i18n";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
@@ -20,8 +30,42 @@ type Account = {
   name: string;
   type: string;
   parent_id?: string | null;
+  level?: number;
   is_active?: boolean;
 };
+
+type AccountNode = Account & { children: AccountNode[] };
+type AccountOption = Account & { depth: number };
+
+const accountTypes = ["Asset", "Liability", "Equity", "Revenue", "Expense"];
+
+function buildAccountTree(accounts: Account[]) {
+  const nodes = new Map<string, AccountNode>();
+  accounts.forEach((account) => nodes.set(account.id, { ...account, children: [] }));
+
+  const roots: AccountNode[] = [];
+  nodes.forEach((node) => {
+    if (node.parent_id && nodes.has(node.parent_id)) {
+      nodes.get(node.parent_id)?.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  });
+
+  const sortNodes = (items: AccountNode[]) => {
+    items.sort((a, b) => a.code.localeCompare(b.code));
+    items.forEach((item) => sortNodes(item.children));
+  };
+  sortNodes(roots);
+  return roots;
+}
+
+function flattenTree(nodes: AccountNode[], depth = 0): AccountOption[] {
+  return nodes.flatMap((node) => [
+    { ...node, depth },
+    ...flattenTree(node.children, depth + 1),
+  ]);
+}
 
 function Page() {
   const { t } = useI18n();
@@ -32,6 +76,8 @@ function Page() {
   const [accName, setAccName] = useState("");
   const [accCode, setAccCode] = useState("");
   const [accType, setAccType] = useState("Expense");
+  const [parentId, setParentId] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<Account | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -48,18 +94,18 @@ function Page() {
     void load();
   }, []);
 
-  const grouped = useMemo(() => {
-    return accounts.reduce<Record<string, Account[]>>((acc, item) => {
-      acc[item.type] = [...(acc[item.type] ?? []), item];
-      return acc;
-    }, {});
-  }, [accounts]);
+  const accountTree = useMemo(() => buildAccountTree(accounts), [accounts]);
+  const parentOptions = useMemo(
+    () => flattenTree(accountTree).filter((account) => account.id !== editing?.id && (account.level ?? account.depth + 1) < 4),
+    [accountTree, editing],
+  );
 
   const openAdd = () => {
     setEditing(null);
     setAccName("");
     setAccCode("");
     setAccType("Expense");
+    setParentId("");
     setDialogOpen(true);
   };
 
@@ -68,14 +114,21 @@ function Page() {
     setAccName(account.name);
     setAccCode(account.code);
     setAccType(account.type);
+    setParentId(account.parent_id ?? "");
     setDialogOpen(true);
   };
 
   const handleSave = async () => {
+    const selectedParent = accounts.find((account) => account.id === parentId);
     try {
       await api("/tenant/accounts", {
         method: "POST",
-        body: JSON.stringify({ code: accCode, name: accName, type: accType }),
+        body: JSON.stringify({
+          code: accCode,
+          name: accName,
+          type: selectedParent?.type ?? accType,
+          parentId: parentId || undefined,
+        }),
       });
       toast.success(editing ? "Account updated" : "Account added");
       setDialogOpen(false);
@@ -83,6 +136,27 @@ function Page() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not save account");
     }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await api(`/tenant/accounts/${deleteTarget.id}`, { method: "DELETE" });
+      toast.success("Account removed");
+      setDeleteTarget(null);
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not remove account");
+    }
+  };
+
+  const openAddChild = (account: Account) => {
+    setEditing(null);
+    setAccName("");
+    setAccCode("");
+    setAccType(account.type);
+    setParentId(account.id);
+    setDialogOpen(true);
   };
 
   return (
@@ -97,25 +171,15 @@ function Page() {
           <p className="text-sm text-on-surface-variant">Loading accounts...</p>
         ) : (
           <div className="space-y-5">
-            {Object.entries(grouped).map(([type, items]) => (
-              <section key={type}>
-                <h3 className="text-sm font-semibold mb-2">{type}</h3>
-                <div className="space-y-1">
-                  {items.map((account) => (
-                    <div key={account.id} className="group flex items-center gap-2 p-2 rounded-lg hover:bg-surface-subtle transition">
-                      <FileText className="h-4 w-4 text-on-surface-variant" />
-                      <span className="text-xs text-on-surface-variant font-mono w-14">{account.code}</span>
-                      <span className="text-sm font-medium">{account.name}</span>
-                      <button
-                        onClick={() => openEdit(account)}
-                        className="ms-auto opacity-0 group-hover:opacity-100 p-1.5 rounded-md hover:bg-surface-container text-on-surface-variant transition"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </section>
+            {accountTree.map((account) => (
+              <AccountRow
+                key={account.id}
+                account={account}
+                depth={0}
+                onAddChild={openAddChild}
+                onEdit={openEdit}
+                onDelete={setDeleteTarget}
+              />
             ))}
           </div>
         )}
@@ -128,6 +192,27 @@ function Page() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-1.5">
+              <Label>Parent account</Label>
+              <select
+                value={parentId}
+                onChange={(e) => {
+                  const nextParentId = e.target.value;
+                  setParentId(nextParentId);
+                  const nextParent = accounts.find((account) => account.id === nextParentId);
+                  if (nextParent) setAccType(nextParent.type);
+                }}
+                className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">No parent (Level 1)</option>
+                {parentOptions.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {"--".repeat(account.depth)} {account.code} - {account.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-on-surface-variant">Pick a level 2 or 3 parent when you need a level 3 or 4 account.</p>
+            </div>
+            <div className="space-y-1.5">
               <Label>{t("accountCode")}</Label>
               <Input value={accCode} onChange={(e) => setAccCode(e.target.value)} placeholder="e.g. 5800" />
             </div>
@@ -137,8 +222,13 @@ function Page() {
             </div>
             <div className="space-y-1.5">
               <Label>Type</Label>
-              <select value={accType} onChange={(e) => setAccType(e.target.value)} className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
-                {["Asset", "Liability", "Equity", "Revenue", "Expense"].map((type) => <option key={type}>{type}</option>)}
+              <select
+                value={accType}
+                onChange={(e) => setAccType(e.target.value)}
+                disabled={!!parentId}
+                className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm disabled:opacity-70"
+              >
+                {accountTypes.map((type) => <option key={type}>{type}</option>)}
               </select>
             </div>
           </div>
@@ -148,6 +238,102 @@ function Page() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes {deleteTarget?.code} - {deleteTarget?.name}. Accounts with child accounts or existing records cannot be deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+function AccountRow({
+  account,
+  depth,
+  onAddChild,
+  onEdit,
+  onDelete,
+}: {
+  account: AccountNode;
+  depth: number;
+  onAddChild: (account: Account) => void;
+  onEdit: (account: Account) => void;
+  onDelete: (account: Account) => void;
+}) {
+  const [open, setOpen] = useState(depth < 1);
+  const hasChildren = account.children.length > 0;
+  const level = account.level ?? depth + 1;
+
+  return (
+    <div className="space-y-1">
+      <div
+        className="group flex items-center gap-2 p-2 rounded-lg hover:bg-surface-subtle transition"
+        style={{ paddingInlineStart: depth * 20 + 8 }}
+      >
+        <button
+          type="button"
+          className="h-5 w-5 grid place-items-center rounded hover:bg-surface-container"
+          onClick={() => hasChildren && setOpen(!open)}
+        >
+          {hasChildren ? (
+            <ChevronRight className={`h-4 w-4 text-on-surface-variant transition-transform ${open ? "rotate-90" : ""}`} />
+          ) : (
+            <span className="w-4" />
+          )}
+        </button>
+        {hasChildren ? <Folder className="h-4 w-4 text-primary" /> : <FileText className="h-4 w-4 text-on-surface-variant" />}
+        <span className="text-xs text-on-surface-variant font-mono w-14">{account.code}</span>
+        <span className="text-sm font-medium min-w-0 flex-1">{account.name}</span>
+        <span className="text-xs text-on-surface-variant hidden sm:inline">{account.type}</span>
+        {level < 4 && (
+          <button
+            type="button"
+            title="Add child account"
+            onClick={() => onAddChild(account)}
+            className="opacity-0 group-hover:opacity-100 p-1.5 rounded-md hover:bg-surface-container text-on-surface-variant transition"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        )}
+        <button
+          type="button"
+          title="Edit account"
+          onClick={() => onEdit(account)}
+          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-md hover:bg-surface-container text-on-surface-variant transition"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          title="Delete account"
+          onClick={() => onDelete(account)}
+          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-md hover:bg-destructive/10 text-on-surface-variant hover:text-destructive transition"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      {open && account.children.map((child) => (
+        <AccountRow
+          key={child.id}
+          account={child}
+          depth={depth + 1}
+          onAddChild={onAddChild}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      ))}
     </div>
   );
 }

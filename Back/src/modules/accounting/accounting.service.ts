@@ -37,10 +37,21 @@ export class AccountingService {
 
   async upsertAccount(ctx: TenantContext, dto: AccountDto) {
     const schema = this.tenant.quote(ctx.schemaName);
+    if (dto.parentId) {
+      const parentRows = await this.db.$queryRawUnsafe<{ type: string; level: number }[]>(
+        `SELECT type, level FROM ${schema}.accounts WHERE id = $1::uuid`,
+        dto.parentId,
+      );
+      if (!parentRows[0]) throw new BadRequestException('Parent account not found');
+      if (parentRows[0].level >= 4) throw new BadRequestException('Accounts can only be nested up to level 4');
+      if (parentRows[0].type !== dto.type) {
+        throw new BadRequestException('Child account type must match its parent account type');
+      }
+    }
     const rows = await this.db.$queryRawUnsafe<IdRow[]>(
       `INSERT INTO ${schema}.accounts (code, name, type, parent_id, level)
        VALUES ($1, $2, $3, $4::uuid, COALESCE((SELECT level + 1 FROM ${schema}.accounts WHERE id = $4::uuid), 1))
-       ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, type = EXCLUDED.type, parent_id = EXCLUDED.parent_id
+       ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, type = EXCLUDED.type, parent_id = EXCLUDED.parent_id, level = EXCLUDED.level
        RETURNING id`,
       dto.code,
       dto.name,
@@ -48,6 +59,46 @@ export class AccountingService {
       dto.parentId ?? null,
     );
     return rows[0];
+  }
+
+  async deleteAccount(ctx: TenantContext, accountId: string) {
+    const schema = this.tenant.quote(ctx.schemaName);
+    const usageRows = await this.db.$queryRawUnsafe<TotalRow[]>(
+      `WITH RECURSIVE branch AS (
+        SELECT id FROM ${schema}.accounts WHERE id = $1::uuid
+        UNION ALL
+        SELECT child.id
+        FROM ${schema}.accounts child
+        INNER JOIN branch parent ON child.parent_id = parent.id
+      )
+      SELECT (
+        (SELECT COUNT(*) FROM ${schema}.journal_lines WHERE account_id IN (SELECT id FROM branch)) +
+        (SELECT COUNT(*) FROM ${schema}.invoice_lines WHERE revenue_account_id IN (SELECT id FROM branch)) +
+        (SELECT COUNT(*) FROM ${schema}.vendor_bill_lines WHERE expense_account_id IN (SELECT id FROM branch)) +
+        (SELECT COUNT(*) FROM ${schema}.expenses WHERE expense_account_id IN (SELECT id FROM branch)) +
+        (SELECT COUNT(*) FROM ${schema}.bank_accounts WHERE gl_account_id IN (SELECT id FROM branch))
+      )::text AS total`,
+      accountId,
+    );
+    if (Number(usageRows[0]?.total ?? 0) > 0) {
+      throw new BadRequestException('This account or one of its child accounts is used by existing records and cannot be deleted');
+    }
+
+    const rows = await this.db.$queryRawUnsafe<IdRow[]>(
+      `WITH RECURSIVE branch AS (
+        SELECT id FROM ${schema}.accounts WHERE id = $1::uuid
+        UNION ALL
+        SELECT child.id
+        FROM ${schema}.accounts child
+        INNER JOIN branch parent ON child.parent_id = parent.id
+      )
+      DELETE FROM ${schema}.accounts
+      WHERE id IN (SELECT id FROM branch)
+      RETURNING id`,
+      accountId,
+    );
+    if (!rows[0]) throw new BadRequestException('Account not found');
+    return { deleted: true };
   }
 
   async createCustomer(ctx: TenantContext, userId: string, dto: PartyDto) {

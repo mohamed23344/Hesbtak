@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Headers,
   Param,
@@ -44,6 +45,18 @@ export class AccountingController {
     return this.accounting.upsertAccount(
       await this.tenant.fromOrganizationId(orgId, user.sub, ['owner', 'accountant']),
       dto,
+    );
+  }
+
+  @Delete('accounts/:id')
+  async deleteAccount(
+    @Headers('x-tenant-id') orgId: string,
+    @CurrentUser() user: JwtUser,
+    @Param('id') id: string,
+  ) {
+    return this.accounting.deleteAccount(
+      await this.tenant.fromOrganizationId(orgId, user.sub, ['owner', 'accountant']),
+      id,
     );
   }
 

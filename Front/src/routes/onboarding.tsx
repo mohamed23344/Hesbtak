@@ -11,7 +11,7 @@ import {
 import { useEffect, useState } from "react";
 import {
   Building2, Briefcase, Coins, Wallet, ArrowRight, ArrowLeft,
-  Check, Info, ChevronRight, Folder, FileText, Plus
+  Check, Info, ChevronRight, Folder, FileText, Plus, Trash2
 } from "lucide-react";
 import { BrandMark, LangToggle, ThemeToggle } from "@/components/Brand";
 import { toast } from "sonner";
@@ -31,6 +31,38 @@ const CURRENCIES = [
   { code: "SAR", name: "Saudi Riyal", symbol: "ر.س" },
   { code: "AED", name: "UAE Dirham", symbol: "د.إ" },
 ];
+
+type COAOption = COANode & { depth: number };
+
+const cloneCOA = (nodes: COANode[]): COANode[] => JSON.parse(JSON.stringify(nodes));
+
+const flattenCOA = (nodes: COANode[], depth = 0): COAOption[] =>
+  nodes.flatMap((node) => [
+    { ...node, depth },
+    ...flattenCOA(node.children ?? [], depth + 1),
+  ]);
+
+const findCOANode = (nodes: COANode[], id: string): COANode | undefined => {
+  for (const node of nodes) {
+    if (node.id === id) return node;
+    const child = findCOANode(node.children ?? [], id);
+    if (child) return child;
+  }
+  return undefined;
+};
+
+const addCOANode = (nodes: COANode[], parentId: string, nodeToAdd: COANode): COANode[] =>
+  nodes.map((node) => {
+    if (node.id === parentId) {
+      return { ...node, children: [...(node.children ?? []), nodeToAdd] };
+    }
+    return { ...node, children: node.children ? addCOANode(node.children, parentId, nodeToAdd) : node.children };
+  });
+
+const removeCOANode = (nodes: COANode[], id: string): COANode[] =>
+  nodes
+    .filter((node) => node.id !== id)
+    .map((node) => ({ ...node, children: node.children ? removeCOANode(node.children, id) : node.children }));
 
 function Onboarding() {
   const { dir, t } = useI18n();
@@ -58,14 +90,10 @@ function Onboarding() {
 
   const generateCOA = () => {
     // Deep clone default COA to avoid mutating standard
-    const newCoa: COANode[] = JSON.parse(JSON.stringify(DEFAULT_COA));
+    let newCoa: COANode[] = cloneCOA(DEFAULT_COA);
     
     const addNode = (parentId: string, node: COANode) => {
-      const parent = newCoa.find((n) => n.id === parentId);
-      if (parent) {
-        parent.children = parent.children || [];
-        parent.children.push(node);
-      }
+      newCoa = addCOANode(newCoa, parentId, node);
     };
 
     if (qProducts) {
@@ -151,15 +179,18 @@ function Onboarding() {
         ...flatten(node.children ?? [], node.id),
       ]);
 
+    const createdIds = new Map<string, string>();
     for (const account of flatten(coaToSave)) {
-      await api("/tenant/accounts", {
+      const created = await api<{ id: string }>("/tenant/accounts", {
         method: "POST",
         body: JSON.stringify({
           code: account.code,
           name: account.name,
           type: account.type === "Income" ? "Revenue" : account.type,
+          parentId: account.parentId ? createdIds.get(account.parentId) : undefined,
         }),
       });
+      createdIds.set(account.id, created.id);
     }
   };
 
@@ -201,7 +232,7 @@ function Onboarding() {
   const back = () => setStep(Math.max(0, step - 1));
 
   const handleAddCustomAccount = () => {
-    const parent = customCOA.find((n) => n.id === newAccParent);
+    const parent = findCOANode(customCOA, newAccParent);
     const parentType = parent ? parent.type : "Asset";
     const newNode: COANode = {
       id: Math.random().toString(36).substring(7),
@@ -210,20 +241,18 @@ function Onboarding() {
       type: parentType,
     };
     
-    setCustomCOA((prev) => {
-      const newTree = JSON.parse(JSON.stringify(prev));
-      const target = newTree.find((n: COANode) => n.id === newAccParent);
-      if (target) {
-        target.children = target.children || [];
-        target.children.push(newNode);
-      }
-      return newTree;
-    });
+    setCustomCOA((prev) => addCOANode(prev, newAccParent, newNode));
     
     setAddDialogOpen(false);
     setNewAccName("");
     setNewAccCode("");
   };
+
+  const handleRemoveAccount = (id: string) => {
+    setCustomCOA((prev) => removeCOANode(prev, id));
+  };
+
+  const parentOptions = flattenCOA(customCOA).filter((node) => node.depth < 3);
 
   return (
     <div dir={dir} className="min-h-screen bg-gradient-hero">
@@ -370,7 +399,18 @@ function Onboarding() {
                     </Button>
                   </div>
                   <div className="bg-surface-container rounded-xl p-3 max-h-60 overflow-y-auto space-y-1">
-                    {customCOA.map((n) => <TreeRow key={n.id} node={n} depth={0} />)}
+                    {customCOA.map((n) => (
+                      <TreeRow
+                        key={n.id}
+                        node={n}
+                        depth={0}
+                        onAdd={(id) => {
+                          setNewAccParent(id);
+                          setAddDialogOpen(true);
+                        }}
+                        onRemove={handleRemoveAccount}
+                      />
+                    ))}
                   </div>
                 </div>
               </div>
@@ -403,16 +443,19 @@ function Onboarding() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-1.5">
-              <Label>Category (Level 1)</Label>
+              <Label>Parent account</Label>
               <select 
                 value={newAccParent} 
                 onChange={(e) => setNewAccParent(e.target.value)}
                 className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
               >
-                {DEFAULT_COA.map((n) => (
-                  <option key={n.id} value={n.id}>{n.code} - {n.name}</option>
+                {parentOptions.map((n) => (
+                  <option key={n.id} value={n.id}>
+                    {"--".repeat(n.depth)} {n.code} - {n.name}
+                  </option>
                 ))}
               </select>
+              <p className="text-xs text-on-surface-variant">Choose a level 2 or level 3 parent to create level 3 or level 4 accounts.</p>
             </div>
             <div className="space-y-1.5">
               <Label>{t("accountCode")}</Label>
@@ -452,24 +495,59 @@ function StepWrap({
   );
 }
 
-function TreeRow({ node, depth }: { node: COANode; depth: number }) {
+function TreeRow({
+  node,
+  depth,
+  onAdd,
+  onRemove,
+}: {
+  node: COANode;
+  depth: number;
+  onAdd: (id: string) => void;
+  onRemove: (id: string) => void;
+}) {
   const [open, setOpen] = useState(false);
   const hasChildren = !!node.children?.length;
   return (
     <>
       <div
-        className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-surface-subtle cursor-pointer"
+        className="group flex items-center gap-2 p-1.5 rounded-lg hover:bg-surface-subtle"
         style={{ paddingInlineStart: depth * 20 + 4 }}
-        onClick={() => hasChildren && setOpen(!open)}
       >
-        {hasChildren ? (
-          <ChevronRight className={`h-4 w-4 text-on-surface-variant transition-transform ${open ? "rotate-90" : ""} rtl:rotate-180 rtl:${open ? "-rotate-90" : ""}`} />
-        ) : <span className="w-4" />}
+        <button
+          type="button"
+          className="h-5 w-5 grid place-items-center rounded hover:bg-surface-container"
+          onClick={() => hasChildren && setOpen(!open)}
+        >
+          {hasChildren ? (
+            <ChevronRight className={`h-4 w-4 text-on-surface-variant transition-transform ${open ? "rotate-90" : ""}`} />
+          ) : <span className="w-4" />}
+        </button>
         {hasChildren ? <Folder className="h-4 w-4 text-primary" /> : <FileText className="h-4 w-4 text-on-surface-variant" />}
         <span className="text-xs text-on-surface-variant font-mono w-10">{node.code}</span>
-        <span className={`text-sm ${hasChildren ? "font-semibold" : ""}`}>{node.name}</span>
+        <span className={`text-sm min-w-0 flex-1 ${hasChildren ? "font-semibold" : ""}`}>{node.name}</span>
+        {depth < 3 && (
+          <button
+            type="button"
+            title="Add child account"
+            onClick={() => onAdd(node.id)}
+            className="opacity-0 group-hover:opacity-100 p-1.5 rounded-md hover:bg-surface-container text-on-surface-variant transition"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        )}
+        <button
+          type="button"
+          title="Remove account"
+          onClick={() => onRemove(node.id)}
+          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-md hover:bg-destructive/10 text-on-surface-variant hover:text-destructive transition"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
       </div>
-      {open && node.children?.map((c) => <TreeRow key={c.id} node={c} depth={depth + 1} />)}
+      {open && node.children?.map((c) => (
+        <TreeRow key={c.id} node={c} depth={depth + 1} onAdd={onAdd} onRemove={onRemove} />
+      ))}
     </>
   );
 }
