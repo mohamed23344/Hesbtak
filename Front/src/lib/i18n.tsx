@@ -139,15 +139,9 @@ const dict = {
     allTypes: "All types",
     allAccounts: "All accounts",
 
-    // Expenses
-    expTitle: "Expenses",
-    expDesc: "Track and categorize every business expense.",
-    addExpense: "Add expense",
-    newExpense: "New expense",
     vendor: "Vendor",
     notes: "Notes",
     optional: "Optional",
-    saveExpense: "Save expense",
     totalThisMonth: "Total this month",
     pendingApproval: "Pending approval",
     avgPerWeek: "Avg per week",
@@ -228,7 +222,7 @@ const dict = {
     uploadToBegin: "Upload a document to begin.",
     confidence: "confidence",
     edit: "Edit",
-    saveAsExpense: "Save as expense",
+    reviewDocument: "Review document",
 
     // Notifications
     notifTitle: "Notifications",
@@ -400,15 +394,9 @@ const dict = {
     allTypes: "جميع الأنواع",
     allAccounts: "جميع الحسابات",
 
-    // Expenses
-    expTitle: "المصروفات",
-    expDesc: "تتبع وصنف كل مصروفات عملك.",
-    addExpense: "إضافة مصروف",
-    newExpense: "مصروف جديد",
     vendor: "المورد",
     notes: "ملاحظات",
     optional: "اختياري",
-    saveExpense: "حفظ المصروف",
     totalThisMonth: "الإجمالي هذا الشهر",
     pendingApproval: "في انتظار الموافقة",
     avgPerWeek: "المتوسط الأسبوعي",
@@ -489,7 +477,7 @@ const dict = {
     uploadToBegin: "ارفع مستنداً للبدء.",
     confidence: "دقة",
     edit: "تعديل",
-    saveAsExpense: "حفظ كمصروف",
+    reviewDocument: "مراجعة المستند",
 
     // Notifications
     notifTitle: "التنبيهات",

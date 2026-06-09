@@ -15,7 +15,6 @@ import { AccountingService } from './accounting.service';
 import {
   AccountDto,
   AttachInvoiceDto,
-  ExpenseDto,
   InvoiceDto,
   JournalEntryDto,
   PartyDto,
@@ -114,6 +113,18 @@ export class AccountingController {
     );
   }
 
+  @Delete('journal-entries/:id')
+  async deleteJournalEntry(
+    @Headers('x-tenant-id') orgId: string,
+    @CurrentUser() user: JwtUser,
+    @Param('id') id: string,
+  ) {
+    return this.accounting.deleteJournalEntry(
+      await this.tenant.fromOrganizationId(orgId, user.sub, ['owner', 'accountant']),
+      id,
+    );
+  }
+
   @Post('journal-entries/:id/attach-invoice')
   async attachInvoice(
     @Headers('x-tenant-id') orgId: string,
@@ -185,24 +196,6 @@ export class AccountingController {
     @Body() dto: PaymentDto,
   ) {
     return this.accounting.createVendorPayment(
-      await this.tenant.fromOrganizationId(orgId, user.sub, ['owner', 'accountant']),
-      user.sub,
-      dto,
-    );
-  }
-
-  @Get('expenses')
-  async expenses(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser) {
-    return this.accounting.listExpenses(await this.tenant.fromOrganizationId(orgId, user.sub));
-  }
-
-  @Post('expenses')
-  async createExpense(
-    @Headers('x-tenant-id') orgId: string,
-    @CurrentUser() user: JwtUser,
-    @Body() dto: ExpenseDto,
-  ) {
-    return this.accounting.createExpense(
       await this.tenant.fromOrganizationId(orgId, user.sub, ['owner', 'accountant']),
       user.sub,
       dto,

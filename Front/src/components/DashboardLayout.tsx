@@ -2,7 +2,7 @@ import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { useI18n } from "@/lib/i18n";
 import { BrandMark, LangToggle, ThemeToggle } from "@/components/Brand";
 import {
-  LayoutDashboard, ArrowLeftRight, Receipt, FileText, Network,
+  LayoutDashboard, ArrowLeftRight, FileText, Network,
   BookOpenText, Bot, TrendingUp, ScanLine, Bell, Settings, Search, LogOut, Menu, X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -25,7 +25,6 @@ export default function DashboardLayout() {
   const NAV = [
     { to: "/dashboard", label: t("dashboard"), icon: LayoutDashboard },
     { to: "/dashboard/transactions", label: t("transactions"), icon: ArrowLeftRight },
-    { to: "/dashboard/expenses", label: t("expenses"), icon: Receipt },
     { to: "/dashboard/invoices", label: t("invoices"), icon: FileText },
     { to: "/dashboard/accounts", label: t("accounts"), icon: Network },
     { to: "/dashboard/journal", label: t("journal"), icon: BookOpenText },

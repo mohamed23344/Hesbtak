@@ -7,8 +7,8 @@ NestJS API for a multi-tenant SMB ERP/accounting system. The platform uses one s
 - Auth: registration, signup OTP verification, login, JWT guards, forgot-password OTP, password reset, invitations, invitation acceptance.
 - Multi-tenancy: shared public `users`, `organizations`, `organization_users`, `invitations`, `plans`, `subscriptions`, `audit_logs`, and `password_reset_otps`; tenant schema provisioning during onboarding.
 - Onboarding: frontend-priority batch completion endpoint can create the organization and tenant schema after signup.
-- Accounting: chart of accounts, customers, vendors, journal entries, invoices, customer payments, vendor bills, vendor payments, direct expenses.
-- Automation and insight: recurring entries, scheduled recurring processing, dashboard KPIs, baseline forecasts, chatbot ledger summary, alerts, suggestions.
+- Accounting: chart of accounts, customers, vendors, journal entries, invoices, customer payments, vendor bills, and vendor payments.
+- Automation and insight: recurring entries, scheduled recurring processing, dashboard KPIs, deterministic formula forecasts, chatbot ledger summary, alerts, suggestions.
 - Frontend contract: protected tenant endpoints require `Authorization: Bearer <token>` and `x-tenant-id: <organizationId>`.
 
 ## Environment
@@ -235,22 +235,6 @@ curl -X POST "$BASE/tenant/vendor-payments" \
   -d '{ "entityId": "<vendor-bill-id>", "amount": 1140, "paymentMethod": "cash", "paymentDate": "2026-06-07" }'
 ```
 
-### Direct Expense
-
-```bash
-curl -X POST "$BASE/tenant/expenses" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "x-tenant-id: $TENANT" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "expenseDate": "2026-06-05",
-    "category": "Software",
-    "description": "AWS monthly hosting",
-    "amount": 128.50,
-    "paymentMethod": "cash"
-  }'
-```
-
 ### Journal Entries
 
 Use account IDs from `GET /tenant/accounts`.
@@ -341,4 +325,4 @@ curl "$BASE/admin/dashboard" \
 - Tenant schema names are generated as `tenant_<organization_uuid_with_underscores>` and validated before raw SQL use.
 - Public/shared tables are Prisma models. Tenant schema tables are provisioned and queried with guarded raw SQL because schemas are dynamic.
 - Signup and forgot-password OTP emails use Gmail SMTP when `GOOGLE_EMAIL` and `GOOGLE_APP_PASSWORD` are set.
-- Forecast and chatbot services are deterministic baselines ready for real ML/LLM integrations.
+- Forecasting is deterministic formula logic from tenant financial history only. Chatbot services can use configured assistant integrations.

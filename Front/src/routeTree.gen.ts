@@ -26,7 +26,6 @@ import { Route as DashboardNotificationsRouteImport } from './routes/dashboard.n
 import { Route as DashboardJournalRouteImport } from './routes/dashboard.journal'
 import { Route as DashboardInvoicesRouteImport } from './routes/dashboard.invoices'
 import { Route as DashboardForecastingRouteImport } from './routes/dashboard.forecasting'
-import { Route as DashboardExpensesRouteImport } from './routes/dashboard.expenses'
 import { Route as DashboardAssistantRouteImport } from './routes/dashboard.assistant'
 import { Route as DashboardAccountsRouteImport } from './routes/dashboard.accounts'
 
@@ -115,11 +114,6 @@ const DashboardForecastingRoute = DashboardForecastingRouteImport.update({
   path: '/forecasting',
   getParentRoute: () => DashboardRoute,
 } as any)
-const DashboardExpensesRoute = DashboardExpensesRouteImport.update({
-  id: '/expenses',
-  path: '/expenses',
-  getParentRoute: () => DashboardRoute,
-} as any)
 const DashboardAssistantRoute = DashboardAssistantRouteImport.update({
   id: '/assistant',
   path: '/assistant',
@@ -142,7 +136,6 @@ export interface FileRoutesByFullPath {
   '/verify-otp': typeof VerifyOtpRoute
   '/dashboard/accounts': typeof DashboardAccountsRoute
   '/dashboard/assistant': typeof DashboardAssistantRoute
-  '/dashboard/expenses': typeof DashboardExpensesRoute
   '/dashboard/forecasting': typeof DashboardForecastingRoute
   '/dashboard/invoices': typeof DashboardInvoicesRoute
   '/dashboard/journal': typeof DashboardJournalRoute
@@ -162,7 +155,6 @@ export interface FileRoutesByTo {
   '/verify-otp': typeof VerifyOtpRoute
   '/dashboard/accounts': typeof DashboardAccountsRoute
   '/dashboard/assistant': typeof DashboardAssistantRoute
-  '/dashboard/expenses': typeof DashboardExpensesRoute
   '/dashboard/forecasting': typeof DashboardForecastingRoute
   '/dashboard/invoices': typeof DashboardInvoicesRoute
   '/dashboard/journal': typeof DashboardJournalRoute
@@ -185,7 +177,6 @@ export interface FileRoutesById {
   '/verify-otp': typeof VerifyOtpRoute
   '/dashboard/accounts': typeof DashboardAccountsRoute
   '/dashboard/assistant': typeof DashboardAssistantRoute
-  '/dashboard/expenses': typeof DashboardExpensesRoute
   '/dashboard/forecasting': typeof DashboardForecastingRoute
   '/dashboard/invoices': typeof DashboardInvoicesRoute
   '/dashboard/journal': typeof DashboardJournalRoute
@@ -209,7 +200,6 @@ export interface FileRouteTypes {
     | '/verify-otp'
     | '/dashboard/accounts'
     | '/dashboard/assistant'
-    | '/dashboard/expenses'
     | '/dashboard/forecasting'
     | '/dashboard/invoices'
     | '/dashboard/journal'
@@ -229,7 +219,6 @@ export interface FileRouteTypes {
     | '/verify-otp'
     | '/dashboard/accounts'
     | '/dashboard/assistant'
-    | '/dashboard/expenses'
     | '/dashboard/forecasting'
     | '/dashboard/invoices'
     | '/dashboard/journal'
@@ -251,7 +240,6 @@ export interface FileRouteTypes {
     | '/verify-otp'
     | '/dashboard/accounts'
     | '/dashboard/assistant'
-    | '/dashboard/expenses'
     | '/dashboard/forecasting'
     | '/dashboard/invoices'
     | '/dashboard/journal'
@@ -395,13 +383,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardForecastingRouteImport
       parentRoute: typeof DashboardRoute
     }
-    '/dashboard/expenses': {
-      id: '/dashboard/expenses'
-      path: '/expenses'
-      fullPath: '/dashboard/expenses'
-      preLoaderRoute: typeof DashboardExpensesRouteImport
-      parentRoute: typeof DashboardRoute
-    }
     '/dashboard/assistant': {
       id: '/dashboard/assistant'
       path: '/assistant'
@@ -432,7 +413,6 @@ const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 interface DashboardRouteChildren {
   DashboardAccountsRoute: typeof DashboardAccountsRoute
   DashboardAssistantRoute: typeof DashboardAssistantRoute
-  DashboardExpensesRoute: typeof DashboardExpensesRoute
   DashboardForecastingRoute: typeof DashboardForecastingRoute
   DashboardInvoicesRoute: typeof DashboardInvoicesRoute
   DashboardJournalRoute: typeof DashboardJournalRoute
@@ -446,7 +426,6 @@ interface DashboardRouteChildren {
 const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardAccountsRoute: DashboardAccountsRoute,
   DashboardAssistantRoute: DashboardAssistantRoute,
-  DashboardExpensesRoute: DashboardExpensesRoute,
   DashboardForecastingRoute: DashboardForecastingRoute,
   DashboardInvoicesRoute: DashboardInvoicesRoute,
   DashboardJournalRoute: DashboardJournalRoute,

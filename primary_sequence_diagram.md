@@ -160,14 +160,14 @@ Acct --> Insight: raw data
 Insight --> Gateway: formatted KPIs, charts
 Gateway --> Web: dashboard view
 
-== 9. AI‑powered forecast & expected liabilities ==
+== 9. Formula-driven forecast & expected liabilities ==
 User -> Web: open forecasts page
 Web -> Gateway: GET /tenant/forecasts?months=12
-Gateway -> Forecast: generateForecast(tenant, months, industry)
-Forecast -> Acct: fetch historical JE data
-Forecast -> Insight: get market/industry trends
-Forecast -> Forecast: run ML model, compute confidence intervals
-Forecast --> Gateway: predicted revenue/expense/cashflow
+Gateway -> Forecast: generateForecast(tenant, months)
+Forecast -> Acct: fetch tenant invoices, expenses, bills, payments, and journal data
+Forecast -> Forecast: apply CAGR, weighted moving average, trend, and seasonal formulas
+Forecast -> Forecast: compute confidence from availability, variance, seasonality, and completeness
+Forecast --> Gateway: predicted revenue/expense/cashflow with audit details
 Gateway --> Web: forecast charts
 
 == 10. Chatbot on financial insights ==

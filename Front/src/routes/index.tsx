@@ -151,7 +151,7 @@ function Landing() {
             {
               icon: Zap,
               title: "Forecasts",
-              desc: "AI predicts next month's cashflow so you know if you can hire or invest.",
+              desc: "Formula-driven cashflow projections use only your own invoices, expenses, bills, and payments.",
             },
           ].map((f) => (
             <div
@@ -186,7 +186,7 @@ function Landing() {
                 "Auto-categorize transactions",
                 "Detect duplicate invoices",
                 "Suggest tax-saving moves",
-                "Forecast cash 60 days ahead",
+                "Explain cash trends from your ledger",
               ].map((x) => (
                 <li key={x} className="flex items-start gap-2 text-sm">
                   <CheckCircle2 className="h-5 w-5 text-status-success shrink-0" /> {x}

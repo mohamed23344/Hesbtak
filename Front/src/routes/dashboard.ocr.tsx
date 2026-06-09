@@ -53,7 +53,7 @@ function Page() {
 
               <div className="flex gap-2 mt-6">
                 <Button variant="outline" className="flex-1">{t("edit")}</Button>
-                <Button className="flex-1 bg-gradient-primary">{t("saveAsExpense")}</Button>
+                <Button className="flex-1 bg-gradient-primary">{t("reviewDocument")}</Button>
               </div>
             </div>
           )}

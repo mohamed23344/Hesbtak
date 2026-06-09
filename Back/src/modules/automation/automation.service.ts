@@ -5,6 +5,38 @@ import { AccountingService } from '../accounting/accounting.service';
 import { TenantContext, TenantService } from '../tenant/tenant.service';
 import { RecurringEntryDto } from './dto';
 
+type MonthlyActual = {
+  month: string;
+  revenue: number;
+  expenses: number;
+  cashCollected: number;
+  vendorPaid: number;
+  revenueRecordIds: string[];
+  expenseRecordIds: string[];
+  paymentRecordIds: string[];
+  vendorPaymentRecordIds: string[];
+};
+
+type ForecastSeries = {
+  method: string;
+  formula: string;
+  values: number[];
+  growthRate: number;
+  seasonalFactors: number[];
+  varianceCoefficient: number;
+};
+
+type ForecastConfidence = {
+  score: number;
+  explanation: string;
+  factors: {
+    historicalDataAvailability: number;
+    historicalVariance: number;
+    seasonalConsistency: number;
+    dataCompleteness: number;
+  };
+};
+
 @Injectable()
 export class AutomationService {
   constructor(
@@ -113,23 +145,97 @@ export class AutomationService {
   }
 
   async forecast(ctx: TenantContext, months = 12) {
-    const dashboard = await this.dashboard(ctx);
-    const monthlyRevenue = dashboard.revenue / Math.max(1, months);
-    const monthlyExpense = dashboard.expenses / Math.max(1, months);
-    const result = Array.from({ length: months }, (_, i) => {
+    const horizon = Math.min(Math.max(Math.trunc(months) || 12, 1), 36);
+    const actuals = await this.monthlyFinancialActuals(ctx);
+    const sourceRecords = await this.forecastSourceRecords(ctx);
+    const revenueSeries = this.buildForecastSeries(
+      actuals.map((item) => item.revenue),
+      actuals.map((item) => item.month),
+      horizon,
+      'Revenue',
+    );
+    const expenseSeries = this.buildForecastSeries(
+      actuals.map((item) => item.expenses),
+      actuals.map((item) => item.month),
+      horizon,
+      'Expense',
+    );
+    const confidence = this.forecastConfidence(actuals);
+    const intervalRatio = 1 - confidence.score / 100;
+
+    const result = Array.from({ length: horizon }, (_, index) => {
       const date = new Date();
-      date.setMonth(date.getMonth() + i + 1, 1);
-      const growth = 1 + i * 0.015;
+      date.setUTCDate(1);
+      date.setUTCMonth(date.getUTCMonth() + index + 1);
+      const predictedRevenue = this.roundMoney(revenueSeries.values[index] ?? 0);
+      const predictedExpense = this.roundMoney(expenseSeries.values[index] ?? 0);
+      const predictedCashflow = this.roundMoney(predictedRevenue - predictedExpense);
+      const interval = Math.abs(predictedCashflow) * intervalRatio;
+
       return {
         forecastMonth: date.toISOString().slice(0, 10),
-        predictedRevenue: Number((monthlyRevenue * growth).toFixed(2)),
-        predictedExpense: Number((monthlyExpense * (1 + i * 0.01)).toFixed(2)),
-        predictedCashflow: Number(((monthlyRevenue - monthlyExpense) * growth).toFixed(2)),
-        confidenceLow: Number(((monthlyRevenue - monthlyExpense) * 0.85).toFixed(2)),
-        confidenceHigh: Number(((monthlyRevenue - monthlyExpense) * 1.15).toFixed(2)),
+        predictedRevenue,
+        predictedExpense,
+        predictedCashflow,
+        confidenceLow: this.roundMoney(predictedCashflow - interval),
+        confidenceHigh: this.roundMoney(predictedCashflow + interval),
+        formulaUsed: 'Cash flow forecast generated as forecast revenue minus forecast expenses.',
+        calculationDetails: {
+          revenueMethod: revenueSeries.method,
+          expenseMethod: expenseSeries.method,
+          revenueGrowthRate: this.roundRate(revenueSeries.growthRate),
+          expenseGrowthRate: this.roundRate(expenseSeries.growthRate),
+          seasonalFactorApplied: {
+            revenue: this.roundRate(revenueSeries.seasonalFactors[index] ?? 1),
+            expenses: this.roundRate(expenseSeries.seasonalFactors[index] ?? 1),
+          },
+        },
       };
     });
-    return { modelVersion: 'baseline-v1', months: result };
+
+    return {
+      modelVersion: 'deterministic-formula-v1',
+      forecastPrinciples: {
+        deterministic: true,
+        externalDataUsed: false,
+        aiOrMlUsed: false,
+        tenantIsolation: `Calculated only from tenant schema ${ctx.schemaName}.`,
+      },
+      method: {
+        revenue: revenueSeries.method,
+        expenses: expenseSeries.method,
+        cashflow: 'Cash Flow Projection Model',
+      },
+      formulaUsed: [
+        revenueSeries.formula,
+        expenseSeries.formula,
+        'Cash flow forecast = predicted revenue - predicted expenses.',
+      ],
+      sourceData: {
+        historicalPeriods: actuals.map((item) => item.month),
+        tables: [
+          'invoices',
+          'expenses',
+          'vendor_bills',
+          'customer_payments',
+          'vendor_payments',
+          'journal_entries',
+          'journal_lines',
+        ],
+        records: sourceRecords,
+      },
+      calculationDetails: {
+        forecastHorizonMonths: horizon,
+        historicalPeriodCount: actuals.length,
+        revenueGrowthRate: this.roundRate(revenueSeries.growthRate),
+        expenseGrowthRate: this.roundRate(expenseSeries.growthRate),
+        revenueVarianceCoefficient: this.roundRate(revenueSeries.varianceCoefficient),
+        expenseVarianceCoefficient: this.roundRate(expenseSeries.varianceCoefficient),
+        monthlyActuals: actuals,
+      },
+      confidence,
+      months: result,
+    };
   }
 
   async listAlerts(ctx: TenantContext) {
@@ -167,5 +273,296 @@ export class AutomationService {
       `SELECT COALESCE(SUM(total), 0) AS total FROM ${schema}.${table} WHERE ${where}`,
     );
     return Number(rows[0]?.total ?? 0);
+  }
+
+  private async monthlyFinancialActuals(ctx: TenantContext): Promise<MonthlyActual[]> {
+    const schema = this.tenant.quote(ctx.schemaName);
+    const rows = await this.db.$queryRawUnsafe<
+      {
+        month: Date;
+        revenue: string;
+        expenses: string;
+        cash_collected: string;
+        vendor_paid: string;
+        revenue_record_ids: string[] | null;
+        expense_record_ids: string[] | null;
+        payment_record_ids: string[] | null;
+        vendor_payment_record_ids: string[] | null;
+      }[]
+    >(
+      `WITH monthly AS (
+         SELECT date_trunc('month', issue_date)::date AS month,
+                SUM(total)::numeric AS revenue,
+                0::numeric AS expenses,
+                0::numeric AS cash_collected,
+                0::numeric AS vendor_paid,
+                array_agg(id::text ORDER BY issue_date, id) AS revenue_record_ids,
+                ARRAY[]::text[] AS expense_record_ids,
+                ARRAY[]::text[] AS payment_record_ids,
+                ARRAY[]::text[] AS vendor_payment_record_ids
+           FROM ${schema}.invoices
+          GROUP BY 1
+         UNION ALL
+         SELECT date_trunc('month', expense_date)::date AS month,
+                0::numeric AS revenue,
+                SUM(total)::numeric AS expenses,
+                0::numeric AS cash_collected,
+                0::numeric AS vendor_paid,
+                ARRAY[]::text[] AS revenue_record_ids,
+                array_agg(id::text ORDER BY expense_date, id) AS expense_record_ids,
+                ARRAY[]::text[] AS payment_record_ids,
+                ARRAY[]::text[] AS vendor_payment_record_ids
+           FROM ${schema}.expenses
+          GROUP BY 1
+         UNION ALL
+         SELECT date_trunc('month', issue_date)::date AS month,
+                0::numeric AS revenue,
+                SUM(total)::numeric AS expenses,
+                0::numeric AS cash_collected,
+                0::numeric AS vendor_paid,
+                ARRAY[]::text[] AS revenue_record_ids,
+                array_agg(id::text ORDER BY issue_date, id) AS expense_record_ids,
+                ARRAY[]::text[] AS payment_record_ids,
+                ARRAY[]::text[] AS vendor_payment_record_ids
+           FROM ${schema}.vendor_bills
+          GROUP BY 1
+         UNION ALL
+         SELECT date_trunc('month', payment_date)::date AS month,
+                0::numeric AS revenue,
+                0::numeric AS expenses,
+                SUM(amount)::numeric AS cash_collected,
+                0::numeric AS vendor_paid,
+                ARRAY[]::text[] AS revenue_record_ids,
+                ARRAY[]::text[] AS expense_record_ids,
+                array_agg(id::text ORDER BY payment_date, id) AS payment_record_ids,
+                ARRAY[]::text[] AS vendor_payment_record_ids
+           FROM ${schema}.customer_payments
+          GROUP BY 1
+         UNION ALL
+         SELECT date_trunc('month', payment_date)::date AS month,
+                0::numeric AS revenue,
+                0::numeric AS expenses,
+                0::numeric AS cash_collected,
+                SUM(amount)::numeric AS vendor_paid,
+                ARRAY[]::text[] AS revenue_record_ids,
+                ARRAY[]::text[] AS expense_record_ids,
+                ARRAY[]::text[] AS payment_record_ids,
+                array_agg(id::text ORDER BY payment_date, id) AS vendor_payment_record_ids
+           FROM ${schema}.vendor_payments
+          GROUP BY 1
+       )
+       SELECT month,
+              COALESCE(SUM(revenue), 0) AS revenue,
+              COALESCE(SUM(expenses), 0) AS expenses,
+              COALESCE(SUM(cash_collected), 0) AS cash_collected,
+              COALESCE(SUM(vendor_paid), 0) AS vendor_paid,
+              COALESCE(array_remove(string_to_array(string_agg(NULLIF(array_to_string(revenue_record_ids, ','), ''), ','), ','), NULL), ARRAY[]::text[]) AS revenue_record_ids,
+              COALESCE(array_remove(string_to_array(string_agg(NULLIF(array_to_string(expense_record_ids, ','), ''), ','), ','), NULL), ARRAY[]::text[]) AS expense_record_ids,
+              COALESCE(array_remove(string_to_array(string_agg(NULLIF(array_to_string(payment_record_ids, ','), ''), ','), ','), NULL), ARRAY[]::text[]) AS payment_record_ids,
+              COALESCE(array_remove(string_to_array(string_agg(NULLIF(array_to_string(vendor_payment_record_ids, ','), ''), ','), ','), NULL), ARRAY[]::text[]) AS vendor_payment_record_ids
+         FROM monthly
+        GROUP BY month
+        ORDER BY month`,
+    );
+
+    const actuals = rows.map((row) => ({
+      month: row.month.toISOString().slice(0, 10),
+      revenue: this.roundMoney(row.revenue),
+      expenses: this.roundMoney(row.expenses),
+      cashCollected: this.roundMoney(row.cash_collected),
+      vendorPaid: this.roundMoney(row.vendor_paid),
+      revenueRecordIds: row.revenue_record_ids ?? [],
+      expenseRecordIds: row.expense_record_ids ?? [],
+      paymentRecordIds: row.payment_record_ids ?? [],
+      vendorPaymentRecordIds: row.vendor_payment_record_ids ?? [],
+    }));
+    return this.fillMonthlyGaps(actuals);
+  }
+
+  private async forecastSourceRecords(ctx: TenantContext) {
+    const schema = this.tenant.quote(ctx.schemaName);
+    return this.db.$queryRawUnsafe(
+      `SELECT 'invoice' AS source_type, id, invoice_number AS reference, issue_date AS record_date, total
+         FROM ${schema}.invoices
+        UNION ALL
+       SELECT 'expense' AS source_type, id, expense_number AS reference, expense_date AS record_date, total
+         FROM ${schema}.expenses
+        UNION ALL
+       SELECT 'vendor_bill' AS source_type, id, bill_number AS reference, issue_date AS record_date, total
+         FROM ${schema}.vendor_bills
+        UNION ALL
+       SELECT 'customer_payment' AS source_type, id, reference, payment_date AS record_date, amount AS total
+         FROM ${schema}.customer_payments
+        UNION ALL
+       SELECT 'vendor_payment' AS source_type, id, reference, payment_date AS record_date, amount AS total
+         FROM ${schema}.vendor_payments
+        UNION ALL
+       SELECT 'journal_entry' AS source_type,
+              je.id,
+              COALESCE(je.reference_type || ':' || je.reference_id::text, je.description) AS reference,
+              je.date AS record_date,
+              COALESCE(SUM(jl.debit + jl.credit), 0) AS total
+         FROM ${schema}.journal_entries je
+         LEFT JOIN ${schema}.journal_lines jl ON jl.journal_entry_id = je.id
+        GROUP BY je.id, je.reference_type, je.reference_id, je.description, je.date
+        ORDER BY record_date DESC
+        LIMIT 250`,
+    );
+  }
+
+  private fillMonthlyGaps(actuals: MonthlyActual[]): MonthlyActual[] {
+    if (actuals.length < 2) return actuals;
+
+    const byMonth = new Map(actuals.map((item) => [item.month.slice(0, 7), item]));
+    const first = new Date(`${actuals[0].month.slice(0, 7)}-01T00:00:00.000Z`);
+    const last = new Date(`${actuals[actuals.length - 1].month.slice(0, 7)}-01T00:00:00.000Z`);
+    const filled: MonthlyActual[] = [];
+
+    for (const cursor = new Date(first); cursor <= last; cursor.setUTCMonth(cursor.getUTCMonth() + 1)) {
+      const monthKey = cursor.toISOString().slice(0, 7);
+      filled.push(
+        byMonth.get(monthKey) ?? {
+          month: `${monthKey}-01`,
+          revenue: 0,
+          expenses: 0,
+          cashCollected: 0,
+          vendorPaid: 0,
+          revenueRecordIds: [],
+          expenseRecordIds: [],
+          paymentRecordIds: [],
+          vendorPaymentRecordIds: [],
+        },
+      );
+    }
+
+    return filled;
+  }
+
+  private buildForecastSeries(history: number[], historicalMonths: string[], horizon: number, label: string): ForecastSeries {
+    const nonZeroHistory = history.filter((value) => value > 0);
+    const varianceCoefficient = this.coefficientOfVariation(nonZeroHistory);
+    const seasonalFactors = this.seasonalFactors(history, historicalMonths, horizon);
+
+    if (nonZeroHistory.length >= 13) {
+      const first = nonZeroHistory[0];
+      const last = nonZeroHistory[nonZeroHistory.length - 1];
+      const growthRate = first > 0 ? Math.pow(last / first, 1 / (nonZeroHistory.length - 1)) - 1 : 0;
+      const base = nonZeroHistory[nonZeroHistory.length - 1] || 0;
+      return {
+        method: 'CAGR with Seasonal Adjustment',
+        formula: `${label} forecast generated using CAGR with seasonal adjustment: latest actual x (1 + CAGR)^period x seasonal factor.`,
+        values: Array.from({ length: horizon }, (_, index) =>
+          Math.max(0, base * Math.pow(1 + growthRate, index + 1) * seasonalFactors[index]),
+        ),
+        growthRate,
+        seasonalFactors,
+        varianceCoefficient,
+      };
+    }
+
+    if (nonZeroHistory.length >= 3) {
+      const weights = [0.5, 0.3, 0.2];
+      const latest = nonZeroHistory.slice(-3).reverse();
+      const weightedAverage = latest.reduce((sum, value, index) => sum + value * weights[index], 0);
+      const trend = this.linearTrend(nonZeroHistory);
+      const growthRate = weightedAverage > 0 ? trend / weightedAverage : 0;
+      return {
+        method: 'Weighted Moving Average with Linear Trend Analysis',
+        formula: `${label} forecast generated using weighted moving average (50%, 30%, 20%) plus linear monthly trend and seasonal factor.`,
+        values: Array.from({ length: horizon }, (_, index) =>
+          Math.max(0, (weightedAverage + trend * (index + 1)) * seasonalFactors[index]),
+        ),
+        growthRate,
+        seasonalFactors,
+        varianceCoefficient,
+      };
+    }
+
+    const average = nonZeroHistory.length
+      ? nonZeroHistory.reduce((sum, value) => sum + value, 0) / nonZeroHistory.length
+      : 0;
+
+    return {
+      method: 'Historical Average Projection',
+      formula: `${label} forecast generated using historical average projection because fewer than three historical periods are available.`,
+      values: Array.from({ length: horizon }, () => average),
+      growthRate: 0,
+      seasonalFactors: Array.from({ length: horizon }, () => 1),
+      varianceCoefficient,
+    };
+  }
+
+  private forecastConfidence(actuals: MonthlyActual[]): ForecastConfidence {
+    const periods = actuals.length;
+    const completePeriods = actuals.filter((item) => item.revenue > 0 || item.expenses > 0).length;
+    const netCash = actuals.map((item) => item.revenue - item.expenses);
+    const variance = this.coefficientOfVariation(netCash.filter((value) => value !== 0).map(Math.abs));
+    const availability = Math.min(1, periods / 12);
+    const varianceScore = Math.max(0, 1 - Math.min(variance, 1));
+    const seasonalConsistency = periods >= 12 ? varianceScore : Math.min(0.6, periods / 12);
+    const completeness = periods ? completePeriods / periods : 0;
+    const score = Math.round(
+      (availability * 0.3 + varianceScore * 0.3 + seasonalConsistency * 0.2 + completeness * 0.2) * 100,
+    );
+
+    return {
+      score,
+      explanation:
+        `Confidence is ${score}% based only on ${periods} tenant historical periods, ` +
+        `${this.roundRate(variance)} historical variance coefficient, ` +
+        `${this.roundRate(seasonalConsistency)} seasonal consistency, and ` +
+        `${this.roundRate(completeness)} data completeness.`,
+      factors: {
+        historicalDataAvailability: this.roundRate(availability),
+        historicalVariance: this.roundRate(varianceScore),
+        seasonalConsistency: this.roundRate(seasonalConsistency),
+        dataCompleteness: this.roundRate(completeness),
+      },
+    };
+  }
+
+  private seasonalFactors(history: number[], historicalMonths: string[], horizon: number): number[] {
+    const positive = history.filter((value) => value > 0);
+    if (positive.length < 12) {
+      return Array.from({ length: horizon }, () => 1);
+    }
+
+    const average = positive.reduce((sum, value) => sum + value, 0) / positive.length;
+    return Array.from({ length: horizon }, (_, index) => {
+      const monthIndex = (new Date().getUTCMonth() + index + 1) % 12;
+      const sameMonthValues = history.filter(
+        (value, historyIndex) =>
+          new Date(`${historicalMonths[historyIndex].slice(0, 10)}T00:00:00.000Z`).getUTCMonth() === monthIndex &&
+          value > 0,
+      );
+      if (!sameMonthValues.length || average === 0) return 1;
+      const sameMonthAverage = sameMonthValues.reduce((sum, value) => sum + value, 0) / sameMonthValues.length;
+      return Math.min(1.5, Math.max(0.5, sameMonthAverage / average));
+    });
+  }
+
+  private linearTrend(values: number[]): number {
+    const count = values.length;
+    const xMean = (count - 1) / 2;
+    const yMean = values.reduce((sum, value) => sum + value, 0) / count;
+    const denominator = values.reduce((sum, _value, index) => sum + Math.pow(index - xMean, 2), 0);
+    if (denominator === 0) return 0;
+    return values.reduce((sum, value, index) => sum + (index - xMean) * (value - yMean), 0) / denominator;
+  }
+
+  private coefficientOfVariation(values: number[]): number {
+    if (!values.length) return 1;
+    const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+    if (average === 0) return 1;
+    const variance = values.reduce((sum, value) => sum + Math.pow(value - average, 2), 0) / values.length;
+    return Math.sqrt(variance) / Math.abs(average);
+  }
+
+  private roundMoney(value: number | string): number {
+    return Number(Number(value).toFixed(2));
+  }
+
+  private roundRate(value: number): number {
+    return Number(value.toFixed(4));
   }
 }

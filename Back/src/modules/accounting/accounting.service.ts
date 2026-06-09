@@ -4,7 +4,6 @@ import { TenantContext, TenantService } from '../tenant/tenant.service';
 import {
   AccountDto,
   AttachInvoiceDto,
-  ExpenseDto,
   InvoiceDto,
   JournalEntryDto,
   JournalLineDto,
@@ -160,6 +159,45 @@ export class AccountingService {
        GROUP BY je.id
        ORDER BY je.date DESC, je.created_at DESC`,
     );
+  }
+
+  async deleteJournalEntry(ctx: TenantContext, journalEntryId: string) {
+    const schema = this.tenant.quote(ctx.schemaName);
+    const entryRows = await this.db.$queryRawUnsafe<IdRow[]>(
+      `SELECT id FROM ${schema}.journal_entries WHERE id = $1::uuid`,
+      journalEntryId,
+    );
+    if (!entryRows[0]) throw new BadRequestException('Journal entry not found');
+
+    const usageRows = await this.db.$queryRawUnsafe<TotalRow[]>(
+      `SELECT (
+        (SELECT COUNT(*) FROM ${schema}.invoices WHERE journal_entry_id = $1::uuid) +
+        (SELECT COUNT(*) FROM ${schema}.customer_payments WHERE journal_entry_id = $1::uuid) +
+        (SELECT COUNT(*) FROM ${schema}.vendor_bills WHERE journal_entry_id = $1::uuid) +
+        (SELECT COUNT(*) FROM ${schema}.vendor_payments WHERE journal_entry_id = $1::uuid) +
+        (SELECT COUNT(*) FROM ${schema}.expenses WHERE journal_entry_id = $1::uuid)
+      )::text AS total`,
+      journalEntryId,
+    );
+    if (Number(usageRows[0]?.total ?? 0) > 0) {
+      throw new BadRequestException('This journal entry is linked to financial records and cannot be deleted. Delete or reverse the source transaction instead.');
+    }
+
+    await this.db.$executeRawUnsafe(
+      `UPDATE ${schema}.recurring_entry_logs
+       SET journal_entry_id = NULL
+       WHERE journal_entry_id = $1::uuid`,
+      journalEntryId,
+    );
+
+    const deletedRows = await this.db.$queryRawUnsafe<IdRow[]>(
+      `DELETE FROM ${schema}.journal_entries
+       WHERE id = $1::uuid
+       RETURNING id`,
+      journalEntryId,
+    );
+    if (!deletedRows[0]) throw new BadRequestException('Journal entry not found');
+    return { deleted: true };
   }
 
   async attachInvoiceToJournalEntry(
@@ -393,57 +431,6 @@ export class AccountingService {
 
   async listVendorBills(ctx: TenantContext) {
     return this.listTable(ctx, 'vendor_bills');
-  }
-
-  async listExpenses(ctx: TenantContext) {
-    return this.listTable(ctx, 'expenses');
-  }
-
-  async createExpense(ctx: TenantContext, userId: string, dto: ExpenseDto) {
-    const schema = this.tenant.quote(ctx.schemaName);
-    const number = await this.nextNumber(ctx, 'expenses', 'EXP');
-    const taxAmount = Number(dto.taxAmount ?? 0);
-    const total = Number(dto.amount) + taxAmount;
-    const expenseAccountId = dto.expenseAccountId ?? (await this.accountId(ctx, '5000'));
-    const cash = dto.bankAccountId
-      ? await this.bankGlAccount(ctx, dto.bankAccountId)
-      : await this.accountId(ctx, '1000');
-
-    const je = await this.createJournalEntry(
-      ctx,
-      userId,
-      {
-        date: dto.expenseDate,
-        description: dto.description,
-        lines: [
-          { accountId: expenseAccountId, debit: total, credit: 0 },
-          { accountId: cash, debit: 0, credit: total },
-        ],
-      },
-      'expense',
-    );
-
-    const rows = await this.db.$queryRawUnsafe<IdRow[]>(
-      `INSERT INTO ${schema}.expenses
-       (expense_number, expense_date, category, description, vendor_id, amount, tax_amount, total, expense_account_id, payment_method, bank_account_id, journal_entry_id, attachment_url, created_by)
-       VALUES ($1, $2::date, $3, $4, $5::uuid, $6, $7, $8, $9::uuid, $10, $11::uuid, $12::uuid, $13, $14::uuid)
-       RETURNING id`,
-      number,
-      dto.expenseDate,
-      dto.category ?? null,
-      dto.description,
-      dto.vendorId ?? null,
-      dto.amount,
-      taxAmount,
-      total,
-      expenseAccountId,
-      dto.paymentMethod,
-      dto.bankAccountId ?? null,
-      je.id,
-      dto.attachmentUrl ?? null,
-      userId,
-    );
-    return { id: rows[0].id, expenseNumber: number, total, status: 'completed' };
   }
 
   async createAlert(ctx: TenantContext, type: string, severity: string, title: string, message: string, entityType?: string, entityId?: string) {
