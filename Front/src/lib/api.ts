@@ -129,8 +129,8 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   return data as T;
 }
 
-export async function apiBlob(path: string): Promise<Blob> {
-  const res = await authenticatedFetch(path);
+export async function apiBlob(path: string, options: RequestInit = {}): Promise<Blob> {
+  const res = await authenticatedFetch(path, options);
   if (!res.ok) {
     const text = await res.text();
     let message = "Download failed";

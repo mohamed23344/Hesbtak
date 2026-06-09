@@ -4,6 +4,7 @@ import { BrandMark, LangToggle, ThemeToggle } from "@/components/Brand";
 import {
   LayoutDashboard, ArrowLeftRight, FileText, Network,
   BookOpenText, Bot, TrendingUp, ScanLine, Bell, Settings, Search, LogOut, Menu, X,
+  ChartNoAxesCombined,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
@@ -30,6 +31,7 @@ export default function DashboardLayout() {
     { to: "/dashboard/journal", label: t("journal"), icon: BookOpenText },
     { to: "/dashboard/assistant", label: t("assistant"), icon: Bot },
     { to: "/dashboard/forecasting", label: t("forecasting"), icon: TrendingUp },
+    { to: "/dashboard/reports", label: t("reports"), icon: ChartNoAxesCombined },
     { to: "/dashboard/ocr", label: t("ocr"), icon: ScanLine },
     { to: "/dashboard/notifications", label: t("notifications"), icon: Bell },
     { to: "/dashboard/settings", label: t("settings"), icon: Settings },

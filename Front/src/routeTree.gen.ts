@@ -21,6 +21,7 @@ import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as DashboardTransactionsRouteImport } from './routes/dashboard.transactions'
 import { Route as DashboardSettingsRouteImport } from './routes/dashboard.settings'
+import { Route as DashboardReportsRouteImport } from './routes/dashboard.reports'
 import { Route as DashboardOcrRouteImport } from './routes/dashboard.ocr'
 import { Route as DashboardNotificationsRouteImport } from './routes/dashboard.notifications'
 import { Route as DashboardJournalRouteImport } from './routes/dashboard.journal'
@@ -89,6 +90,11 @@ const DashboardSettingsRoute = DashboardSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardReportsRoute = DashboardReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardOcrRoute = DashboardOcrRouteImport.update({
   id: '/ocr',
   path: '/ocr',
@@ -141,6 +147,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/journal': typeof DashboardJournalRoute
   '/dashboard/notifications': typeof DashboardNotificationsRoute
   '/dashboard/ocr': typeof DashboardOcrRoute
+  '/dashboard/reports': typeof DashboardReportsRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/transactions': typeof DashboardTransactionsRoute
   '/admin/': typeof AdminIndexRoute
@@ -160,6 +167,7 @@ export interface FileRoutesByTo {
   '/dashboard/journal': typeof DashboardJournalRoute
   '/dashboard/notifications': typeof DashboardNotificationsRoute
   '/dashboard/ocr': typeof DashboardOcrRoute
+  '/dashboard/reports': typeof DashboardReportsRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/transactions': typeof DashboardTransactionsRoute
   '/admin': typeof AdminIndexRoute
@@ -182,6 +190,7 @@ export interface FileRoutesById {
   '/dashboard/journal': typeof DashboardJournalRoute
   '/dashboard/notifications': typeof DashboardNotificationsRoute
   '/dashboard/ocr': typeof DashboardOcrRoute
+  '/dashboard/reports': typeof DashboardReportsRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/transactions': typeof DashboardTransactionsRoute
   '/admin/': typeof AdminIndexRoute
@@ -205,6 +214,7 @@ export interface FileRouteTypes {
     | '/dashboard/journal'
     | '/dashboard/notifications'
     | '/dashboard/ocr'
+    | '/dashboard/reports'
     | '/dashboard/settings'
     | '/dashboard/transactions'
     | '/admin/'
@@ -224,6 +234,7 @@ export interface FileRouteTypes {
     | '/dashboard/journal'
     | '/dashboard/notifications'
     | '/dashboard/ocr'
+    | '/dashboard/reports'
     | '/dashboard/settings'
     | '/dashboard/transactions'
     | '/admin'
@@ -245,6 +256,7 @@ export interface FileRouteTypes {
     | '/dashboard/journal'
     | '/dashboard/notifications'
     | '/dashboard/ocr'
+    | '/dashboard/reports'
     | '/dashboard/settings'
     | '/dashboard/transactions'
     | '/admin/'
@@ -348,6 +360,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardSettingsRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/reports': {
+      id: '/dashboard/reports'
+      path: '/reports'
+      fullPath: '/dashboard/reports'
+      preLoaderRoute: typeof DashboardReportsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/ocr': {
       id: '/dashboard/ocr'
       path: '/ocr'
@@ -418,6 +437,7 @@ interface DashboardRouteChildren {
   DashboardJournalRoute: typeof DashboardJournalRoute
   DashboardNotificationsRoute: typeof DashboardNotificationsRoute
   DashboardOcrRoute: typeof DashboardOcrRoute
+  DashboardReportsRoute: typeof DashboardReportsRoute
   DashboardSettingsRoute: typeof DashboardSettingsRoute
   DashboardTransactionsRoute: typeof DashboardTransactionsRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
@@ -431,6 +451,7 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardJournalRoute: DashboardJournalRoute,
   DashboardNotificationsRoute: DashboardNotificationsRoute,
   DashboardOcrRoute: DashboardOcrRoute,
+  DashboardReportsRoute: DashboardReportsRoute,
   DashboardSettingsRoute: DashboardSettingsRoute,
   DashboardTransactionsRoute: DashboardTransactionsRoute,
   DashboardIndexRoute: DashboardIndexRoute,

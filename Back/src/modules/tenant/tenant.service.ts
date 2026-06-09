@@ -309,6 +309,58 @@ export class TenantService {
         status VARCHAR NOT NULL DEFAULT 'active',
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
+      CREATE TABLE IF NOT EXISTS ${schema}.report_templates (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR NOT NULL,
+        description TEXT,
+        configuration_json JSONB NOT NULL,
+        created_by UUID REFERENCES public.users(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE TABLE IF NOT EXISTS ${schema}.reports (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name VARCHAR NOT NULL,
+        report_type VARCHAR NOT NULL,
+        configuration_json JSONB NOT NULL,
+        created_by UUID NOT NULL REFERENCES public.users(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE TABLE IF NOT EXISTS ${schema}.scheduled_reports (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        report_id UUID NOT NULL REFERENCES ${schema}.reports(id) ON DELETE CASCADE,
+        frequency VARCHAR NOT NULL,
+        timezone VARCHAR NOT NULL DEFAULT 'UTC',
+        start_date DATE NOT NULL,
+        end_date DATE,
+        time_of_day TIME NOT NULL DEFAULT '09:00',
+        next_run_at TIMESTAMPTZ NOT NULL,
+        last_run_at TIMESTAMPTZ,
+        status VARCHAR NOT NULL DEFAULT 'active',
+        recipients_json JSONB NOT NULL DEFAULT '[]',
+        delivery_methods JSONB NOT NULL DEFAULT '["in_app"]',
+        export_format VARCHAR NOT NULL DEFAULT 'pdf',
+        created_by UUID NOT NULL REFERENCES public.users(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE TABLE IF NOT EXISTS ${schema}.report_executions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        report_id UUID REFERENCES ${schema}.reports(id) ON DELETE SET NULL,
+        scheduled_report_id UUID REFERENCES ${schema}.scheduled_reports(id) ON DELETE SET NULL,
+        started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        completed_at TIMESTAMPTZ,
+        status VARCHAR NOT NULL,
+        file_url TEXT,
+        file_name TEXT,
+        content_type TEXT,
+        file_data BYTEA,
+        export_format VARCHAR,
+        result_json JSONB,
+        email_status VARCHAR,
+        emailed_at TIMESTAMPTZ,
+        error_message TEXT
+      );
     `);
   }
 
