@@ -124,7 +124,8 @@ function Onboarding() {
     if (!session) {
       throw new Error("Please login before onboarding");
     }
-    const endpoint = session.activeTenantId
+    const createNew = new URLSearchParams(window.location.search).get("new") === "1";
+    const endpoint = session.activeTenantId && !createNew
       ? `/onboarding/${session.activeTenantId}/complete`
       : "/onboarding/complete";
     const result = await api<{
@@ -163,12 +164,15 @@ function Onboarding() {
       currency: result.organization.currency,
       role: "owner",
     } : undefined);
-    if (createdTenant && !session.activeTenantId) {
+    if (createdTenant && (!session.activeTenantId || createNew)) {
       updateSession({
-        tenants: [{
-          ...createdTenant,
-          organizationName: createdTenant.organizationName ?? company,
-        }],
+        tenants: [
+          ...session.tenants.filter((item) => item.organizationId !== createdTenant.organizationId),
+          {
+            ...createdTenant,
+            organizationName: createdTenant.organizationName ?? company,
+          },
+        ],
         activeTenantId: createdTenant.organizationId,
       });
     }

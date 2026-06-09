@@ -9,6 +9,8 @@ export type TenantContext = {
   industry?: string;
   currency?: string;
   role: string;
+  permissions?: string[];
+  accessExpiresAt?: string | null;
 };
 
 export type Session = {
@@ -58,7 +60,9 @@ export function saveSession(data: {
     user: data.user,
     tenants,
     activeTenantId:
-      data.user.globalRole === "admin" ? undefined : tenants[0]?.organizationId,
+      data.user.globalRole === "admin" || tenants.length !== 1
+        ? undefined
+        : tenants[0]?.organizationId,
   };
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   return session;

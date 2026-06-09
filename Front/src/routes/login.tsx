@@ -31,7 +31,9 @@ function LoginPage() {
         return;
       }
       nav({
-        to: data.tenants?.length
+        to: data.tenants?.length > 1
+          ? "/select-organization"
+          : data.tenants?.length
             ? "/dashboard"
             : "/onboarding",
       });

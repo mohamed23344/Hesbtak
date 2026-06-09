@@ -20,7 +20,11 @@ export class OrganizationsService {
 
   async userTenants(userId: string) {
     const rows = await this.db.organizationUser.findMany({
-      where: { userId, isActive: true },
+      where: {
+        userId,
+        isActive: true,
+        OR: [{ accessExpiresAt: null }, { accessExpiresAt: { gt: new Date() } }],
+      },
       include: { organization: true },
       orderBy: { createdAt: 'desc' },
     });
@@ -34,6 +38,8 @@ export class OrganizationsService {
         currency: row.organization.currency,
         schemaName: row.organization.schemaName,
         role: row.role,
+        accessExpiresAt: row.accessExpiresAt,
+        permissions: row.permissions,
       }));
   }
 

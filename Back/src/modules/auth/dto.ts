@@ -5,6 +5,7 @@ import {
   IsIn,
   IsNotEmpty,
   IsOptional,
+  IsDateString,
   IsString,
   MinLength,
   ValidateNested,
@@ -81,6 +82,43 @@ export class InviteMemberDto {
 
   @IsIn(['owner', 'accountant', 'viewer'])
   role!: string;
+
+  @IsOptional()
+  @IsDateString()
+  accessExpiresAt?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  permissions?: string[];
+}
+
+export class CreateOrganizationDto {
+  @IsString()
+  @IsNotEmpty()
+  name!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  industry!: string;
+
+  @IsString()
+  @IsOptional()
+  currency?: string;
+}
+
+export class UpdateOrganizationDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  industry?: string;
+
+  @IsOptional()
+  @IsString()
+  currency?: string;
 }
 
 export class AcceptInvitationDto {

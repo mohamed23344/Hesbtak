@@ -13,6 +13,7 @@ import { TenantService } from '../tenant/tenant.service';
 import {
   AcceptInvitationDto,
   CompleteOnboardingDto,
+  CreateOrganizationDto,
   ForgotPasswordDto,
   InviteMemberDto,
   LoginDto,
@@ -20,6 +21,7 @@ import {
   RegisterDto,
   ResendOtpDto,
   ResetPasswordDto,
+  UpdateOrganizationDto,
   VerifyOtpDto,
 } from './dto';
 
@@ -98,6 +100,7 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
+    await this.tenant.ensureAccessControlSchema();
     const user = await this.db.user.findUnique({
       where: { email: dto.email.toLowerCase() },
     });
@@ -109,7 +112,11 @@ export class AuthService {
     }
 
     const tenants = await this.db.organizationUser.findMany({
-      where: { userId: user.id, isActive: true },
+      where: {
+        userId: user.id,
+        isActive: true,
+        OR: [{ accessExpiresAt: null }, { accessExpiresAt: { gt: new Date() } }],
+      },
       include: { organization: true },
     });
 
@@ -125,6 +132,8 @@ export class AuthService {
           industry: tenant.organization.industry,
           currency: tenant.organization.currency,
           role: tenant.role,
+          accessExpiresAt: tenant.accessExpiresAt,
+          permissions: tenant.permissions,
         })),
     };
   }
@@ -322,6 +331,17 @@ export class AuthService {
     dto: InviteMemberDto,
   ) {
     await this.tenant.fromOrganizationId(organizationId, userId, ['owner']);
+    await this.tenant.ensureAccessControlSchema();
+    if (dto.role !== 'viewer' && dto.accessExpiresAt) {
+      throw new BadRequestException('Temporary access dates are only supported for viewers');
+    }
+    const accessExpiresAt = dto.accessExpiresAt ? new Date(dto.accessExpiresAt) : null;
+    if (accessExpiresAt && accessExpiresAt <= new Date()) {
+      throw new BadRequestException('Viewer access end date must be in the future');
+    }
+    const permissions = dto.role === 'viewer'
+      ? Array.from(new Set(dto.permissions ?? ['dashboard', 'reports']))
+      : [];
     const token = randomBytes(32).toString('hex');
     const invitation = await this.db.invitation.create({
       data: {
@@ -331,13 +351,20 @@ export class AuthService {
         token,
         invitedBy: userId,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        accessExpiresAt,
+        permissions,
       },
     });
+    await this.sendInvitationEmail(
+      dto.email.toLowerCase(),
+      invitation.token,
+      invitation.expiresAt,
+    );
 
     return {
       invitation,
-      emailQueued: true,
-      acceptUrl: `/api/v1/auth/accept-invitation`,
+      emailSent: true,
+      acceptUrl: `/accept-invitation?token=${invitation.token}`,
     };
   }
 
@@ -350,6 +377,10 @@ export class AuthService {
     }
     if (invitation.acceptedAt || invitation.expiresAt < new Date()) {
       throw new BadRequestException('Invitation is no longer valid');
+    }
+    const invitedUser = await this.db.user.findUnique({ where: { id: userId } });
+    if (!invitedUser || invitedUser.email.toLowerCase() !== invitation.email.toLowerCase()) {
+      throw new UnauthorizedException('This invitation belongs to another email address');
     }
 
     await this.db.$transaction(async (tx) => {
@@ -366,11 +397,15 @@ export class AuthService {
           role: invitation.role,
           invitedBy: invitation.invitedBy,
           joinedAt: new Date(),
+          accessExpiresAt: invitation.accessExpiresAt,
+          permissions: invitation.permissions ?? undefined,
         },
         update: {
           role: invitation.role,
           isActive: true,
           joinedAt: new Date(),
+          accessExpiresAt: invitation.accessExpiresAt,
+          permissions: invitation.permissions ?? undefined,
         },
       });
       await tx.invitation.update({
@@ -380,6 +415,75 @@ export class AuthService {
     });
 
     return { accepted: true, organizationId: invitation.organizationId };
+  }
+
+  async createOrganization(userId: string, dto: CreateOrganizationDto) {
+    const organization = await this.createOrganizationForUser(userId, {
+      organizationName: dto.name,
+      industry: dto.industry,
+      currency: dto.currency,
+    });
+    return {
+      organizationId: organization.id,
+      schemaName: organization.schemaName,
+      organizationName: organization.name,
+      industry: organization.industry,
+      currency: organization.currency,
+      role: 'owner',
+      permissions: [],
+    };
+  }
+
+  async organizationAccess(organizationId: string, userId: string) {
+    const context = await this.tenant.fromOrganizationId(organizationId, userId);
+    return { role: context.role, permissions: context.permissions };
+  }
+
+  async members(organizationId: string, userId: string) {
+    await this.tenant.fromOrganizationId(organizationId, userId, ['owner']);
+    return this.db.organizationUser.findMany({
+      where: { organizationId },
+      include: { user: { select: { id: true, fullName: true, email: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async removeMember(organizationId: string, memberId: string, userId: string) {
+    await this.tenant.fromOrganizationId(organizationId, userId, ['owner']);
+    const member = await this.db.organizationUser.findFirst({
+      where: { id: memberId, organizationId },
+    });
+    if (!member) throw new NotFoundException('Member not found');
+    if (member.userId === userId) throw new BadRequestException('Owner cannot remove their own membership');
+    await this.db.organizationUser.delete({ where: { id: memberId } });
+    return { removed: true };
+  }
+
+  async updateOrganization(
+    organizationId: string,
+    userId: string,
+    dto: UpdateOrganizationDto,
+  ) {
+    await this.tenant.fromOrganizationId(organizationId, userId, ['owner', 'accountant']);
+    return this.db.organization.update({
+      where: { id: organizationId },
+      data: { name: dto.name, industry: dto.industry, currency: dto.currency },
+    });
+  }
+
+  async deleteOrganization(organizationId: string, userId: string) {
+    await this.tenant.fromOrganizationId(organizationId, userId, ['owner']);
+    const organization = await this.db.organization.findUnique({ where: { id: organizationId } });
+    if (!organization) throw new NotFoundException('Organization not found');
+    await this.db.$transaction([
+      this.db.auditLog.deleteMany({ where: { organizationId } }),
+      this.db.invitation.deleteMany({ where: { organizationId } }),
+      this.db.organizationUser.deleteMany({ where: { organizationId } }),
+      this.db.subscription.deleteMany({ where: { organizationId } }),
+      this.db.organization.delete({ where: { id: organizationId } }),
+    ]);
+    await this.db.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${organization.schemaName}" CASCADE`);
+    return { deleted: true };
   }
 
   private sign(user: { id: string; email: string; globalRole: string }): string {
@@ -514,6 +618,33 @@ export class AuthService {
       throw new BadRequestException(`Could not send OTP email: ${message}`);
     }
     return { sent: true };
+  }
+
+  private async sendInvitationEmail(email: string, token: string, expiresAt: Date) {
+    this.assertEmailConfigured();
+    const googleEmail = process.env.GOOGLE_EMAIL!;
+    const appUrl = process.env.FRONTEND_URL ?? 'http://localhost:8080';
+    const acceptUrl = `${appUrl}/accept-invitation?token=${encodeURIComponent(token)}`;
+    const message = [
+      `From: Hesbtk.AI <${googleEmail}>`,
+      `To: ${email}`,
+      'Subject: You have been invited to Hesbtk.AI',
+      'MIME-Version: 1.0',
+      'Content-Type: text/plain; charset=utf-8',
+      '',
+      'You have been invited to access a financial workspace.',
+      `Accept the invitation: ${acceptUrl}`,
+      `This invitation link expires on ${expiresAt.toISOString()}.`,
+    ].join('\r\n');
+    await this.smtpSend({
+      host: 'smtp.gmail.com',
+      port: 465,
+      user: googleEmail,
+      pass: process.env.GOOGLE_APP_PASSWORD!,
+      to: email,
+      message,
+      rejectUnauthorized: process.env.GOOGLE_SMTP_REJECT_UNAUTHORIZED !== 'false',
+    });
   }
 
   private assertEmailConfigured() {

@@ -28,7 +28,7 @@ export class AutomationController {
 
   @Get('recurring-entries')
   async recurring(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser) {
-    return this.automation.listRecurringEntries(await this.tenant.fromOrganizationId(orgId, user.sub));
+    return this.automation.listRecurringEntries(await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'dashboard'));
   }
 
   @Post('recurring-entries/run')
@@ -38,7 +38,7 @@ export class AutomationController {
 
   @Get('insights/dashboard')
   async dashboard(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser) {
-    return this.automation.dashboard(await this.tenant.fromOrganizationId(orgId, user.sub));
+    return this.automation.dashboard(await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'dashboard'));
   }
 
   @Get('forecasts')
@@ -48,14 +48,14 @@ export class AutomationController {
     @Query('months') months?: string,
   ) {
     return this.automation.forecast(
-      await this.tenant.fromOrganizationId(orgId, user.sub),
+      await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'forecasting'),
       months ? Number(months) : 12,
     );
   }
 
   @Get('alerts')
   async alerts(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser) {
-    return this.automation.listAlerts(await this.tenant.fromOrganizationId(orgId, user.sub));
+    return this.automation.listAlerts(await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'notifications'));
   }
 
   @Post('alerts/evaluate')
@@ -65,6 +65,6 @@ export class AutomationController {
 
   @Get('suggestions')
   async suggestions(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser) {
-    return this.automation.suggestions(await this.tenant.fromOrganizationId(orgId, user.sub));
+    return this.automation.suggestions(await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'dashboard'));
   }
 }

@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { CurrentUser, JwtUser } from '../../common/auth/current-user.decorator';
 import { JwtAuthGuard } from '../../common/auth/jwt-auth.guard';
 import { AuthService } from './auth.service';
 import {
   AcceptInvitationDto,
   CompleteOnboardingDto,
+  CreateOrganizationDto,
   ForgotPasswordDto,
   InviteMemberDto,
   LoginDto,
@@ -12,6 +13,7 @@ import {
   RegisterDto,
   ResendOtpDto,
   ResetPasswordDto,
+  UpdateOrganizationDto,
   VerifyOtpDto,
 } from './dto';
 
@@ -101,5 +103,52 @@ export class AuthController {
   @Post('auth/accept-invitation')
   accept(@CurrentUser() user: JwtUser, @Body() dto: AcceptInvitationDto) {
     return this.auth.acceptInvitation(user.sub, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('organizations')
+  createOrganization(@CurrentUser() user: JwtUser, @Body() dto: CreateOrganizationDto) {
+    return this.auth.createOrganization(user.sub, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('org/:organizationId/access')
+  access(@Param('organizationId') organizationId: string, @CurrentUser() user: JwtUser) {
+    return this.auth.organizationAccess(organizationId, user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('org/:organizationId/members')
+  members(@Param('organizationId') organizationId: string, @CurrentUser() user: JwtUser) {
+    return this.auth.members(organizationId, user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('org/:organizationId/members/:memberId')
+  removeMember(
+    @Param('organizationId') organizationId: string,
+    @Param('memberId') memberId: string,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.auth.removeMember(organizationId, memberId, user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('org/:organizationId')
+  updateOrganization(
+    @Param('organizationId') organizationId: string,
+    @CurrentUser() user: JwtUser,
+    @Body() dto: UpdateOrganizationDto,
+  ) {
+    return this.auth.updateOrganization(organizationId, user.sub, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('org/:organizationId')
+  deleteOrganization(
+    @Param('organizationId') organizationId: string,
+    @CurrentUser() user: JwtUser,
+  ) {
+    return this.auth.deleteOrganization(organizationId, user.sub);
   }
 }

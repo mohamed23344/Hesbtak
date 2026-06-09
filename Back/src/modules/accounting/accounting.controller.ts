@@ -32,7 +32,7 @@ export class AccountingController {
 
   @Get('accounts')
   async accounts(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser) {
-    return this.accounting.listAccounts(await this.tenant.fromOrganizationId(orgId, user.sub));
+    return this.accounting.listAccounts(await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'accounts'));
   }
 
   @Post('accounts')
@@ -61,7 +61,7 @@ export class AccountingController {
 
   @Get('customers')
   async customers(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser) {
-    return this.accounting.listCustomers(await this.tenant.fromOrganizationId(orgId, user.sub));
+    return this.accounting.listCustomers(await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'accounting'));
   }
 
   @Post('customers')
@@ -79,7 +79,7 @@ export class AccountingController {
 
   @Get('vendors')
   async vendors(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser) {
-    return this.accounting.listVendors(await this.tenant.fromOrganizationId(orgId, user.sub));
+    return this.accounting.listVendors(await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'accounting'));
   }
 
   @Post('vendors')
@@ -97,7 +97,7 @@ export class AccountingController {
 
   @Get('journal-entries')
   async journalEntries(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser) {
-    return this.accounting.listJournalEntries(await this.tenant.fromOrganizationId(orgId, user.sub));
+    return this.accounting.listJournalEntries(await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'journal'));
   }
 
   @Post('journal-entries')
@@ -142,7 +142,7 @@ export class AccountingController {
 
   @Get('invoices')
   async invoices(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser) {
-    return this.accounting.listInvoices(await this.tenant.fromOrganizationId(orgId, user.sub));
+    return this.accounting.listInvoices(await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'invoices'));
   }
 
   @Post('invoices')
@@ -173,7 +173,7 @@ export class AccountingController {
 
   @Get('vendor-bills')
   async vendorBills(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser) {
-    return this.accounting.listVendorBills(await this.tenant.fromOrganizationId(orgId, user.sub));
+    return this.accounting.listVendorBills(await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'accounting'));
   }
 
   @Post('vendor-bills')

@@ -37,6 +37,7 @@ export class ReportsController {
       orgId,
       user.sub,
       write ? ['owner', 'accountant'] : undefined,
+      write ? undefined : 'reports',
     );
   }
 

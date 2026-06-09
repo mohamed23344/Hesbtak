@@ -9,13 +9,14 @@ import {
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { clearSession, getSession } from "@/lib/api";
+import { clearSession, getSession, updateSession } from "@/lib/api";
 
 export default function DashboardLayout() {
   const { t, dir } = useI18n();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const [open, setOpen] = useState(false);
   const session = getSession();
+  const activeTenant = session?.tenants.find((tenant) => tenant.organizationId === session.activeTenantId);
 
   useEffect(() => {
     if (session?.user.globalRole === "admin") {
@@ -24,18 +25,20 @@ export default function DashboardLayout() {
   }, [session?.user.globalRole]);
 
   const NAV = [
-    { to: "/dashboard", label: t("dashboard"), icon: LayoutDashboard },
-    { to: "/dashboard/transactions", label: t("transactions"), icon: ArrowLeftRight },
-    { to: "/dashboard/invoices", label: t("invoices"), icon: FileText },
-    { to: "/dashboard/accounts", label: t("accounts"), icon: Network },
-    { to: "/dashboard/journal", label: t("journal"), icon: BookOpenText },
-    { to: "/dashboard/assistant", label: t("assistant"), icon: Bot },
-    { to: "/dashboard/forecasting", label: t("forecasting"), icon: TrendingUp },
-    { to: "/dashboard/reports", label: t("reports"), icon: ChartNoAxesCombined },
-    { to: "/dashboard/ocr", label: t("ocr"), icon: ScanLine },
-    { to: "/dashboard/notifications", label: t("notifications"), icon: Bell },
-    { to: "/dashboard/settings", label: t("settings"), icon: Settings },
-  ];
+    { to: "/dashboard", label: t("dashboard"), icon: LayoutDashboard, permission: "dashboard" },
+    { to: "/dashboard/transactions", label: t("transactions"), icon: ArrowLeftRight, permission: "accounting" },
+    { to: "/dashboard/invoices", label: t("invoices"), icon: FileText, permission: "invoices" },
+    { to: "/dashboard/accounts", label: t("accounts"), icon: Network, permission: "accounts" },
+    { to: "/dashboard/journal", label: t("journal"), icon: BookOpenText, permission: "journal" },
+    { to: "/dashboard/assistant", label: t("assistant"), icon: Bot, permission: "assistant" },
+    { to: "/dashboard/forecasting", label: t("forecasting"), icon: TrendingUp, permission: "forecasting" },
+    { to: "/dashboard/reports", label: t("reports"), icon: ChartNoAxesCombined, permission: "reports" },
+    { to: "/dashboard/ocr", label: t("ocr"), icon: ScanLine, permission: "ocr" },
+    { to: "/dashboard/notifications", label: t("notifications"), icon: Bell, permission: "notifications" },
+    { to: "/dashboard/settings", label: t("settings"), icon: Settings, permission: "settings" },
+  ].filter((item) =>
+    activeTenant?.role !== "viewer" || activeTenant.permissions?.includes(item.permission),
+  );
 
   return (
     <div dir={dir} className="min-h-screen flex bg-surface">
@@ -98,6 +101,19 @@ export default function DashboardLayout() {
             <Input placeholder={t("search")} className="ps-9 bg-card" />
           </div>
           <div className="ms-auto flex items-center gap-2">
+            {(session?.tenants.length ?? 0) > 1 && (
+              <select
+                aria-label="Switch organization"
+                value={session?.activeTenantId ?? ""}
+                onChange={(event) => {
+                  updateSession({ activeTenantId: event.target.value });
+                  window.location.assign("/dashboard");
+                }}
+                className="hidden md:block h-9 max-w-52 rounded-md border border-input bg-background px-2 text-sm"
+              >
+                {session?.tenants.map((tenant) => <option key={tenant.organizationId} value={tenant.organizationId}>{tenant.organizationName}</option>)}
+              </select>
+            )}
             <LangToggle />
             <ThemeToggle />
             <Button variant="ghost" size="icon">
@@ -105,7 +121,7 @@ export default function DashboardLayout() {
             </Button>
             <div className="hidden sm:block text-end">
               <p className="text-sm font-medium leading-tight">{session?.user.fullName ?? "Account"}</p>
-              <p className="text-xs text-on-surface-variant leading-tight">{session?.tenants.find((t) => t.organizationId === session.activeTenantId)?.organizationName ?? "Onboarding"}</p>
+              <p className="text-xs text-on-surface-variant leading-tight">{activeTenant?.organizationName ?? "Onboarding"}</p>
             </div>
             <div className="h-9 w-9 rounded-full bg-gradient-primary text-primary-foreground grid place-items-center text-sm font-semibold">
               {session?.user.fullName?.[0] ?? "A"}

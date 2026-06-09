@@ -9,6 +9,7 @@ export interface TenantContext {
   organizationId: string;
   schemaName: string;
   role: string;
+  permissions?: string[];
 }
 
 @Injectable()
@@ -30,7 +31,9 @@ export class TenantService {
     organizationId: string,
     userId: string,
     allowedRoles: string[] = ['owner', 'accountant', 'viewer'],
+    requiredPermission?: string,
   ): Promise<TenantContext> {
+    await this.ensureAccessControlSchema();
     const membership = await this.db.organizationUser.findFirst({
       where: { organizationId, userId, isActive: true },
       include: { organization: true },
@@ -47,12 +50,37 @@ export class TenantService {
     if (!allowedRoles.includes(membership.role)) {
       throw new ForbiddenException('Insufficient tenant role');
     }
+    if (membership.accessExpiresAt && membership.accessExpiresAt <= new Date()) {
+      throw new ForbiddenException('Organization access has expired');
+    }
+    const permissions = Array.isArray(membership.permissions)
+      ? membership.permissions.filter((value): value is string => typeof value === 'string')
+      : [];
+    if (
+      membership.role === 'viewer' &&
+      requiredPermission &&
+      !permissions.includes(requiredPermission)
+    ) {
+      throw new ForbiddenException('This dashboard is not included in your viewer access');
+    }
 
     return {
       organizationId,
       schemaName: membership.organization.schemaName,
       role: membership.role,
+      permissions,
     };
+  }
+
+  async ensureAccessControlSchema() {
+    await this.db.$executeRawUnsafe(`
+      ALTER TABLE public.organization_users
+        ADD COLUMN IF NOT EXISTS access_expires_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS permissions JSONB;
+      ALTER TABLE public.invitations
+        ADD COLUMN IF NOT EXISTS access_expires_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS permissions JSONB;
+    `);
   }
 
   async provisionTenantSchema(schemaName: string): Promise<void> {
