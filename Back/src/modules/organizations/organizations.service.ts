@@ -13,10 +13,14 @@ import {
   UpdateAdminUserDto,
   UpdatePlanDto,
 } from './dto';
+import { TenantService } from '../tenant/tenant.service';
 
 @Injectable()
 export class OrganizationsService {
-  constructor(private readonly db: DataBaseService) {}
+  constructor(
+    private readonly db: DataBaseService,
+    private readonly tenant: TenantService,
+  ) {}
 
   async userTenants(userId: string) {
     const rows = await this.db.organizationUser.findMany({
@@ -25,22 +29,47 @@ export class OrganizationsService {
         isActive: true,
         OR: [{ accessExpiresAt: null }, { accessExpiresAt: { gt: new Date() } }],
       },
-      include: { organization: true },
+      include: {
+        organization: {
+          include: {
+            subscriptions: {
+              where: { status: 'active', currentPeriodEnd: { gt: new Date() } },
+              include: { plan: true },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
 
     return rows
       .filter((row) => row.organization.isActive)
-      .map((row) => ({
-        organizationId: row.organizationId,
-        organizationName: row.organization.name,
-        industry: row.organization.industry,
-        currency: row.organization.currency,
-        schemaName: row.organization.schemaName,
-        role: row.role,
-        accessExpiresAt: row.accessExpiresAt,
-        permissions: row.permissions,
-      }));
+      .map((row) => {
+        const subscription = row.organization.subscriptions[0];
+        return {
+          organizationId: row.organizationId,
+          organizationName: row.organization.name,
+          industry: row.organization.industry,
+          currency: row.organization.currency,
+          schemaName: row.organization.schemaName,
+          role: row.role,
+          accessExpiresAt: row.accessExpiresAt,
+          permissions: row.permissions,
+          subscription: subscription
+            ? {
+                status: subscription.status,
+                currentPeriodEnd: subscription.currentPeriodEnd,
+                plan: {
+                  code: subscription.plan.code,
+                  name: subscription.plan.name,
+                  features: this.tenant.featureMap(subscription.plan.features),
+                },
+              }
+            : null,
+        };
+      });
   }
 
   async adminDashboard(user: JwtUser) {
@@ -268,8 +297,10 @@ export class OrganizationsService {
     this.ensureAdmin(user);
     return this.db.plan.create({
       data: {
+        code: dto.code ?? dto.name.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
         name: dto.name,
         price: dto.price,
+        currency: dto.currency ?? 'EGP',
         billingCycle: dto.billingCycle,
         features: (dto.features ?? {}) as Prisma.InputJsonValue,
         isActive: dto.isActive ?? true,
@@ -282,8 +313,10 @@ export class OrganizationsService {
     return this.db.plan.update({
       where: { id },
       data: {
+        code: dto.code,
         name: dto.name,
         price: dto.price,
+        currency: dto.currency,
         billingCycle: dto.billingCycle,
         features: dto.features as Prisma.InputJsonValue | undefined,
         isActive: dto.isActive,

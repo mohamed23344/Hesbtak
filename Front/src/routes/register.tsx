@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
-import { api, saveSession, setPendingEmail, setPendingOtpPurpose } from "@/lib/api";
+import { api, setPendingEmail, setPendingOtpPurpose } from "@/lib/api";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -27,11 +27,10 @@ function RegisterPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      const data = await api<any>("/auth/register", {
+      await api("/auth/register", {
         method: "POST",
         body: JSON.stringify(form),
       });
-      saveSession(data);
       setPendingEmail(form.email);
       setPendingOtpPurpose("signup");
       toast.success("Account created. Check your email for the OTP code.");

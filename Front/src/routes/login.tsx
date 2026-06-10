@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n";
 import { useState } from "react";
-import { api, saveSession } from "@/lib/api";
+import { api, saveSession, setPendingEmail, setPendingOtpPurpose } from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/login")({ component: LoginPage });
@@ -38,7 +38,15 @@ function LoginPage() {
             : "/onboarding",
       });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Login failed");
+      const message = error instanceof Error ? error.message : "Login failed";
+      if (message.toLowerCase().includes("email verification")) {
+        setPendingEmail(email);
+        setPendingOtpPurpose("signup");
+        toast.error(message);
+        nav({ to: "/verify-otp" });
+      } else {
+        toast.error(message);
+      }
     } finally {
       setLoading(false);
     }

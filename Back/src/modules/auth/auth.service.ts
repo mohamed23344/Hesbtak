@@ -13,6 +13,7 @@ import { TenantService } from '../tenant/tenant.service';
 import {
   AcceptInvitationDto,
   CompleteOnboardingDto,
+  CompleteInvitationDto,
   CreateOrganizationDto,
   ForgotPasswordDto,
   InviteMemberDto,
@@ -43,7 +44,7 @@ export class AuthService {
     this.assertEmailConfigured();
     const exists = await this.db.user.findUnique({
       where: {
-        email: dto.email,
+        email: dto.email.toLowerCase(),
       },
     });
     if (exists) {
@@ -79,20 +80,7 @@ export class AuthService {
     );
 
     return {
-      accessToken: this.sign(user),
       user: this.publicUser(user),
-      tenants: organization
-        ? [
-            {
-              organizationId: organization.id,
-              schemaName: organization.schemaName,
-              organizationName: organization.name,
-              industry: organization.industry,
-              currency: organization.currency,
-              role: 'owner',
-            },
-          ]
-        : [],
       organization,
       onboarding: { nextQuestion: this.onboardingQuestions[0] },
       otpSent: true,
@@ -110,6 +98,14 @@ export class AuthService {
     if (!user.isActive) {
       throw new UnauthorizedException('This account is deactivated');
     }
+    if (!user.emailVerifiedAt) {
+      throw new UnauthorizedException('Email verification is required before signing in');
+    }
+    if (user.mustChangePassword) {
+      throw new UnauthorizedException(
+        'Use the invitation email link to change your temporary password before signing in',
+      );
+    }
 
     const tenants = await this.db.organizationUser.findMany({
       where: {
@@ -117,7 +113,18 @@ export class AuthService {
         isActive: true,
         OR: [{ accessExpiresAt: null }, { accessExpiresAt: { gt: new Date() } }],
       },
-      include: { organization: true },
+      include: {
+        organization: {
+          include: {
+            subscriptions: {
+              where: { status: 'active', currentPeriodEnd: { gt: new Date() } },
+              include: { plan: true },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
+        },
+      },
     });
 
     return {
@@ -134,6 +141,7 @@ export class AuthService {
           role: tenant.role,
           accessExpiresAt: tenant.accessExpiresAt,
           permissions: tenant.permissions,
+          subscription: this.publicSubscription(tenant.organization.subscriptions[0]),
         })),
     };
   }
@@ -298,6 +306,14 @@ export class AuthService {
           data: { usedAt: new Date() },
         }),
       ]);
+      const tenants = await this.loginTenants(user.id);
+      const verifiedUser = { ...user, emailVerifiedAt: new Date() };
+      return {
+        verified: true,
+        accessToken: this.sign(verifiedUser),
+        user: this.publicUser(verifiedUser),
+        tenants,
+      };
     }
     return { verified: true };
   }
@@ -342,30 +358,101 @@ export class AuthService {
     const permissions = dto.role === 'viewer'
       ? Array.from(new Set(dto.permissions ?? ['dashboard', 'reports']))
       : [];
-    const token = randomBytes(32).toString('hex');
-    const invitation = await this.db.invitation.create({
+    const existingUser = await this.db.user.findUnique({
+      where: { email: dto.email.toLowerCase() },
+    });
+    if (existingUser) {
+      throw new BadRequestException(
+        'This email already has an account. Invite a new email for managed credentials.',
+      );
+    }
+    const temporaryPasswordHash = await bcrypt.hash(dto.password, 12);
+    const invitedUser = await this.db.user.create({
       data: {
-        organizationId,
         email: dto.email.toLowerCase(),
-        role: dto.role,
-        token,
-        invitedBy: userId,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        accessExpiresAt,
-        permissions,
+        fullName: dto.fullName?.trim() || dto.email.split('@')[0],
+        passwordHash: temporaryPasswordHash,
+        emailVerifiedAt: new Date(),
+        mustChangePassword: true,
       },
     });
-    await this.sendInvitationEmail(
-      dto.email.toLowerCase(),
-      invitation.token,
-      invitation.expiresAt,
-    );
+    const token = randomBytes(32).toString('hex');
+    let invitation;
+    try {
+      invitation = await this.db.invitation.create({
+        data: {
+          organizationId,
+          email: dto.email.toLowerCase(),
+          role: dto.role,
+          token,
+          invitedBy: userId,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          accessExpiresAt,
+          permissions,
+        },
+      });
+      await this.sendInvitationEmail(
+        dto.email.toLowerCase(),
+        dto.password,
+        invitation.token,
+        invitation.expiresAt,
+      );
+    } catch (error) {
+      if (invitation) {
+        await this.db.invitation.delete({ where: { id: invitation.id } });
+      }
+      await this.db.user.delete({ where: { id: invitedUser.id } });
+      throw error;
+    }
 
     return {
       invitation,
       emailSent: true,
       acceptUrl: `/accept-invitation?token=${invitation.token}`,
     };
+  }
+
+  async invitation(token: string) {
+    const invitation = await this.validInvitation(token);
+    return {
+      email: invitation.email,
+      role: invitation.role,
+      organizationName: invitation.organization.name,
+      expiresAt: invitation.expiresAt,
+    };
+  }
+
+  async completeInvitation(dto: CompleteInvitationDto) {
+    const invitation = await this.validInvitation(dto.token);
+    const invitedUser = await this.db.user.findUnique({
+      where: { email: invitation.email.toLowerCase() },
+    });
+    if (!invitedUser || !invitedUser.mustChangePassword) {
+      throw new BadRequestException('Invited account is not available');
+    }
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+    await this.db.$transaction([
+      this.db.user.update({
+        where: { id: invitedUser.id },
+        data: { passwordHash, mustChangePassword: false },
+      }),
+      this.db.organizationUser.create({
+        data: {
+          organizationId: invitation.organizationId,
+          userId: invitedUser.id,
+          role: invitation.role,
+          invitedBy: invitation.invitedBy,
+          joinedAt: new Date(),
+          accessExpiresAt: invitation.accessExpiresAt,
+          permissions: invitation.permissions ?? undefined,
+        },
+      }),
+      this.db.invitation.update({
+        where: { id: invitation.id },
+        data: { acceptedAt: new Date() },
+      }),
+    ]);
+    return { completed: true, email: invitation.email };
   }
 
   async acceptInvitation(userId: string, dto: AcceptInvitationDto) {
@@ -620,7 +707,12 @@ export class AuthService {
     return { sent: true };
   }
 
-  private async sendInvitationEmail(email: string, token: string, expiresAt: Date) {
+  private async sendInvitationEmail(
+    email: string,
+    temporaryPassword: string,
+    token: string,
+    expiresAt: Date,
+  ) {
     this.assertEmailConfigured();
     const googleEmail = process.env.GOOGLE_EMAIL!;
     const appUrl = process.env.FRONTEND_URL ?? 'http://localhost:8080';
@@ -632,8 +724,12 @@ export class AuthService {
       'MIME-Version: 1.0',
       'Content-Type: text/plain; charset=utf-8',
       '',
-      'You have been invited to access a financial workspace.',
-      `Accept the invitation: ${acceptUrl}`,
+      'An account was created for you to access a financial workspace.',
+      `Email: ${email}`,
+      `Temporary password: ${temporaryPassword}`,
+      '',
+      'You must set a new password before you can access the system:',
+      acceptUrl,
       `This invitation link expires on ${expiresAt.toISOString()}.`,
     ].join('\r\n');
     await this.smtpSend({
@@ -645,6 +741,72 @@ export class AuthService {
       message,
       rejectUnauthorized: process.env.GOOGLE_SMTP_REJECT_UNAUTHORIZED !== 'false',
     });
+  }
+
+  private async validInvitation(token: string) {
+    const invitation = await this.db.invitation.findUnique({
+      where: { token },
+      include: { organization: true },
+    });
+    if (!invitation) throw new NotFoundException('Invitation not found');
+    if (invitation.acceptedAt || invitation.expiresAt < new Date()) {
+      throw new BadRequestException('Invitation is no longer valid');
+    }
+    return invitation;
+  }
+
+  private async loginTenants(userId: string) {
+    const memberships = await this.db.organizationUser.findMany({
+      where: {
+        userId,
+        isActive: true,
+        OR: [{ accessExpiresAt: null }, { accessExpiresAt: { gt: new Date() } }],
+      },
+      include: {
+        organization: {
+          include: {
+            subscriptions: {
+              where: { status: 'active', currentPeriodEnd: { gt: new Date() } },
+              include: { plan: true },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+    return memberships
+      .filter((membership) => membership.organization.isActive)
+      .map((membership) => ({
+        organizationId: membership.organizationId,
+        schemaName: membership.organization.schemaName,
+        organizationName: membership.organization.name,
+        industry: membership.organization.industry,
+        currency: membership.organization.currency,
+        role: membership.role,
+        accessExpiresAt: membership.accessExpiresAt,
+        permissions: membership.permissions,
+        subscription: this.publicSubscription(
+          membership.organization.subscriptions[0],
+        ),
+      }));
+  }
+
+  private publicSubscription(subscription?: {
+    status: string;
+    currentPeriodEnd: Date;
+    plan: { code: string; name: string; features: unknown };
+  }) {
+    if (!subscription) return null;
+    return {
+      status: subscription.status,
+      currentPeriodEnd: subscription.currentPeriodEnd,
+      plan: {
+        code: subscription.plan.code,
+        name: subscription.plan.name,
+        features: this.tenant.featureMap(subscription.plan.features),
+      },
+    };
   }
 
   private assertEmailConfigured() {

@@ -8,7 +8,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { useI18n } from "@/lib/i18n";
-import { api, apiBlob } from "@/lib/api";
+import { api, apiBlob, getSession } from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/dashboard/assistant")({ component: Page });
@@ -50,6 +50,8 @@ const SUGGESTED = [
 
 function Page() {
   const { t } = useI18n();
+  const session = getSession();
+  const tenant = session?.tenants.find((item) => item.organizationId === session.activeTenantId);
   const [msgs, setMsgs] = useState<Msg[]>([
     { who: "ai", text: "Hi! I'm your AI finance assistant. Ask me anything about your books." },
   ]);
@@ -59,6 +61,7 @@ function Page() {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!tenant?.subscription?.plan.features.chatbot) return;
     const loadHistory = async () => {
       try {
         const history = await api<HistoryRow[]>("/tenant/chatbot/history");
@@ -75,11 +78,24 @@ function Page() {
       }
     };
     void loadHistory();
-  }, []);
+  }, [tenant?.subscription?.plan.features.chatbot]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs, loading]);
+
+  if (!tenant?.subscription?.plan.features.chatbot) {
+    return (
+      <div className="space-y-5">
+        <Header title={t("astTitle")} desc={t("astDesc")} />
+        <div className="rounded-2xl border border-border-default bg-card p-8 text-center">
+          <h3 className="font-semibold">AI Pro subscription required</h3>
+          <p className="mt-2 text-sm text-on-surface-variant">The AI financial chatbot is available on the AI Pro plan.</p>
+          <Button asChild className="mt-4"><a href="/dashboard/settings">View plans</a></Button>
+        </div>
+      </div>
+    );
+  }
 
   const send = async (text: string) => {
     const question = text.trim();

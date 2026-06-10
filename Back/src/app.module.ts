@@ -13,6 +13,7 @@ import { AutomationModule } from './modules/automation/automation.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { AiModule } from './modules/ai/ai.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { BillingModule } from './modules/billing/billing.module';
 
 @Module({
   imports: [
@@ -76,6 +77,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     AutomationModule,
     AiModule,
     ReportsModule,
+    BillingModule,
   ],
   controllers: [AppController],
   providers: [AppService],

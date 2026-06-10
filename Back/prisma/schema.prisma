@@ -11,8 +11,10 @@ datasource db {
 
 model Plan {
   id           String   @id @default(uuid()) @db.Uuid
+  code         String   @unique
   name         String
   price        Decimal  @db.Decimal(10, 2)
+  currency     String   @default("EGP")
   billingCycle String   @map("billing_cycle")
   features     Json
   isActive     Boolean  @default(true) @map("is_active")
@@ -45,6 +47,9 @@ model Subscription {
   organizationId     String   @map("organization_id") @db.Uuid
   planId             String   @map("plan_id") @db.Uuid
   status             String
+  paymentReference   String?  @unique @map("payment_reference")
+  paymobIntentionId  String?  @map("paymob_intention_id")
+  paymobTransactionId String? @map("paymob_transaction_id")
   currentPeriodStart DateTime @map("current_period_start")
   currentPeriodEnd   DateTime @map("current_period_end")
   createdAt          DateTime @default(now()) @map("created_at")
@@ -63,6 +68,7 @@ model User {
   globalRole   String   @default("user") @map("global_role")
   isActive     Boolean  @default(true) @map("is_active")
   emailVerifiedAt DateTime? @map("email_verified_at")
+  mustChangePassword Boolean @default(false) @map("must_change_password")
   createdAt    DateTime @default(now()) @map("created_at")
 
   memberships       OrganizationUser[] @relation("UserMemberships")

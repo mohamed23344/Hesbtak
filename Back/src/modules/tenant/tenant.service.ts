@@ -32,6 +32,7 @@ export class TenantService {
     userId: string,
     allowedRoles: string[] = ['owner', 'accountant', 'viewer'],
     requiredPermission?: string,
+    requiredFeature?: 'chatbot' | 'invoiceAiExtraction',
   ): Promise<TenantContext> {
     await this.ensureAccessControlSchema();
     const membership = await this.db.organizationUser.findFirst({
@@ -63,6 +64,17 @@ export class TenantService {
     ) {
       throw new ForbiddenException('This dashboard is not included in your viewer access');
     }
+    if (requiredFeature) {
+      const subscription = await this.subscriptionForOrganization(organizationId);
+      const features = this.featureMap(subscription?.plan.features);
+      if (!features[requiredFeature]) {
+        throw new ForbiddenException(
+          requiredFeature === 'chatbot'
+            ? 'The AI chatbot requires the AI Pro subscription'
+            : 'AI invoice extraction requires the AI Pro subscription',
+        );
+      }
+    }
 
     return {
       organizationId,
@@ -70,6 +82,25 @@ export class TenantService {
       role: membership.role,
       permissions,
     };
+  }
+
+  async subscriptionForOrganization(organizationId: string) {
+    return this.db.subscription.findFirst({
+      where: {
+        organizationId,
+        status: 'active',
+        currentPeriodEnd: { gt: new Date() },
+      },
+      include: { plan: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  featureMap(value: unknown): Record<string, boolean> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    return Object.fromEntries(
+      Object.entries(value).map(([key, enabled]) => [key, enabled === true]),
+    );
   }
 
   async ensureAccessControlSchema() {

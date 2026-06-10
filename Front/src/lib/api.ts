@@ -11,6 +11,15 @@ export type TenantContext = {
   role: string;
   permissions?: string[];
   accessExpiresAt?: string | null;
+  subscription?: {
+    status: string;
+    currentPeriodEnd: string;
+    plan: {
+      code: string;
+      name: string;
+      features: Record<string, boolean>;
+    };
+  } | null;
 };
 
 export type Session = {

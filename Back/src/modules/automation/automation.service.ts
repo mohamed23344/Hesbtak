@@ -213,15 +213,7 @@ export class AutomationService {
       ],
       sourceData: {
         historicalPeriods: actuals.map((item) => item.month),
-        tables: [
-          'invoices',
-          'expenses',
-          'vendor_bills',
-          'customer_payments',
-          'vendor_payments',
-          'journal_entries',
-          'journal_lines',
-        ],
+        tables: ['accounts', 'journal_entries', 'journal_lines'],
         records: sourceRecords,
       },
       calculationDetails: {
@@ -290,41 +282,34 @@ export class AutomationService {
         vendor_payment_record_ids: string[] | null;
       }[]
     >(
-      `WITH monthly AS (
-         SELECT date_trunc('month', issue_date)::date AS month,
-                SUM(total)::numeric AS revenue,
-                0::numeric AS expenses,
-                0::numeric AS cash_collected,
-                0::numeric AS vendor_paid,
-                array_agg(id::text ORDER BY issue_date, id) AS revenue_record_ids,
-                ARRAY[]::text[] AS expense_record_ids,
-                ARRAY[]::text[] AS payment_record_ids,
-                ARRAY[]::text[] AS vendor_payment_record_ids
-           FROM ${schema}.invoices
-          GROUP BY 1
+      `WITH RECURSIVE account_hierarchy AS (
+         SELECT id, parent_id, type AS root_type
+           FROM ${schema}.accounts
+          WHERE parent_id IS NULL
          UNION ALL
-         SELECT date_trunc('month', expense_date)::date AS month,
-                0::numeric AS revenue,
-                SUM(total)::numeric AS expenses,
+         SELECT child.id, child.parent_id, parent.root_type
+           FROM ${schema}.accounts child
+           JOIN account_hierarchy parent ON parent.id = child.parent_id
+       ),
+       monthly AS (
+         SELECT date_trunc('month', je.date)::date AS month,
+                SUM(CASE WHEN hierarchy.root_type = 'Revenue'
+                  THEN jl.credit - jl.debit ELSE 0 END)::numeric AS revenue,
+                SUM(CASE WHEN hierarchy.root_type = 'Expense'
+                  THEN jl.debit - jl.credit ELSE 0 END)::numeric AS expenses,
                 0::numeric AS cash_collected,
                 0::numeric AS vendor_paid,
-                ARRAY[]::text[] AS revenue_record_ids,
-                array_agg(id::text ORDER BY expense_date, id) AS expense_record_ids,
+                array_agg(DISTINCT je.id::text)
+                  FILTER (WHERE hierarchy.root_type = 'Revenue') AS revenue_record_ids,
+                array_agg(DISTINCT je.id::text)
+                  FILTER (WHERE hierarchy.root_type = 'Expense') AS expense_record_ids,
                 ARRAY[]::text[] AS payment_record_ids,
                 ARRAY[]::text[] AS vendor_payment_record_ids
-           FROM ${schema}.expenses
-          GROUP BY 1
-         UNION ALL
-         SELECT date_trunc('month', issue_date)::date AS month,
-                0::numeric AS revenue,
-                SUM(total)::numeric AS expenses,
-                0::numeric AS cash_collected,
-                0::numeric AS vendor_paid,
-                ARRAY[]::text[] AS revenue_record_ids,
-                array_agg(id::text ORDER BY issue_date, id) AS expense_record_ids,
-                ARRAY[]::text[] AS payment_record_ids,
-                ARRAY[]::text[] AS vendor_payment_record_ids
-           FROM ${schema}.vendor_bills
+           FROM ${schema}.journal_entries je
+           JOIN ${schema}.journal_lines jl ON jl.journal_entry_id = je.id
+           JOIN account_hierarchy hierarchy ON hierarchy.id = jl.account_id
+          WHERE je.status = 'posted'
+            AND hierarchy.root_type IN ('Revenue', 'Expense')
           GROUP BY 1
          UNION ALL
          SELECT date_trunc('month', payment_date)::date AS month,
@@ -382,29 +367,29 @@ export class AutomationService {
   private async forecastSourceRecords(ctx: TenantContext) {
     const schema = this.tenant.quote(ctx.schemaName);
     return this.db.$queryRawUnsafe(
-      `SELECT 'invoice' AS source_type, id, invoice_number AS reference, issue_date AS record_date, total
-         FROM ${schema}.invoices
-        UNION ALL
-       SELECT 'expense' AS source_type, id, expense_number AS reference, expense_date AS record_date, total
-         FROM ${schema}.expenses
-        UNION ALL
-       SELECT 'vendor_bill' AS source_type, id, bill_number AS reference, issue_date AS record_date, total
-         FROM ${schema}.vendor_bills
-        UNION ALL
-       SELECT 'customer_payment' AS source_type, id, reference, payment_date AS record_date, amount AS total
-         FROM ${schema}.customer_payments
-        UNION ALL
-       SELECT 'vendor_payment' AS source_type, id, reference, payment_date AS record_date, amount AS total
-         FROM ${schema}.vendor_payments
-        UNION ALL
-       SELECT 'journal_entry' AS source_type,
+      `WITH RECURSIVE account_hierarchy AS (
+         SELECT id, parent_id, type AS root_type
+           FROM ${schema}.accounts
+          WHERE parent_id IS NULL
+         UNION ALL
+         SELECT child.id, child.parent_id, parent.root_type
+           FROM ${schema}.accounts child
+           JOIN account_hierarchy parent ON parent.id = child.parent_id
+       )
+       SELECT lower(hierarchy.root_type) || '_journal_entry' AS source_type,
               je.id,
-              COALESCE(je.reference_type || ':' || je.reference_id::text, je.description) AS reference,
+              je.description AS reference,
               je.date AS record_date,
-              COALESCE(SUM(jl.debit + jl.credit), 0) AS total
+              SUM(CASE
+                WHEN hierarchy.root_type = 'Revenue' THEN jl.credit - jl.debit
+                ELSE jl.debit - jl.credit
+              END)::numeric AS total
          FROM ${schema}.journal_entries je
-         LEFT JOIN ${schema}.journal_lines jl ON jl.journal_entry_id = je.id
-        GROUP BY je.id, je.reference_type, je.reference_id, je.description, je.date
+         JOIN ${schema}.journal_lines jl ON jl.journal_entry_id = je.id
+         JOIN account_hierarchy hierarchy ON hierarchy.id = jl.account_id
+        WHERE je.status = 'posted'
+          AND hierarchy.root_type IN ('Revenue', 'Expense')
+        GROUP BY hierarchy.root_type, je.id, je.description, je.date
         ORDER BY record_date DESC
         LIMIT 250`,
     );

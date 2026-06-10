@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { useState } from "react";
 import { useI18n } from "@/lib/i18n";
-import { api, getPendingEmail, getPendingOtpPurpose, getSession, updateSession } from "@/lib/api";
+import { api, getPendingEmail, getPendingOtpPurpose, saveSession } from "@/lib/api";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/verify-otp")({ component: VerifyOTP });
@@ -17,7 +17,6 @@ function VerifyOTP() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
-  const session = getSession();
   const purpose = getPendingOtpPurpose();
   const isPasswordReset = purpose === "password_reset";
 
@@ -35,18 +34,11 @@ function VerifyOTP() {
         toast.success("Password reset");
         nav({ to: "/login" });
       } else {
-        await api<{ verified: boolean }>("/auth/verify-otp", {
+        const result = await api<any>("/auth/verify-otp", {
           method: "POST",
           body: JSON.stringify({ email, code, purpose: "signup" }),
         });
-        if (session) {
-          updateSession({
-            user: {
-              ...session.user,
-              emailVerifiedAt: new Date().toISOString(),
-            },
-          });
-        }
+        saveSession(result);
         toast.success("Email verified");
         nav({ to: "/onboarding" });
       }

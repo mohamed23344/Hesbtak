@@ -19,6 +19,24 @@ type Member = {
   user: { id: string; fullName: string; email: string };
 };
 
+type Plan = {
+  id: string;
+  code: string;
+  name: string;
+  price: string | number;
+  currency: string;
+  billingCycle: string;
+  features: Record<string, boolean>;
+};
+
+type CurrentSubscription = {
+  id: string;
+  status: string;
+  currentPeriodEnd: string;
+  paymentReference?: string | null;
+  plan: Plan;
+} | null;
+
 const VIEW_PERMISSIONS = [
   ["dashboard", "Financial dashboard"],
   ["reports", "Reports"],
@@ -43,8 +61,13 @@ function Page() {
     currency: tenant?.currency ?? "USD",
   });
   const [members, setMembers] = useState<Member[]>([]);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [subscription, setSubscription] = useState<CurrentSubscription>(null);
+  const [checkoutPlanId, setCheckoutPlanId] = useState("");
   const [invite, setInvite] = useState({
+    fullName: "",
     email: "",
+    password: "",
     role: "viewer",
     accessExpiresAt: "",
     permissions: ["dashboard", "reports"],
@@ -59,6 +82,71 @@ function Page() {
     }
   };
   useEffect(() => { void loadMembers(); }, [tenant?.organizationId, isOwner]);
+  useEffect(() => {
+    api<Plan[]>("/plans")
+      .then(setPlans)
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Could not load plans"));
+    if (tenant?.organizationId) {
+      api<CurrentSubscription>("/subscriptions/current")
+        .then((result) => {
+          setSubscription(result);
+          if (session && tenant && result?.status === "active") {
+            updateSession({
+              tenants: session.tenants.map((item) =>
+                item.organizationId === tenant.organizationId
+                  ? {
+                      ...item,
+                      subscription: {
+                        status: result.status,
+                        currentPeriodEnd: result.currentPeriodEnd,
+                        plan: {
+                          code: result.plan.code,
+                          name: result.plan.name,
+                          features: result.plan.features,
+                        },
+                      },
+                    }
+                  : item,
+              ),
+            });
+          }
+        })
+        .catch((error) => toast.error(error instanceof Error ? error.message : "Could not load subscription"));
+    }
+  }, [tenant?.organizationId]);
+
+  useEffect(() => {
+    const reference = new URLSearchParams(window.location.search).get("reference");
+    if (!reference || !tenant?.organizationId) return;
+    api<CurrentSubscription>("/subscriptions/verify", {
+      method: "POST",
+      body: JSON.stringify({ reference }),
+    }).then((result) => {
+      setSubscription(result);
+      if (session && tenant && result?.status === "active") {
+        updateSession({
+          tenants: session.tenants.map((item) =>
+            item.organizationId === tenant.organizationId
+              ? {
+                  ...item,
+                  subscription: {
+                    status: result.status,
+                    currentPeriodEnd: result.currentPeriodEnd,
+                    plan: {
+                      code: result.plan.code,
+                      name: result.plan.name,
+                      features: result.plan.features,
+                    },
+                  },
+                }
+              : item,
+          ),
+        });
+      }
+      if (result?.status === "active") toast.success("Subscription activated");
+      else toast.info("Payment is still being confirmed");
+    }).catch((error) => toast.error(error instanceof Error ? error.message : "Could not verify payment"));
+  }, [tenant?.organizationId]);
 
   const saveOrganization = async () => {
     try {
@@ -82,6 +170,8 @@ function Page() {
         method: "POST",
         body: JSON.stringify({
           email: invite.email,
+          fullName: invite.fullName,
+          password: invite.password,
           role: invite.role,
           accessExpiresAt: invite.role === "viewer" && invite.accessExpiresAt
             ? new Date(`${invite.accessExpiresAt}T23:59:59`).toISOString()
@@ -90,9 +180,23 @@ function Page() {
         }),
       });
       toast.success("Invitation email sent");
-      setInvite({ ...invite, email: "" });
+      setInvite({ ...invite, fullName: "", email: "", password: "" });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not send invitation");
+    }
+  };
+
+  const subscribe = async (planId: string) => {
+    setCheckoutPlanId(planId);
+    try {
+      const result = await api<{ checkoutUrl: string }>("/subscriptions/checkout", {
+        method: "POST",
+        body: JSON.stringify({ planId }),
+      });
+      window.location.assign(result.checkoutUrl);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not start checkout");
+      setCheckoutPlanId("");
     }
   };
 
@@ -130,6 +234,34 @@ function Page() {
       </div>
     </Section>
 
+    <Section title="Subscription plans">
+      <div className="mb-4 rounded-lg bg-surface-container px-4 py-3 text-sm">
+        {subscription?.status === "active"
+          ? <>Current plan: <strong>{subscription.plan.name}</strong> until {new Date(subscription.currentPeriodEnd).toLocaleDateString()}</>
+          : "No active paid plan. Core accounting remains available, while AI features require AI Pro."}
+      </div>
+      <div className="grid md:grid-cols-2 gap-4">
+        {plans.map((plan) => {
+          const active = subscription?.status === "active" && subscription.plan.id === plan.id;
+          return <div key={plan.id} className={`rounded-xl border p-5 ${active ? "border-primary bg-primary/5" : "border-border-default"}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div><h4 className="font-semibold">{plan.name}</h4><p className="text-xs text-on-surface-variant mt-1">{plan.billingCycle} billing</p></div>
+              {active && <Badge>Current</Badge>}
+            </div>
+            <p className="text-3xl font-semibold mt-4">{Number(plan.price).toLocaleString()} <span className="text-sm font-normal">{plan.currency}/month</span></p>
+            <div className="mt-4 space-y-2 text-sm">
+              <p>Accounting, journals, reports, and forecasting</p>
+              <p>{plan.features.chatbot ? "AI financial chatbot included" : "AI financial chatbot not included"}</p>
+              <p>{plan.features.invoiceAiExtraction ? "AI invoice extraction included" : "AI invoice extraction not included"}</p>
+            </div>
+            {isOwner && <Button className="mt-5 w-full" variant={active ? "outline" : "default"} disabled={active || checkoutPlanId === plan.id} onClick={() => void subscribe(plan.id)}>
+              {active ? "Active plan" : checkoutPlanId === plan.id ? "Opening Paymob..." : "Subscribe with Paymob"}
+            </Button>}
+          </div>;
+        })}
+      </div>
+    </Section>
+
     {canEdit && <Section title="Organization settings">
       <div className="grid sm:grid-cols-3 gap-4">
         <EditField label="Name" value={organization.name} onChange={(name) => setOrganization({ ...organization, name })} />
@@ -140,15 +272,23 @@ function Page() {
     </Section>}
 
     {isOwner && <Section title="Invite external users and staff">
-      <div className="grid md:grid-cols-3 gap-3">
+      <div className="grid md:grid-cols-4 gap-3">
+        <EditField label="Full name" value={invite.fullName} onChange={(fullName) => setInvite({ ...invite, fullName })} />
         <EditField label="Email" value={invite.email} onChange={(email) => setInvite({ ...invite, email })} type="email" />
+        <EditField label="Temporary password" value={invite.password} onChange={(password) => setInvite({ ...invite, password })} type="password" />
         <div className="space-y-1.5"><Label>Role</Label><select value={invite.role} onChange={(event) => setInvite({ ...invite, role: event.target.value })} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="accountant">Accountant / staff</option><option value="viewer">Viewer</option><option value="owner">Owner</option></select></div>
         {invite.role === "viewer" && <EditField label="Access end date (optional)" value={invite.accessExpiresAt} onChange={(accessExpiresAt) => setInvite({ ...invite, accessExpiresAt })} type="date" />}
       </div>
       {invite.role === "viewer" && <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-4">
         {VIEW_PERMISSIONS.map(([key, text]) => <label key={key} className="flex items-center gap-2 text-sm"><Checkbox checked={invite.permissions.includes(key)} onCheckedChange={() => setInvite({ ...invite, permissions: invite.permissions.includes(key) ? invite.permissions.filter((value) => value !== key) : [...invite.permissions, key] })} />{text}</label>)}
       </div>}
-      <Button className="mt-4" onClick={sendInvitation}>Send secure invitation</Button>
+      <Button
+        className="mt-4"
+        onClick={sendInvitation}
+        disabled={!invite.email || !invite.password || invite.password.length < 8}
+      >
+        Create account and send invitation
+      </Button>
     </Section>}
 
     {isOwner && <Section title="Organization members">

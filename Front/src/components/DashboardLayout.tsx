@@ -17,6 +17,7 @@ export default function DashboardLayout() {
   const [open, setOpen] = useState(false);
   const session = getSession();
   const activeTenant = session?.tenants.find((tenant) => tenant.organizationId === session.activeTenantId);
+  const features = activeTenant?.subscription?.plan.features ?? {};
 
   useEffect(() => {
     if (session?.user.globalRole === "admin") {
@@ -36,9 +37,11 @@ export default function DashboardLayout() {
     { to: "/dashboard/ocr", label: t("ocr"), icon: ScanLine, permission: "ocr" },
     { to: "/dashboard/notifications", label: t("notifications"), icon: Bell, permission: "notifications" },
     { to: "/dashboard/settings", label: t("settings"), icon: Settings, permission: "settings" },
-  ].filter((item) =>
-    activeTenant?.role !== "viewer" || activeTenant.permissions?.includes(item.permission),
-  );
+  ].filter((item) => {
+    if (item.permission === "assistant" && !features.chatbot) return false;
+    if (item.permission === "ocr" && !features.invoiceAiExtraction) return false;
+    return activeTenant?.role !== "viewer" || activeTenant.permissions?.includes(item.permission);
+  });
 
   return (
     <div dir={dir} className="min-h-screen flex bg-surface">

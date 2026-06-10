@@ -80,6 +80,14 @@ export class InviteMemberDto {
   @IsEmail()
   email!: string;
 
+  @IsString()
+  @MinLength(8)
+  password!: string;
+
+  @IsString()
+  @IsOptional()
+  fullName?: string;
+
   @IsIn(['owner', 'accountant', 'viewer'])
   role!: string;
 
@@ -125,6 +133,12 @@ export class AcceptInvitationDto {
   @IsString()
   @IsNotEmpty()
   token!: string;
+}
+
+export class CompleteInvitationDto extends AcceptInvitationDto {
+  @IsString()
+  @MinLength(8)
+  password!: string;
 }
 
 export class ForgotPasswordDto {

@@ -5,12 +5,27 @@ import { Upload, FileText, CheckCircle2, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 import { useI18n } from "@/lib/i18n";
+import { getSession } from "@/lib/api";
 
 export const Route = createFileRoute("/dashboard/ocr")({ component: Page });
 
 function Page() {
   const { t } = useI18n();
   const [scanned, setScanned] = useState(false);
+  const session = getSession();
+  const tenant = session?.tenants.find((item) => item.organizationId === session.activeTenantId);
+  if (!tenant?.subscription?.plan.features.invoiceAiExtraction) {
+    return (
+      <div className="space-y-5">
+        <Header title={t("ocrTitle")} desc={t("ocrDesc")} />
+        <div className="rounded-2xl border border-border-default bg-card p-8 text-center">
+          <h3 className="font-semibold">AI Pro subscription required</h3>
+          <p className="mt-2 text-sm text-on-surface-variant">Invoice AI extraction is available on the AI Pro plan.</p>
+          <Button asChild className="mt-4"><a href="/dashboard/settings">View plans</a></Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">

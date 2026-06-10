@@ -83,7 +83,7 @@ export class AiController {
       throw new BadRequestException('question or userQuery is required');
     }
     return this.chatbot.run(
-      await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'assistant'),
+      await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'assistant', 'chatbot'),
       user.sub,
       {
         ...dto,
@@ -99,7 +99,7 @@ export class AiController {
     @Body() dto: RunGraphDto,
   ) {
     return this.chatbot.run(
-      await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'assistant'),
+      await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'assistant', 'chatbot'),
       user.sub,
       dto,
     );
@@ -112,7 +112,7 @@ export class AiController {
     @Query('sessionId') sessionId?: string,
   ) {
     return this.chatbot.history(
-      await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'assistant'),
+      await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'assistant', 'chatbot'),
       user.sub,
       sessionId,
     );
@@ -126,7 +126,7 @@ export class AiController {
     @Res({ passthrough: true }) response: Response,
   ) {
     const report = await this.reports.pdf(
-      await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'assistant'),
+      await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'assistant', 'chatbot'),
       user.sub,
       reportId,
     );
@@ -188,7 +188,13 @@ export class AiController {
     @CurrentUser() user: JwtUser,
     @Body() dto: RetrieveDto,
   ) {
-    const ctx = await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'assistant');
+    const ctx = await this.tenant.fromOrganizationId(
+      orgId,
+      user.sub,
+      undefined,
+      'assistant',
+      'chatbot',
+    );
     return this.retrieval.retrieve(
       ctx,
       dto.query,
@@ -203,7 +209,7 @@ export class AiController {
     @CurrentUser() user: JwtUser,
   ) {
     return this.indexer.status(
-      await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'assistant'),
+      await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'assistant', 'chatbot'),
     );
   }
 

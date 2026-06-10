@@ -47,11 +47,19 @@ export class UpdateAdminOrganizationDto {
 
 export class PlanDto {
   @IsString()
+  @IsOptional()
+  code?: string;
+
+  @IsString()
   name!: string;
 
   @IsNumber()
   @Min(0)
   price!: number;
+
+  @IsString()
+  @IsOptional()
+  currency?: string;
 
   @IsString()
   billingCycle!: string;
@@ -68,12 +76,20 @@ export class PlanDto {
 export class UpdatePlanDto {
   @IsString()
   @IsOptional()
+  code?: string;
+
+  @IsString()
+  @IsOptional()
   name?: string;
 
   @IsNumber()
   @Min(0)
   @IsOptional()
   price?: number;
+
+  @IsString()
+  @IsOptional()
+  currency?: string;
 
   @IsString()
   @IsOptional()

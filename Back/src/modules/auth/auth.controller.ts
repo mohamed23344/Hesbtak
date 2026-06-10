@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import {
   AcceptInvitationDto,
   CompleteOnboardingDto,
+  CompleteInvitationDto,
   CreateOrganizationDto,
   ForgotPasswordDto,
   InviteMemberDto,
@@ -49,6 +50,16 @@ export class AuthController {
   @Post('auth/reset-password')
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.auth.resetPassword(dto);
+  }
+
+  @Get('auth/invitations/:token')
+  invitation(@Param('token') token: string) {
+    return this.auth.invitation(token);
+  }
+
+  @Post('auth/complete-invitation')
+  completeInvitation(@Body() dto: CompleteInvitationDto) {
+    return this.auth.completeInvitation(dto);
   }
 
   @UseGuards(JwtAuthGuard)
