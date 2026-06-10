@@ -108,7 +108,9 @@ export class BillingService {
           plan_code: plan.code,
         },
         notification_url: `${this.backendUrl()}/api/v1/subscriptions/paymob/webhook`,
-        redirection_url: `${process.env.FRONTEND_URL ?? 'http://localhost:8080'}/dashboard/settings?payment=return&reference=${encodeURIComponent(reference)}`,
+        redirection_url:
+          `${this.backendUrl()}/api/v1/subscriptions/paymob/return` +
+          `?reference=${encodeURIComponent(reference)}`,
       }),
     });
 
@@ -155,43 +157,25 @@ export class BillingService {
     }
 
     const obj = this.record(body.obj) ?? body;
-    const success = obj.success === true;
+    const success = this.boolean(obj.success);
     const reference =
       this.string(obj.special_reference) ??
       this.string(this.record(obj.order)?.merchant_order_id) ??
       this.findString(body, 'special_reference');
     const subscriptionId = this.findString(body, 'subscription_id');
-    const subscription = subscriptionId
-      ? await this.db.subscription.findUnique({ where: { id: subscriptionId } })
-      : reference
-        ? await this.db.subscription.findUnique({ where: { paymentReference: reference } })
-        : null;
+    const intentionId =
+      this.findString(body, 'intention_id') ??
+      this.findString(body, 'intention_order_id');
+    const subscription = await this.findSubscription(
+      subscriptionId,
+      reference,
+      intentionId,
+    );
     if (!subscription) throw new NotFoundException('Subscription webhook reference not found');
 
     const transactionId = this.string(obj.id);
     if (success) {
-      const now = new Date();
-      const periodEnd = new Date(now);
-      periodEnd.setUTCMonth(periodEnd.getUTCMonth() + 1);
-      await this.db.$transaction([
-        this.db.subscription.updateMany({
-          where: {
-            organizationId: subscription.organizationId,
-            status: 'active',
-            id: { not: subscription.id },
-          },
-          data: { status: 'replaced' },
-        }),
-        this.db.subscription.update({
-          where: { id: subscription.id },
-          data: {
-            status: 'active',
-            paymobTransactionId: transactionId,
-            currentPeriodStart: now,
-            currentPeriodEnd: periodEnd,
-          },
-        }),
-      ]);
+      await this.activateSubscription(subscription, transactionId);
     } else {
       await this.db.subscription.update({
         where: { id: subscription.id },
@@ -199,6 +183,37 @@ export class BillingService {
       });
     }
     return { received: true };
+  }
+
+  async paymentReturn(query: Record<string, unknown>) {
+    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:8080';
+    const reference = this.string(query.reference);
+    const hmac = this.string(query.hmac);
+    const success = this.boolean(query.success);
+    const transactionId = this.string(query.id);
+
+    if (!reference) {
+      return `${frontendUrl}/dashboard/settings?payment=failed&reason=missing-reference`;
+    }
+    if (!this.validHmac(query, hmac)) {
+      return `${frontendUrl}/dashboard/settings?payment=failed&reference=${encodeURIComponent(reference)}&reason=invalid-signature`;
+    }
+
+    const subscription = await this.findSubscription(undefined, reference);
+    if (!subscription) {
+      return `${frontendUrl}/dashboard/settings?payment=failed&reference=${encodeURIComponent(reference)}&reason=not-found`;
+    }
+
+    if (success) {
+      await this.activateSubscription(subscription, transactionId);
+      return `${frontendUrl}/dashboard/settings?payment=success&reference=${encodeURIComponent(reference)}`;
+    }
+
+    await this.db.subscription.update({
+      where: { id: subscription.id },
+      data: { status: 'failed', paymobTransactionId: transactionId },
+    });
+    return `${frontendUrl}/dashboard/settings?payment=failed&reference=${encodeURIComponent(reference)}`;
   }
 
   private async ensurePlans() {
@@ -254,6 +269,62 @@ export class BillingService {
     return process.env.BACKEND_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
   }
 
+  private async findSubscription(
+    subscriptionId?: string,
+    reference?: string,
+    intentionId?: string,
+  ) {
+    if (subscriptionId) {
+      const subscription = await this.db.subscription.findUnique({
+        where: { id: subscriptionId },
+      });
+      if (subscription) return subscription;
+    }
+    if (reference) {
+      const subscription = await this.db.subscription.findUnique({
+        where: { paymentReference: reference },
+      });
+      if (subscription) return subscription;
+    }
+    if (intentionId) {
+      return this.db.subscription.findFirst({
+        where: { paymobIntentionId: intentionId },
+      });
+    }
+    return null;
+  }
+
+  private async activateSubscription(
+    subscription: { id: string; organizationId: string; status?: string },
+    transactionId?: string,
+  ) {
+    if (subscription.status === 'active') {
+      return;
+    }
+    const now = new Date();
+    const periodEnd = new Date(now);
+    periodEnd.setUTCMonth(periodEnd.getUTCMonth() + 1);
+    await this.db.$transaction([
+      this.db.subscription.updateMany({
+        where: {
+          organizationId: subscription.organizationId,
+          status: 'active',
+          id: { not: subscription.id },
+        },
+        data: { status: 'replaced' },
+      }),
+      this.db.subscription.update({
+        where: { id: subscription.id },
+        data: {
+          status: 'active',
+          paymobTransactionId: transactionId,
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+        },
+      }),
+    ]);
+  }
+
   private serialize(subscription: {
     id: string;
     status: string;
@@ -296,12 +367,12 @@ export class BillingService {
       obj.is_refunded,
       obj.is_standalone_payment,
       obj.is_voided,
-      order?.id,
+      order?.id ?? obj.order,
       obj.owner,
       obj.pending,
-      source?.pan,
-      source?.sub_type,
-      source?.type,
+      source?.pan ?? obj['source_data.pan'],
+      source?.sub_type ?? obj['source_data.sub_type'],
+      source?.type ?? obj['source_data.type'],
       obj.success,
     ].map((value) => String(value ?? '')).join('');
     const expected = createHmac('sha512', secret).update(values).digest('hex');
@@ -321,6 +392,10 @@ export class BillingService {
     return typeof value === 'string' || typeof value === 'number'
       ? String(value)
       : undefined;
+  }
+
+  private boolean(value: unknown) {
+    return value === true || value === 'true' || value === 1 || value === '1';
   }
 
   private findString(value: unknown, key: string): string | undefined {

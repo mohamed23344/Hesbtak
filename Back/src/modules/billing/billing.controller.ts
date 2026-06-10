@@ -5,8 +5,10 @@ import {
   Headers,
   Post,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { CurrentUser, JwtUser } from '../../common/auth/current-user.decorator';
 import { JwtAuthGuard } from '../../common/auth/jwt-auth.guard';
 import { BillingService } from './billing.service';
@@ -56,5 +58,14 @@ export class BillingController {
     @Query('hmac') hmac?: string,
   ) {
     return this.billing.webhook(body, hmac);
+  }
+
+  @Get('subscriptions/paymob/return')
+  async paymentReturn(
+    @Query() query: Record<string, unknown>,
+    @Res() response: Response,
+  ) {
+    const redirectUrl = await this.billing.paymentReturn(query);
+    return response.redirect(redirectUrl);
   }
 }

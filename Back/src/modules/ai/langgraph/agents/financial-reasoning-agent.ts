@@ -5,6 +5,7 @@ import { EmbeddingsService } from '../../embeddings/embeddings.service';
 import { analysisAgentPrompt } from '../langgraph-prompts';
 import Groq from 'groq-sdk';
 import { FinancialContextService } from '../../financial-context.service';
+import { reportProfileByTitle } from '../report-profile';
 
 /**
  * Financial Reasoning Agent
@@ -41,6 +42,7 @@ export async function financialReasoningAgentNode(
     organizationName,
     financialDatabaseContext,
   } = state;
+  const reportProfile = reportProfileByTitle(state.reportType);
 
   console.log('Financial Reasoning Agent: starting analysis for org:', orgSlug);
 
@@ -57,42 +59,42 @@ export async function financialReasoningAgentNode(
     retrievalService.retrieveBySourceType(
       tenantContext,
       'invoice_transaction',
-      'current quarter revenue invoices sales customers',
+      reportProfile.retrievalQueries[0],
       10,
       0.0,
     ),
     retrievalService.retrieveBySourceType(
       tenantContext,
-      'invoice_transaction',
-      'previous quarter revenue invoices historical comparison',
+      'vendor_bill_transaction',
+      reportProfile.retrievalQueries[0],
       8,
       0.0,
     ),
     retrievalService.retrieveBySourceType(
       tenantContext,
       'ai_insights',
-      'financial analysis recommendations risks opportunities cost optimization',
+      reportProfile.retrievalQueries[1],
       6,
       0.0,
     ),
     retrievalService.retrieveBySourceType(
       tenantContext,
       'onboarding_questionnaire',
-      'business context industry profile currency operating environment',
+      `business context and priorities for ${reportProfile.title}`,
       4,
       0.0,
     ),
     retrievalService.retrieveBySourceType(
       tenantContext,
       'quarter_live_report',
-      'current quarter income statement balance sheet cash flow KPIs performance',
+      `${reportProfile.focus} current period`,
       6,
       0.0,
     ),
     retrievalService.retrieveBySourceType(
       tenantContext,
       'quarter_live_report',
-      'previous quarter financial report performance comparison baseline',
+      `${reportProfile.focus} previous period comparison baseline`,
       6,
       0.0,
     ),
@@ -133,6 +135,12 @@ export async function financialReasoningAgentNode(
   // ── Phase 2: LLM Reasoning ────────────────────────────────────────────────
 
   const REASONING_SYSTEM_PROMPT = `${analysisAgentPrompt(organizationName)}
+
+This analysis will become a "${reportProfile.title}".
+Primary focus: ${reportProfile.focus}.
+Prefer these sections when supported by verified data:
+${reportProfile.sections.map((section) => `- ${section}`).join('\n')}
+Do not force unrelated sections into this report type.
 
 You must produce a structured financial analysis with the following sections:
 
@@ -202,7 +210,7 @@ Do NOT invent data. All claims must trace to the retrieved context.`;
         sourceId: insightId,
         payload: {
           content: reasoningOutput,
-          analysis_type: inferAnalysisType(userQuery),
+          analysis_type: reportProfile.analysisType,
           generated_at: new Date().toISOString(),
           org_slug: orgSlug,
           query: userQuery,
@@ -219,6 +227,7 @@ Do NOT invent data. All claims must trace to the retrieved context.`;
     ragContext: aggregatedContext,
     reasoningOutput,
     agentOutput: reasoningOutput,
+    reportType: reportProfile.title,
     unresolvedIntent: false,
   };
 }

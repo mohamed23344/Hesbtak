@@ -9,7 +9,11 @@ import { TenantContext } from '../../tenant/tenant.service';
 import { RetrievalService } from '../retrieval/retrieval.service';
 import { EmbeddingsService } from '../embeddings/embeddings.service';
 import { RunGraphDto } from './dto/run-graph.dto';
-import { getGroqClient, hasGroqApiKey } from './config/llm.config';
+import {
+  getGroqClient,
+  hasGroqApiKey,
+  LLM_MODELS,
+} from './config/llm.config';
 import { MultiAgentState, StateType } from './state/graph-state';
 import { chattingAgentNode } from './agents/chatting-agent';
 import { orchestratorAgentNode } from './agents/orchestrator-agent';
@@ -19,6 +23,9 @@ import { reportGenerationAgentNode } from './agents/report-generation-agent';
 import { ragSearchAgentNode } from './agents/rag-search-agent';
 import Groq from 'groq-sdk';
 import { FinancialContextService } from '../financial-context.service';
+import { inferReportProfile } from './report-profile';
+
+type GraphRunInput = RunGraphDto & { conversationHistory?: string };
 
 @Injectable()
 export class LanggraphService {
@@ -95,7 +102,7 @@ export class LanggraphService {
 
   // ─── Public API ─────────────────────────────────────────────────────────────
 
-  async run(ctx: TenantContext, dto: RunGraphDto) {
+  async run(ctx: TenantContext, dto: GraphRunInput) {
     if (!hasGroqApiKey(this.config)) {
       throw new ServiceUnavailableException(
         'AI assistant is not configured. Set GROQ_API_KEY in the backend environment.',
@@ -104,8 +111,16 @@ export class LanggraphService {
 
     try {
       const financialContext = await this.financialContext.build(ctx);
+      const conversationHistory = dto.conversationHistory?.trim() ?? '';
+      const contextualQuery = await this.contextualizeQuery(
+        dto.userQuery,
+        conversationHistory,
+      );
+      const reportProfile = inferReportProfile(contextualQuery);
       const initialState: Partial<StateType> = {
-        userQuery: dto.userQuery,
+        userQuery: contextualQuery,
+        originalUserQuery: dto.userQuery,
+        conversationHistory,
         orgSlug: ctx.schemaName,
         tenantContext: ctx,
         organizationName: financialContext.organization.name,
@@ -121,7 +136,7 @@ export class LanggraphService {
         ragContext: undefined,
         reasoningOutput: undefined,
         reportMarkdown: undefined,
-        reportType: undefined,
+        reportType: reportProfile.title,
       };
 
       const result = await this.compiledGraph.invoke(initialState);
@@ -138,6 +153,34 @@ export class LanggraphService {
         throw error;
       }
       throw new InternalServerErrorException(`LangGraph execution failed: ${error}`);
+    }
+  }
+
+  private async contextualizeQuery(
+    userQuery: string,
+    conversationHistory: string,
+  ) {
+    if (!conversationHistory) return userQuery;
+    try {
+      const response = await this.groqClient.chat.completions.create({
+        model: LLM_MODELS.ORCHESTRATOR_AGENT,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Rewrite the latest user message as a standalone financial request using the conversation history. Preserve intent, names, dates, and requested report type. Return only the rewritten request. Do not answer it.',
+          },
+          {
+            role: 'user',
+            content: `Conversation history:\n${conversationHistory}\n\nLatest user message:\n${userQuery}`,
+          },
+        ],
+        temperature: 0,
+        max_tokens: 300,
+      });
+      return response.choices[0]?.message?.content?.trim() || userQuery;
+    } catch {
+      return userQuery;
     }
   }
 

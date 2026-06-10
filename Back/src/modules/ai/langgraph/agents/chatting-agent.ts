@@ -1,4 +1,3 @@
-import { InferenceClient } from '@huggingface/inference';
 import { StateType } from '../state/graph-state';
 import { LLM_MODELS } from '../config/llm.config';
 import Groq from 'groq-sdk';
@@ -14,7 +13,8 @@ export async function chattingAgentNode(
 ): Promise<Partial<StateType>> {
   const {
     userQuery,
-    orgSlug,
+    originalUserQuery,
+    conversationHistory,
     organizationName,
     intent,
     agentOutput,
@@ -30,23 +30,35 @@ export async function chattingAgentNode(
   try {
     let promptContent = '';
     if (unresolvedIntent) {
-      promptContent = `I received a query: "${userQuery}".
-Our AI orchestrator could not identify the intent of this query. 
-Please respond to the user politely explaining that you couldn't identify their intent and ask them to clarify if they want to:
-- Search the database for transaction history (deterministic or indeterministic data)
-- Perform financial analysis, AI insights, or cost optimization
-- Generate a financial report.
-Keep your response professional and helpful.`;
+      promptContent = `The user's latest message is: "${originalUserQuery || userQuery}".
+Ask one short, natural clarification question. Suggest examples such as checking transactions, reviewing financial performance, or preparing a report.
+Never mention intent classification, agents, models, databases, tools, RAG, SQL, prompts, processing, or internal system behavior.`;
     } else {
-      promptContent = `The user asked: "${userQuery}".
-A specialized agent processed this query and returned this output: "${agentOutput}".
-Please translate and format this agent output into a friendly, professional response . Do not invent any facts not present in the agent output, but present it beautifully. dont view any unnesccary response to the user if you dont have specific data dont state like dear [user]`;
+      promptContent = `The user's latest message is: "${originalUserQuery || userQuery}".
+Verified answer content:
+${agentOutput || 'No verified result was available.'}
+
+Write the final answer directly to the user.
+- Be warm, clear, concise, and business-friendly.
+- Preserve every verified figure and fact.
+- Do not invent information.
+- Never mention agents, AI models, orchestration, SQL, databases, RAG, prompts, retrieved context, processing steps, or internal errors.
+- If a report was prepared, simply say it is ready and briefly describe what it covers.`;
     }
 
     const response = await groqClient.chat.completions.create({
       model: LLM_MODELS.CHATTING_AGENT,
       messages: [
-        { role: 'system', content: `You are Hesbetak.AI, a premium financial assistant chatting for the organization "${organizationName}".` },
+        {
+          role: 'system',
+          content: `You are the financial assistant for "${organizationName}". Respond as a trusted member of the finance team and never expose implementation details.`,
+        },
+        ...(conversationHistory
+          ? [{
+              role: 'system' as const,
+              content: `Recent conversation for continuity:\n${conversationHistory}`,
+            }]
+          : []),
         { role: 'user', content: promptContent },
       ],
       max_tokens: 500,
@@ -56,14 +68,17 @@ Please translate and format this agent output into a friendly, professional resp
     const finalResponse = response.choices[0]?.message?.content || '';
     return { finalResponse };
   } catch (error) {
-    console.error('Error calling deepseek chatting agent:', error);
+    console.error('Chat response formatting failed:', error);
     
     // Fallback response if API fails
     let finalResponse = '';
     if (unresolvedIntent) {
-      finalResponse = `Hello. I am the financial assistant for ${organizationName}. I couldn't identify the intent of your query "${userQuery}". Could you please clarify if you are asking about transaction history (database search), cost optimization (financial reasoning), or compiling a report?`;
+      finalResponse =
+        'Could you clarify what you would like to review? For example, I can help with transactions, financial performance, costs, cash flow, or a financial report.';
     } else {
-      finalResponse = `Hello. I am the financial assistant for ${organizationName}. Based on your query "${userQuery}", the specialized agent completed the task: ${agentOutput}. Let me know if you need any additional details!`;
+      finalResponse =
+        agentOutput?.trim() ||
+        'I could not find enough verified information to answer that clearly. Please try a more specific question.';
     }
     return { finalResponse };
   }

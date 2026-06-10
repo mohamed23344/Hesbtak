@@ -18,6 +18,8 @@ import { TenantContext } from '../../../tenant/tenant.service';
  */
 export const MultiAgentState = Annotation.Root({
   userQuery: Annotation<string>(),
+  originalUserQuery: Annotation<string>(),
+  conversationHistory: Annotation<string>(),
   orgSlug: Annotation<string>(),
   tenantContext: Annotation<TenantContext>(),
   organizationName: Annotation<string>(),

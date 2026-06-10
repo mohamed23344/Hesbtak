@@ -24,14 +24,11 @@ type Msg = {
   who: "you" | "ai";
   text: string;
   attachment?: Attachment | null;
-  agent?: string;
 };
 
 type ChatResponse = {
   sessionId: string;
   response: string;
-  engine: "langgraph";
-  agent: string;
   attachment?: Attachment | null;
 };
 
@@ -115,7 +112,6 @@ function Page() {
           who: "ai",
           text: result.response,
           attachment: result.attachment,
-          agent: result.agent,
         },
       ]);
     } catch (error) {
@@ -155,11 +151,6 @@ function Page() {
                     <MarkdownMessage text={m.text} />
                   ) : (
                     <p className="whitespace-pre-wrap">{m.text}</p>
-                  )}
-                  {m.agent && (
-                    <p className="mt-2 text-[11px] text-on-surface-variant">
-                      AI agent: {m.agent}
-                    </p>
                   )}
                   {m.attachment && (
                     <Button

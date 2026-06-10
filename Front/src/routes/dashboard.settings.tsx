@@ -116,7 +116,9 @@ function Page() {
   }, [tenant?.organizationId]);
 
   useEffect(() => {
-    const reference = new URLSearchParams(window.location.search).get("reference");
+    const params = new URLSearchParams(window.location.search);
+    const reference = params.get("reference");
+    const payment = params.get("payment");
     if (!reference || !tenant?.organizationId) return;
     api<CurrentSubscription>("/subscriptions/verify", {
       method: "POST",
@@ -144,7 +146,8 @@ function Page() {
         });
       }
       if (result?.status === "active") toast.success("Subscription activated");
-      else toast.info("Payment is still being confirmed");
+      else if (payment === "failed") toast.error("Payment was not completed");
+      else toast.info("Payment is still being confirmed. Refresh in a few seconds.");
     }).catch((error) => toast.error(error instanceof Error ? error.message : "Could not verify payment"));
   }, [tenant?.organizationId]);
 

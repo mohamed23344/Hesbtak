@@ -103,14 +103,19 @@ export async function orchestratorAgentNode(
   state: StateType,
   groqClient: Groq,
 ): Promise<Partial<StateType>> {
-  const { userQuery } = state;
+  const { userQuery, conversationHistory } = state;
 
   try {
     const response = await groqClient.chat.completions.create({
       model: LLM_MODELS.ORCHESTRATOR_AGENT,
       messages: [
         { role: 'system', content: ORCHESTRATOR_SYSTEM_PROMPT },
-        { role: 'user', content: `Please classify this query: "${userQuery}"` },
+        {
+          role: 'user',
+          content:
+            `${conversationHistory ? `Recent conversation:\n${conversationHistory}\n\n` : ''}` +
+            `Classify this standalone request: "${userQuery}"`,
+        },
       ],
       max_tokens: 100,
       temperature: 0.1,

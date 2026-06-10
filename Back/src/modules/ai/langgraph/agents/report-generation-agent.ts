@@ -1,6 +1,7 @@
 import { StateType } from '../state/graph-state';
 import { LLM_MODELS } from '../config/llm.config';
 import Groq from 'groq-sdk';
+import { reportProfileByTitle } from '../report-profile';
 
 /**
  * Report Generation Agent
@@ -51,7 +52,8 @@ export async function reportGenerationAgentNode(
 
   console.log('Report Generation Agent: generating report for org:', orgSlug);
 
-  const resolvedReportType = reportType ?? inferReportType(userQuery ?? '');
+  const profile = reportProfileByTitle(reportType);
+  const resolvedReportType = profile.title;
 
   const REPORT_SYSTEM_PROMPT = `You are a senior FP&A financial report writer for ${organizationName}.
 
@@ -69,6 +71,11 @@ You have received structured financial analysis. Your task is to transform it in
 - Cite source data or reasoning evidence whenever possible.
 
 # Section Flexibility
+Build this report around: ${profile.focus}.
+Prefer this report-specific structure:
+${profile.sections.map((section) => `- ${section}`).join('\n')}
+Treat this profile as the primary instruction and ignore guidance for unrelated report types below.
+
 You do NOT need to include every section.
 Choose only the sections that fit the report type and available data.
 
@@ -229,7 +236,7 @@ Include this section only if the analysis input has concrete figures, source ref
 
     // Provide a brief agentOutput summary for the chatting agent to reference
     const agentOutput = reportMarkdown
-      ? `A ${resolvedReportType} has been generated for ${organizationName}. The report covers key findings, KPI analysis, identified risks, opportunities, and prioritized recommendations.`
+      ? `Your ${resolvedReportType} is ready. It focuses on ${profile.focus}.`
       : 'Report generation encountered an issue. Please try again.';
 
     return {

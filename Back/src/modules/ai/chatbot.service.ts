@@ -22,14 +22,21 @@ export class ChatbotService {
     userId: string,
     dto: RunGraphDto,
   ) {
+    const sessionId = dto.sessionId ?? randomUUID();
+    const conversationHistory = await this.conversationContext(
+      ctx,
+      userId,
+      sessionId,
+    );
     const result = await this.langgraph.run(ctx, {
       ...dto,
       userId,
+      sessionId,
+      conversationHistory,
     });
     this.logger.log(
       `LangGraph handled tenant=${ctx.organizationId} agent=${result.intent ?? 'other'}`,
     );
-    const sessionId = dto.sessionId ?? randomUUID();
     const response =
       result.finalResponse ??
       result.agentOutput ??
@@ -55,25 +62,60 @@ export class ChatbotService {
     return {
       sessionId,
       response,
-      engine: 'langgraph',
-      agent: result.intent ?? 'other',
-      agentResponse: response,
       attachment,
-      ...result,
     };
   }
 
   history(ctx: TenantContext, userId: string, sessionId?: string) {
     const schema = this.tenant.quote(ctx.schemaName);
     return this.db.$queryRawUnsafe(
-      `SELECT session_id, question, response, created_at
+      `WITH selected_session AS (
+         SELECT COALESCE(
+           $2::uuid,
+           (
+             SELECT session_id
+             FROM ${schema}.ai_conversations
+             WHERE user_id = $1::uuid
+             ORDER BY created_at DESC
+             LIMIT 1
+           )
+         ) AS id
+       )
+       SELECT session_id, question, response, created_at
        FROM ${schema}.ai_conversations
        WHERE user_id = $1::uuid
-         AND ($2::uuid IS NULL OR session_id = $2::uuid)
+         AND session_id = (SELECT id FROM selected_session)
        ORDER BY created_at ASC
        LIMIT 100`,
       userId,
       sessionId ?? null,
     );
+  }
+
+  private async conversationContext(
+    ctx: TenantContext,
+    userId: string,
+    sessionId: string,
+  ) {
+    const schema = this.tenant.quote(ctx.schemaName);
+    const rows = await this.db.$queryRawUnsafe<
+      { question: string; response: string }[]
+    >(
+      `SELECT question, response
+       FROM ${schema}.ai_conversations
+       WHERE user_id = $1::uuid AND session_id = $2::uuid
+       ORDER BY created_at DESC
+       LIMIT 12`,
+      userId,
+      sessionId,
+    );
+    return rows
+      .reverse()
+      .map(
+        (row) =>
+          `User: ${row.question.slice(0, 1000)}\nAssistant: ${row.response.slice(0, 2000)}`,
+      )
+      .join('\n\n')
+      .slice(-12000);
   }
 }
