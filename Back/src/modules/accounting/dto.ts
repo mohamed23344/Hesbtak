@@ -209,8 +209,8 @@ export class VendorBillDto {
 
   @IsString()
   @IsOptional()
-  @IsIn(['unpaid', 'paid', 'draft'])
-  status?: 'unpaid' | 'paid' | 'draft';
+  @IsIn(['received', 'paid', 'draft'])
+  status?: 'received' | 'paid' | 'draft';
 
   @IsString()
   @IsOptional()

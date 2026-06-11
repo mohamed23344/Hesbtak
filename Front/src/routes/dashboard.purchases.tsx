@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Header, StatusBadge } from "./dashboard.transactions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,12 @@ import { api, money } from "@/lib/api";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/dashboard/purchases")({ component: PurchasesPage });
+export const Route = createFileRoute("/dashboard/purchases")({ component: PurchasesRoute });
+
+function PurchasesRoute() {
+  const path = useRouterState({ select: (state) => state.location.pathname.replace(/\/+$/, "") });
+  return path === "/dashboard/purchases" ? <PurchasesPage /> : <Outlet />;
+}
 
 type Bill = {
   id: string;
@@ -87,7 +92,7 @@ function PurchasesPage() {
         title={t("purchasesTitle")}
         desc={t("purchasesDesc")}
         action={
-          <Button className="bg-gradient-primary gap-1.5" onClick={() => navigate({ to: "/dashboard/purchases/create" })}>
+          <Button className="bg-gradient-primary gap-1.5" onClick={() => navigate({ to: "/dashboard/purchases/manage" })}>
             <Plus className="h-4 w-4" /> {t("createInvoice")}
           </Button>
         }

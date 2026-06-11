@@ -63,7 +63,6 @@ export default function DashboardLayout() {
       icon: Receipt,
       permission: "invoices",
       items: [
-        { to: "/dashboard/sales/create", label: t("createInvoice") },
         { to: "/dashboard/sales/manage", label: t("manageInvoices") },
         { to: "/dashboard/sales/payments", label: t("payments") },
         { to: "/dashboard/sales/customers", label: t("customers") },
@@ -76,7 +75,6 @@ export default function DashboardLayout() {
       icon: ShoppingCart,
       permission: "invoices",
       items: [
-        { to: "/dashboard/purchases/create", label: t("createInvoice") },
         { to: "/dashboard/purchases/manage", label: t("manageInvoices") },
         { to: "/dashboard/purchases/payments", label: t("payments") },
         { to: "/dashboard/purchases/vendors", label: t("vendors") },
@@ -89,7 +87,6 @@ export default function DashboardLayout() {
       icon: Wallet,
       permission: "invoices",
       items: [
-        { to: "/dashboard/expenses/create", label: t("createInvoice") },
         { to: "/dashboard/expenses/manage", label: t("manageInvoices") },
         { to: "/dashboard/expenses/payments", label: t("payments") },
         { to: "/dashboard/expenses/vendors", label: t("vendors") },

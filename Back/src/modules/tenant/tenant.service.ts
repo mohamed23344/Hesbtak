@@ -485,7 +485,9 @@ export class TenantService {
     const baseAccounts = [
       ['1000', 'Cash and Bank', 'Asset'],
       ['1100', 'Accounts Receivable', 'Asset'],
+      ['1200', 'Input Tax Receivable', 'Asset'],
       ['2000', 'Accounts Payable', 'Liability'],
+      ['2100', 'Output Tax Payable', 'Liability'],
       ['3000', 'Owner Equity', 'Equity'],
       ['4000', 'Sales Revenue', 'Revenue'],
       ['5000', 'Operating Expenses', 'Expense'],

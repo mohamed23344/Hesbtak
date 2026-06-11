@@ -84,7 +84,10 @@ export class AccountingService {
   async listVendors(ctx: TenantContext) { return this.listTable(ctx, 'vendors'); }
 
   async resolveCustomer(ctx: TenantContext, userId: string, dto: { id?: string; name?: string; email?: string }): Promise<string> {
-    if (dto.id) return dto.id;
+    if (dto.id) {
+      await this.ensurePartyExists(ctx, 'customers', dto.id, 'Customer');
+      return dto.id;
+    }
     if (dto.name) {
       const customer = await this.createCustomer(ctx, userId, { name: dto.name, email: dto.email });
       return customer.id;
@@ -93,7 +96,10 @@ export class AccountingService {
   }
 
   async resolveVendor(ctx: TenantContext, userId: string, dto: { id?: string; name?: string; email?: string }): Promise<string> {
-    if (dto.id) return dto.id;
+    if (dto.id) {
+      await this.ensurePartyExists(ctx, 'vendors', dto.id, 'Vendor');
+      return dto.id;
+    }
     if (dto.name) {
       const vendor = await this.createVendor(ctx, userId, { name: dto.name, email: dto.email });
       return vendor.id;
@@ -168,88 +174,49 @@ export class AccountingService {
 
   async attachInvoiceToJournalEntry(ctx: TenantContext, userId: string, journalEntryId: string, dto: AttachInvoiceDto) {
     const invoice = await this.createInvoice(ctx, userId, dto, journalEntryId);
-    await this.createCustomerPayment(ctx, userId, {
-      entityId: invoice.id, amount: Number(invoice.total),
-      paymentMethod: 'cash', paymentDate: dto.issueDate,
-      notes: 'Auto-created cash sale payment from attached invoice',
-    });
+    if (dto.status !== 'paid' && dto.status !== 'draft') {
+      await this.createCustomerPayment(ctx, userId, {
+        entityId: invoice.id, amount: Number(invoice.total),
+        paymentMethod: 'cash', paymentDate: dto.issueDate,
+        notes: 'Auto-created cash sale payment from attached invoice',
+      }, 'receipt_voucher');
+    }
     return invoice;
   }
 
   // ─── Vouchers (Expense / Receipt) ─────────────────────────────────
 
   async createVoucher(ctx: TenantContext, userId: string, dto: VoucherDto) {
-    const schema = this.tenant.quote(ctx.schemaName);
-    const cashId = dto.bankAccountId
-      ? await this.bankGlAccount(ctx, dto.bankAccountId)
-      : await this.accountId(ctx, '1000');
-
     if (dto.type === 'receipt') {
       const customerId = await this.resolveCustomer(ctx, userId, {
         id: dto.partyId, name: dto.partyInfo?.name, email: dto.partyInfo?.email,
       });
-      let description = dto.description || 'Receipt voucher';
-      if (dto.invoiceId) {
-        const invRows = await this.db.$queryRawUnsafe<{ invoice_number: string }[]>(
-          `SELECT invoice_number FROM ${schema}.invoices WHERE id = $1::uuid`, dto.invoiceId,
-        );
-        if (invRows[0]) description = `Receipt for ${invRows[0].invoice_number}`;
-      }
-      const ar = await this.accountId(ctx, '1100');
-      const je = await this.createJournalEntry(ctx, userId, {
-        date: dto.date, description,
-        lines: [
-          { accountId: cashId, debit: dto.amount, credit: 0 },
-          { accountId: ar, debit: 0, credit: dto.amount },
-        ],
+      const payment = await this.createCustomerPayment(ctx, userId, {
+        entityId: dto.invoiceId, partyId: customerId, partyType: 'customer',
+        amount: dto.amount, paymentMethod: dto.paymentMethod ?? 'cash',
+        paymentDate: dto.date, bankAccountId: dto.bankAccountId,
+        notes: dto.description || 'Receipt voucher',
       }, 'receipt_voucher');
-
-      if (dto.invoiceId) {
-        await this.createCustomerPayment(ctx, userId, {
-          entityId: dto.invoiceId, amount: dto.amount,
-          paymentMethod: dto.paymentMethod ?? 'cash', paymentDate: dto.date,
-          bankAccountId: dto.bankAccountId,
-        });
-      }
-
-      return { id: je.id, type: 'receipt_voucher' };
+      return { id: payment.id, journalEntryId: payment.journalEntryId, type: 'receipt_voucher' };
     }
 
-    // expense voucher
     const vendorId = await this.resolveVendor(ctx, userId, {
       id: dto.partyId, name: dto.partyInfo?.name, email: dto.partyInfo?.email,
     });
-    let description = dto.description || 'Expense voucher';
-    if (dto.invoiceId) {
-      const billRows = await this.db.$queryRawUnsafe<{ bill_number: string }[]>(
-        `SELECT bill_number FROM ${schema}.vendor_bills WHERE id = $1::uuid`, dto.invoiceId,
-      );
-      if (billRows[0]) description = `Payment for ${billRows[0].bill_number}`;
-    }
-    const ap = await this.accountId(ctx, '2000');
-    const je = await this.createJournalEntry(ctx, userId, {
-      date: dto.date, description,
-      lines: [
-        { accountId: ap, debit: dto.amount, credit: 0 },
-        { accountId: cashId, debit: 0, credit: dto.amount },
-      ],
+    const payment = await this.createVendorPayment(ctx, userId, {
+      entityId: dto.invoiceId, partyId: vendorId, partyType: 'vendor',
+      amount: dto.amount, paymentMethod: dto.paymentMethod ?? 'cash',
+      paymentDate: dto.date, bankAccountId: dto.bankAccountId,
+      notes: dto.description || 'Expense voucher',
     }, 'expense_voucher');
-
-    if (dto.invoiceId) {
-      await this.createVendorPayment(ctx, userId, {
-        entityId: dto.invoiceId, amount: dto.amount,
-        paymentMethod: dto.paymentMethod ?? 'cash', paymentDate: dto.date,
-        bankAccountId: dto.bankAccountId,
-      });
-    }
-
-    return { id: je.id, type: 'expense_voucher' };
+    return { id: payment.id, journalEntryId: payment.journalEntryId, type: 'expense_voucher' };
   }
 
   // ─── Invoices ─────────────────────────────────────────────────────
 
   async createInvoice(ctx: TenantContext, userId: string, dto: InvoiceDto, existingJournalEntryId?: string) {
     const schema = this.tenant.quote(ctx.schemaName);
+    this.ensureValidDocumentDates(dto.issueDate, dto.dueDate);
     const customerId = await this.resolveCustomer(ctx, userId, {
       id: dto.customerId, name: dto.customerInfo?.name, email: dto.customerInfo?.email,
     });
@@ -266,27 +233,40 @@ export class AccountingService {
       dto.status ?? 'unpaid', existingJournalEntryId ?? null, userId,
     );
     const invoice = invoiceRows[0];
+    const defaultRevenueAccountId = await this.accountId(ctx, '4000');
+    const revenueByAccount = new Map<string, number>();
     let lineNumber = 1;
     for (const line of totals.lines) {
+      const revenueAccountId = line.accountId ?? defaultRevenueAccountId;
+      revenueByAccount.set(
+        revenueAccountId,
+        (revenueByAccount.get(revenueAccountId) ?? 0) + line.lineSubtotal,
+      );
       await this.db.$executeRawUnsafe(
         `INSERT INTO ${schema}.invoice_lines
          (invoice_id, line_number, description, quantity, unit_price, discount_amount, tax_rate, line_subtotal, tax_amount, line_total, revenue_account_id)
          VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::uuid)`,
         invoice.id, lineNumber++, line.description, line.quantity, line.unitPrice,
         line.discountAmount, line.taxRate, line.lineSubtotal, line.taxAmount, line.lineTotal,
-        line.accountId ?? (await this.accountId(ctx, '4000')),
+        revenueAccountId,
       );
     }
 
-    if (!existingJournalEntryId) {
+    if (!existingJournalEntryId && dto.status !== 'draft') {
       const ar = await this.accountId(ctx, '1100');
-      const revenue = dto.lines[0]?.accountId ?? (await this.accountId(ctx, '4000'));
+      const journalLines: JournalLineDto[] = [
+        { accountId: ar, debit: totals.total, credit: 0 },
+        ...Array.from(revenueByAccount, ([accountId, amount]) => ({
+          accountId, debit: 0, credit: amount,
+        })),
+      ];
+      if (totals.taxAmount > 0) {
+        const outputTax = await this.ensureSystemAccount(ctx, '2100', 'Output Tax Payable', 'Liability');
+        journalLines.push({ accountId: outputTax, debit: 0, credit: totals.taxAmount });
+      }
       const je = await this.createJournalEntry(ctx, userId, {
         date: dto.issueDate, description: `Customer invoice ${number}`,
-        lines: [
-          { accountId: ar, debit: totals.total, credit: 0 },
-          { accountId: revenue, debit: 0, credit: totals.total },
-        ],
+        lines: journalLines,
       }, 'invoice', invoice.id);
       await this.db.$executeRawUnsafe(
         `UPDATE ${schema}.invoices SET journal_entry_id = $1::uuid WHERE id = $2::uuid`, je.id, invoice.id,
@@ -298,14 +278,23 @@ export class AccountingService {
         entityId: invoice.id, amount: Number(invoice.total),
         paymentMethod: dto.paymentMethod ?? 'cash', paymentDate: dto.issueDate,
         bankAccountId: dto.bankAccountId, notes: 'Auto payment for invoice',
-      });
+      }, 'receipt_voucher');
     }
 
     await this.createAlert(ctx, 'due_date', 'info', 'Invoice due date scheduled', `Invoice ${number} is due on ${dto.dueDate}`, 'invoice', invoice.id);
     return { id: invoice.id, invoiceNumber: number, total: invoice.total, status: dto.status ?? 'unpaid' };
   }
 
-  async listInvoices(ctx: TenantContext) { return this.listTable(ctx, 'invoices'); }
+  async listInvoices(ctx: TenantContext) {
+    const schema = this.tenant.quote(ctx.schemaName);
+    return this.db.$queryRawUnsafe(
+      `SELECT i.*, c.name AS customer_name,
+        COALESCE((SELECT SUM(cp.amount) FROM ${schema}.customer_payments cp WHERE cp.invoice_id = i.id), 0) AS paid_amount
+       FROM ${schema}.invoices i
+       JOIN ${schema}.customers c ON c.id = i.customer_id
+       ORDER BY i.created_at DESC`,
+    );
+  }
 
   async deleteInvoice(ctx: TenantContext, invoiceId: string) {
     const schema = this.tenant.quote(ctx.schemaName);
@@ -333,6 +322,7 @@ export class AccountingService {
 
   async createVendorBill(ctx: TenantContext, userId: string, dto: VendorBillDto) {
     const schema = this.tenant.quote(ctx.schemaName);
+    this.ensureValidDocumentDates(dto.issueDate, dto.dueDate);
     const vendorId = await this.resolveVendor(ctx, userId, {
       id: dto.vendorId, name: dto.vendorInfo?.name, email: dto.vendorInfo?.email,
     });
@@ -349,43 +339,67 @@ export class AccountingService {
       dto.status ?? 'received', userId,
     );
     const bill = billRows[0];
+    const defaultExpenseAccountId = await this.accountId(ctx, '5000');
+    const expenseByAccount = new Map<string, number>();
     let lineNumber = 1;
     for (const line of totals.lines) {
+      const expenseAccountId = line.accountId ?? defaultExpenseAccountId;
+      expenseByAccount.set(
+        expenseAccountId,
+        (expenseByAccount.get(expenseAccountId) ?? 0) + line.lineSubtotal,
+      );
       await this.db.$executeRawUnsafe(
         `INSERT INTO ${schema}.vendor_bill_lines
          (vendor_bill_id, line_number, description, quantity, unit_cost, discount_amount, tax_rate, line_subtotal, tax_amount, line_total, expense_account_id)
          VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::uuid)`,
         bill.id, lineNumber++, line.description, line.quantity, line.unitPrice,
         line.discountAmount, line.taxRate, line.lineSubtotal, line.taxAmount, line.lineTotal,
-        line.accountId ?? (await this.accountId(ctx, '5000')),
+        expenseAccountId,
       );
     }
-    const expense = dto.lines[0]?.accountId ?? (await this.accountId(ctx, '5000'));
     const ap = await this.accountId(ctx, '2000');
-    const je = await this.createJournalEntry(ctx, userId, {
-      date: dto.issueDate, description: `Vendor bill ${number}`,
-      lines: [
-        { accountId: expense, debit: totals.total, credit: 0 },
-        { accountId: ap, debit: 0, credit: totals.total },
-      ],
-    }, 'vendor_bill', bill.id);
-    await this.db.$executeRawUnsafe(
-      `UPDATE ${schema}.vendor_bills SET journal_entry_id = $1::uuid WHERE id = $2::uuid`, je.id, bill.id,
-    );
+    if (dto.status !== 'draft') {
+      const journalLines: JournalLineDto[] = [
+        ...Array.from(expenseByAccount, ([accountId, amount]) => ({
+          accountId, debit: amount, credit: 0,
+        })),
+      ];
+      if (totals.taxAmount > 0) {
+        const inputTax = await this.ensureSystemAccount(ctx, '1200', 'Input Tax Receivable', 'Asset');
+        journalLines.push({ accountId: inputTax, debit: totals.taxAmount, credit: 0 });
+      }
+      journalLines.push({ accountId: ap, debit: 0, credit: totals.total });
+      const je = await this.createJournalEntry(ctx, userId, {
+        date: dto.issueDate, description: `Vendor bill ${number}`,
+        lines: journalLines,
+      }, 'vendor_bill', bill.id);
+      await this.db.$executeRawUnsafe(
+        `UPDATE ${schema}.vendor_bills SET journal_entry_id = $1::uuid WHERE id = $2::uuid`, je.id, bill.id,
+      );
+    }
 
     if (dto.status === 'paid') {
       await this.createVendorPayment(ctx, userId, {
         entityId: bill.id, amount: Number(bill.total),
         paymentMethod: dto.paymentMethod ?? 'cash', paymentDate: dto.issueDate,
         bankAccountId: dto.bankAccountId, notes: 'Auto payment for bill',
-      });
+      }, 'expense_voucher');
     }
 
     await this.createAlert(ctx, 'due_date', 'info', 'Vendor bill due date scheduled', `Bill ${number} is due on ${dto.dueDate}`, 'vendor_bill', bill.id);
     return { id: bill.id, billNumber: number, total: bill.total, status: dto.status ?? 'received' };
   }
 
-  async listVendorBills(ctx: TenantContext) { return this.listTable(ctx, 'vendor_bills'); }
+  async listVendorBills(ctx: TenantContext) {
+    const schema = this.tenant.quote(ctx.schemaName);
+    return this.db.$queryRawUnsafe(
+      `SELECT b.*, v.name AS vendor_name,
+        COALESCE((SELECT SUM(vp.amount) FROM ${schema}.vendor_payments vp WHERE vp.vendor_bill_id = b.id), 0) AS paid_amount
+       FROM ${schema}.vendor_bills b
+       JOIN ${schema}.vendors v ON v.id = b.vendor_id
+       ORDER BY b.created_at DESC`,
+    );
+  }
 
   async deleteVendorBill(ctx: TenantContext, billId: string) {
     const schema = this.tenant.quote(ctx.schemaName);
@@ -411,7 +425,7 @@ export class AccountingService {
 
   // ─── Customer Payments ────────────────────────────────────────────
 
-  async createCustomerPayment(ctx: TenantContext, userId: string, dto: PaymentDto) {
+  async createCustomerPayment(ctx: TenantContext, userId: string, dto: PaymentDto, referenceType = 'customer_payment') {
     const schema = this.tenant.quote(ctx.schemaName);
 
     let invoiceId = dto.entityId;
@@ -426,11 +440,17 @@ export class AccountingService {
     }
 
     if (!invoiceId) throw new BadRequestException('Invoice not found');
-    const invoiceRows = await this.db.$queryRawUnsafe<{ id: string; customer_id: string; total: string }[]>(
-      `SELECT id, customer_id, total FROM ${schema}.invoices WHERE id = $1::uuid`, invoiceId,
+    const invoiceRows = await this.db.$queryRawUnsafe<{ id: string; customer_id: string; total: string; paid: string }[]>(
+      `SELECT i.id, i.customer_id, i.total,
+        COALESCE((SELECT SUM(cp.amount) FROM ${schema}.customer_payments cp WHERE cp.invoice_id = i.id), 0) AS paid
+       FROM ${schema}.invoices i WHERE i.id = $1::uuid`, invoiceId,
     );
     if (!invoiceRows[0]) throw new BadRequestException('Invoice not found');
     customerId = invoiceRows[0].customer_id;
+    const remaining = Number(invoiceRows[0].total) - Number(invoiceRows[0].paid);
+    if (dto.amount <= 0 || dto.amount > remaining + 0.001) {
+      throw new BadRequestException(`Payment must be greater than zero and cannot exceed the remaining balance of ${remaining.toFixed(2)}`);
+    }
 
     const cash = dto.bankAccountId ? await this.bankGlAccount(ctx, dto.bankAccountId) : await this.accountId(ctx, '1000');
     const ar = await this.accountId(ctx, '1100');
@@ -440,7 +460,7 @@ export class AccountingService {
         { accountId: cash, debit: dto.amount, credit: 0 },
         { accountId: ar, debit: 0, credit: dto.amount },
       ],
-    }, 'customer_payment');
+    }, referenceType, invoiceId);
     const rows = await this.db.$queryRawUnsafe<IdRow[]>(
       `INSERT INTO ${schema}.customer_payments
        (customer_id, invoice_id, amount, payment_method, bank_account_id, payment_date, reference, journal_entry_id, notes, created_by)
@@ -449,7 +469,7 @@ export class AccountingService {
       dto.paymentDate, dto.reference ?? null, je.id, dto.notes ?? null, userId,
     );
     await this.updateInvoiceStatus(ctx, invoiceId);
-    return rows[0];
+    return { ...rows[0], journalEntryId: je.id };
   }
 
   async listCustomerPayments(ctx: TenantContext) {
@@ -458,7 +478,7 @@ export class AccountingService {
 
   // ─── Vendor Payments ──────────────────────────────────────────────
 
-  async createVendorPayment(ctx: TenantContext, userId: string, dto: PaymentDto) {
+  async createVendorPayment(ctx: TenantContext, userId: string, dto: PaymentDto, referenceType = 'vendor_payment') {
     const schema = this.tenant.quote(ctx.schemaName);
 
     let billId = dto.entityId;
@@ -473,11 +493,17 @@ export class AccountingService {
     }
 
     if (!billId) throw new BadRequestException('Vendor bill not found');
-    const billRows = await this.db.$queryRawUnsafe<{ id: string; vendor_id: string; total: string }[]>(
-      `SELECT id, vendor_id, total FROM ${schema}.vendor_bills WHERE id = $1::uuid`, billId,
+    const billRows = await this.db.$queryRawUnsafe<{ id: string; vendor_id: string; total: string; paid: string }[]>(
+      `SELECT b.id, b.vendor_id, b.total,
+        COALESCE((SELECT SUM(vp.amount) FROM ${schema}.vendor_payments vp WHERE vp.vendor_bill_id = b.id), 0) AS paid
+       FROM ${schema}.vendor_bills b WHERE b.id = $1::uuid`, billId,
     );
     if (!billRows[0]) throw new BadRequestException('Vendor bill not found');
     vendorId = billRows[0].vendor_id;
+    const remaining = Number(billRows[0].total) - Number(billRows[0].paid);
+    if (dto.amount <= 0 || dto.amount > remaining + 0.001) {
+      throw new BadRequestException(`Payment must be greater than zero and cannot exceed the remaining balance of ${remaining.toFixed(2)}`);
+    }
 
     const cash = dto.bankAccountId ? await this.bankGlAccount(ctx, dto.bankAccountId) : await this.accountId(ctx, '1000');
     const ap = await this.accountId(ctx, '2000');
@@ -487,7 +513,7 @@ export class AccountingService {
         { accountId: ap, debit: dto.amount, credit: 0 },
         { accountId: cash, debit: 0, credit: dto.amount },
       ],
-    }, 'vendor_payment');
+    }, referenceType, billId);
     const rows = await this.db.$queryRawUnsafe<IdRow[]>(
       `INSERT INTO ${schema}.vendor_payments
        (vendor_bill_id, vendor_id, amount, payment_method, bank_account_id, payment_date, reference, journal_entry_id, notes, created_by)
@@ -496,7 +522,7 @@ export class AccountingService {
       dto.paymentDate, dto.reference ?? null, je.id, dto.notes ?? null, userId,
     );
     await this.updateBillStatus(ctx, billId);
-    return rows[0];
+    return { ...rows[0], journalEntryId: je.id };
   }
 
   async listVendorPayments(ctx: TenantContext) {
@@ -626,6 +652,20 @@ export class AccountingService {
     return rows[0];
   }
 
+  private async ensurePartyExists(
+    ctx: TenantContext,
+    table: 'customers' | 'vendors',
+    id: string,
+    label: string,
+  ) {
+    const schema = this.tenant.quote(ctx.schemaName);
+    const rows = await this.db.$queryRawUnsafe<IdRow[]>(
+      `SELECT id FROM ${schema}.${table} WHERE id = $1::uuid AND is_active = true`,
+      id,
+    );
+    if (!rows[0]) throw new BadRequestException(`${label} not found`);
+  }
+
   private async listTable(ctx: TenantContext, table: string) {
     const schema = this.tenant.quote(ctx.schemaName);
     return this.db.$queryRawUnsafe(`SELECT * FROM ${schema}.${table} ORDER BY created_at DESC`);
@@ -640,12 +680,17 @@ export class AccountingService {
   }
 
   private calculateLines(lines: { description: string; quantity: number; unitPrice: number; discountAmount?: number; taxRate?: number; accountId?: string }[]) {
+    if (!lines.length) throw new BadRequestException('At least one document line is required');
     const calculated = lines.map((line) => {
       const quantity = Number(line.quantity ?? 1);
       const unitPrice = Number(line.unitPrice);
       const discountAmount = Number(line.discountAmount ?? 0);
       const taxRate = Number(line.taxRate ?? 0);
-      const lineSubtotal = quantity * unitPrice - discountAmount;
+      const gross = quantity * unitPrice;
+      if (!line.description?.trim() || quantity <= 0 || unitPrice < 0 || discountAmount < 0 || discountAmount > gross || taxRate < 0) {
+        throw new BadRequestException('Each line requires a description, positive quantity, non-negative price and tax, and a discount no greater than the line amount');
+      }
+      const lineSubtotal = gross - discountAmount;
       const taxAmount = lineSubtotal * (taxRate / 100);
       return { ...line, quantity, unitPrice, discountAmount, taxRate, lineSubtotal, taxAmount, lineTotal: lineSubtotal + taxAmount };
     });
@@ -680,6 +725,29 @@ export class AccountingService {
       `SELECT id FROM ${schema}.accounts WHERE code = $1`, code,
     );
     if (!rows[0]) throw new BadRequestException(`Account ${code} not found`);
+    return rows[0].id;
+  }
+
+  private ensureValidDocumentDates(issueDate: string, dueDate: string) {
+    if (dueDate < issueDate) {
+      throw new BadRequestException('Due date cannot be before the issue date');
+    }
+  }
+
+  private async ensureSystemAccount(
+    ctx: TenantContext,
+    code: string,
+    name: string,
+    type: string,
+  ): Promise<string> {
+    const schema = this.tenant.quote(ctx.schemaName);
+    const rows = await this.db.$queryRawUnsafe<IdRow[]>(
+      `INSERT INTO ${schema}.accounts (code, name, type)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name
+       RETURNING id`,
+      code, name, type,
+    );
     return rows[0].id;
   }
 

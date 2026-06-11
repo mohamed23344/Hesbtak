@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Header, StatusBadge } from "./dashboard.transactions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,12 @@ import { api, money } from "@/lib/api";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/dashboard/sales")({ component: SalesPage });
+export const Route = createFileRoute("/dashboard/sales")({ component: SalesRoute });
+
+function SalesRoute() {
+  const path = useRouterState({ select: (state) => state.location.pathname.replace(/\/+$/, "") });
+  return path === "/dashboard/sales" ? <SalesPage /> : <Outlet />;
+}
 
 type Invoice = {
   id: string;
@@ -83,7 +88,7 @@ function SalesPage() {
         title={t("salesTitle")}
         desc={t("salesDesc")}
         action={
-          <Button className="bg-gradient-primary gap-1.5" onClick={() => navigate({ to: "/dashboard/sales/create" })}>
+          <Button className="bg-gradient-primary gap-1.5" onClick={() => navigate({ to: "/dashboard/sales/manage" })}>
             <Plus className="h-4 w-4" /> {t("createInvoice")}
           </Button>
         }

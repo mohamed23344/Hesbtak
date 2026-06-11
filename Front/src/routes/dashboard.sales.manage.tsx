@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { Header, StatusBadge } from "./dashboard.transactions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { useI18n } from "@/lib/i18n";
 import { api, money } from "@/lib/api";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import CreateInvoiceDialog from "@/components/CreateInvoiceDialog";
 
 export const Route = createFileRoute("/dashboard/sales/manage")({ component: ManageSalesPage });
 
@@ -15,6 +16,7 @@ type Invoice = {
   id: string;
   invoice_number: string;
   customer_id: string;
+  customer_name: string;
   issue_date: string;
   due_date: string;
   total: string;
@@ -23,8 +25,8 @@ type Invoice = {
 
 function ManageSalesPage() {
   const { t } = useI18n();
-  const navigate = useNavigate();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [createOpen, setCreateOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
@@ -43,7 +45,7 @@ function ManageSalesPage() {
 
   const filtered = useMemo(() => {
     return invoices.filter((inv) => {
-      if (search && !inv.invoice_number.toLowerCase().includes(search.toLowerCase())) return false;
+      if (search && !`${inv.invoice_number} ${inv.customer_name}`.toLowerCase().includes(search.toLowerCase())) return false;
       if (statusFilter && inv.status !== statusFilter) return false;
       if (dateFrom && inv.issue_date.slice(0, 10) < dateFrom) return false;
       if (dateTo && inv.issue_date.slice(0, 10) > dateTo) return false;
@@ -75,7 +77,7 @@ function ManageSalesPage() {
         title={t("manageSales")}
         desc={t("salesDesc")}
         action={
-          <Button className="bg-gradient-primary gap-1.5" onClick={() => navigate({ to: "/dashboard/sales/create" })}>
+          <Button className="bg-gradient-primary gap-1.5" onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4" /> {t("createInvoice")}
           </Button>
         }
@@ -140,6 +142,7 @@ function ManageSalesPage() {
           <thead className="bg-surface-container text-on-surface-variant text-xs uppercase">
             <tr>
               <th className="text-start p-3 font-medium">{t("number")}</th>
+              <th className="text-start p-3 font-medium">Customer</th>
               <th className="text-start p-3 font-medium">{t("issued")}</th>
               <th className="text-start p-3 font-medium">{t("dueDate")}</th>
               <th className="text-start p-3 font-medium">{t("status")}</th>
@@ -149,11 +152,12 @@ function ManageSalesPage() {
           </thead>
           <tbody className="divide-y divide-border-default">
             {filtered.length === 0 ? (
-              <tr><td colSpan={6} className="p-8 text-center text-on-surface-variant text-sm">No invoices found.</td></tr>
+              <tr><td colSpan={7} className="p-8 text-center text-on-surface-variant text-sm">No invoices found.</td></tr>
             ) : (
               filtered.map((i) => (
                 <tr key={i.id} className="hover:bg-surface-subtle">
                   <td className="p-3 font-medium text-primary">{i.invoice_number}</td>
+                  <td className="p-3">{i.customer_name}</td>
                   <td className="p-3 text-on-surface-variant">{String(i.issue_date).slice(0, 10)}</td>
                   <td className="p-3 text-on-surface-variant">{String(i.due_date).slice(0, 10)}</td>
                   <td className="p-3"><StatusBadge status={i.status} /></td>
@@ -169,6 +173,13 @@ function ManageSalesPage() {
           </tbody>
         </table>
       </div>
+      <CreateInvoiceDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        title={t("salesInvoice")}
+        type="sales"
+        onCreated={load}
+      />
     </div>
   );
 }
