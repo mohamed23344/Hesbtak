@@ -1,13 +1,7 @@
 import { Type } from 'class-transformer';
 import {
-  IsArray,
-  IsDateString,
-  IsIn,
-  IsNotEmpty,
-  IsNumber,
-  IsOptional,
-  IsString,
-  ValidateNested,
+  IsArray, IsBoolean, IsDateString, IsIn, IsNotEmpty, IsNumber,
+  IsOptional, IsString, ValidateNested,
 } from 'class-validator';
 
 export class AccountDto {
@@ -40,6 +34,19 @@ export class PartyDto {
   @IsString()
   @IsOptional()
   address?: string;
+}
+
+export class PartyInfo {
+  @IsString()
+  name!: string;
+
+  @IsString()
+  @IsOptional()
+  email?: string;
+
+  @IsString()
+  @IsOptional()
+  phone?: string;
 }
 
 export class JournalLineDto {
@@ -75,6 +82,52 @@ export class JournalEntryDto {
   lines!: JournalLineDto[];
 }
 
+export class VoucherDto {
+  @IsDateString()
+  date!: string;
+
+  @IsString()
+  @IsIn(['expense', 'receipt'])
+  type!: 'expense' | 'receipt';
+
+  @IsString()
+  @IsOptional()
+  partyId?: string;
+
+  @ValidateNested()
+  @IsOptional()
+  @Type(() => PartyInfo)
+  partyInfo?: PartyInfo;
+
+  @IsString()
+  @IsOptional()
+  partyType?: 'customer' | 'vendor';
+
+  @IsString()
+  description!: string;
+
+  @IsNumber()
+  amount!: number;
+
+  @IsString()
+  @IsOptional()
+  invoiceId?: string;
+
+  @IsArray()
+  @IsOptional()
+  @IsString({ each: true })
+  invoiceIds?: string[];
+
+  @IsString()
+  @IsOptional()
+  @IsIn(['cash', 'bank', 'card', 'transfer'])
+  paymentMethod?: string;
+
+  @IsString()
+  @IsOptional()
+  bankAccountId?: string;
+}
+
 export class DocumentLineDto {
   @IsString()
   description!: string;
@@ -100,7 +153,13 @@ export class DocumentLineDto {
 
 export class InvoiceDto {
   @IsString()
-  customerId!: string;
+  @IsOptional()
+  customerId?: string;
+
+  @ValidateNested()
+  @IsOptional()
+  @Type(() => PartyInfo)
+  customerInfo?: PartyInfo;
 
   @IsDateString()
   issueDate!: string;
@@ -112,11 +171,30 @@ export class InvoiceDto {
   @ValidateNested({ each: true })
   @Type(() => DocumentLineDto)
   lines!: DocumentLineDto[];
+
+  @IsString()
+  @IsOptional()
+  @IsIn(['unpaid', 'paid', 'draft'])
+  status?: 'unpaid' | 'paid' | 'draft';
+
+  @IsString()
+  @IsOptional()
+  paymentMethod?: string;
+
+  @IsString()
+  @IsOptional()
+  bankAccountId?: string;
 }
 
 export class VendorBillDto {
   @IsString()
-  vendorId!: string;
+  @IsOptional()
+  vendorId?: string;
+
+  @ValidateNested()
+  @IsOptional()
+  @Type(() => PartyInfo)
+  vendorInfo?: PartyInfo;
 
   @IsDateString()
   issueDate!: string;
@@ -128,11 +206,33 @@ export class VendorBillDto {
   @ValidateNested({ each: true })
   @Type(() => DocumentLineDto)
   lines!: DocumentLineDto[];
+
+  @IsString()
+  @IsOptional()
+  @IsIn(['unpaid', 'paid', 'draft'])
+  status?: 'unpaid' | 'paid' | 'draft';
+
+  @IsString()
+  @IsOptional()
+  paymentMethod?: string;
+
+  @IsString()
+  @IsOptional()
+  bankAccountId?: string;
 }
 
 export class PaymentDto {
   @IsString()
-  entityId!: string;
+  @IsOptional()
+  entityId?: string;
+
+  @IsString()
+  @IsOptional()
+  partyId?: string;
+
+  @IsString()
+  @IsOptional()
+  partyType?: 'customer' | 'vendor';
 
   @IsNumber()
   amount!: number;
@@ -157,3 +257,39 @@ export class PaymentDto {
 }
 
 export class AttachInvoiceDto extends InvoiceDto {}
+
+export class ReturnLineDto {
+  @IsString()
+  description!: string;
+
+  @IsNumber()
+  quantity!: number;
+
+  @IsNumber()
+  unitPrice!: number;
+
+  @IsNumber()
+  @IsOptional()
+  taxRate?: number;
+}
+
+export class ReturnDto {
+  @IsString()
+  @IsOptional()
+  invoiceId?: string;
+
+  @IsString()
+  @IsOptional()
+  billId?: string;
+
+  @IsDateString()
+  returnDate!: string;
+
+  @IsString()
+  reason!: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ReturnLineDto)
+  lines!: ReturnLineDto[];
+}

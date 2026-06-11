@@ -23,14 +23,32 @@ import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as DashboardTransactionsRouteImport } from './routes/dashboard.transactions'
 import { Route as DashboardSettingsRouteImport } from './routes/dashboard.settings'
+import { Route as DashboardSalesRouteImport } from './routes/dashboard.sales'
 import { Route as DashboardReportsRouteImport } from './routes/dashboard.reports'
+import { Route as DashboardPurchasesRouteImport } from './routes/dashboard.purchases'
 import { Route as DashboardOcrRouteImport } from './routes/dashboard.ocr'
 import { Route as DashboardNotificationsRouteImport } from './routes/dashboard.notifications'
 import { Route as DashboardJournalRouteImport } from './routes/dashboard.journal'
 import { Route as DashboardInvoicesRouteImport } from './routes/dashboard.invoices'
 import { Route as DashboardForecastingRouteImport } from './routes/dashboard.forecasting'
+import { Route as DashboardExpensesRouteImport } from './routes/dashboard.expenses'
 import { Route as DashboardAssistantRouteImport } from './routes/dashboard.assistant'
 import { Route as DashboardAccountsRouteImport } from './routes/dashboard.accounts'
+import { Route as DashboardSalesReturnsRouteImport } from './routes/dashboard.sales.returns'
+import { Route as DashboardSalesPaymentsRouteImport } from './routes/dashboard.sales.payments'
+import { Route as DashboardSalesManageRouteImport } from './routes/dashboard.sales.manage'
+import { Route as DashboardSalesCustomersRouteImport } from './routes/dashboard.sales.customers'
+import { Route as DashboardSalesCreateRouteImport } from './routes/dashboard.sales.create'
+import { Route as DashboardPurchasesVendorsRouteImport } from './routes/dashboard.purchases.vendors'
+import { Route as DashboardPurchasesReturnsRouteImport } from './routes/dashboard.purchases.returns'
+import { Route as DashboardPurchasesPaymentsRouteImport } from './routes/dashboard.purchases.payments'
+import { Route as DashboardPurchasesManageRouteImport } from './routes/dashboard.purchases.manage'
+import { Route as DashboardPurchasesCreateRouteImport } from './routes/dashboard.purchases.create'
+import { Route as DashboardExpensesVendorsRouteImport } from './routes/dashboard.expenses.vendors'
+import { Route as DashboardExpensesReturnsRouteImport } from './routes/dashboard.expenses.returns'
+import { Route as DashboardExpensesPaymentsRouteImport } from './routes/dashboard.expenses.payments'
+import { Route as DashboardExpensesManageRouteImport } from './routes/dashboard.expenses.manage'
+import { Route as DashboardExpensesCreateRouteImport } from './routes/dashboard.expenses.create'
 
 const VerifyOtpRoute = VerifyOtpRouteImport.update({
   id: '/verify-otp',
@@ -102,9 +120,19 @@ const DashboardSettingsRoute = DashboardSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardSalesRoute = DashboardSalesRouteImport.update({
+  id: '/sales',
+  path: '/sales',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardReportsRoute = DashboardReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardPurchasesRoute = DashboardPurchasesRouteImport.update({
+  id: '/purchases',
+  path: '/purchases',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardOcrRoute = DashboardOcrRouteImport.update({
@@ -132,6 +160,11 @@ const DashboardForecastingRoute = DashboardForecastingRouteImport.update({
   path: '/forecasting',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardExpensesRoute = DashboardExpensesRouteImport.update({
+  id: '/expenses',
+  path: '/expenses',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardAssistantRoute = DashboardAssistantRouteImport.update({
   id: '/assistant',
   path: '/assistant',
@@ -141,6 +174,89 @@ const DashboardAccountsRoute = DashboardAccountsRouteImport.update({
   id: '/accounts',
   path: '/accounts',
   getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardSalesReturnsRoute = DashboardSalesReturnsRouteImport.update({
+  id: '/returns',
+  path: '/returns',
+  getParentRoute: () => DashboardSalesRoute,
+} as any)
+const DashboardSalesPaymentsRoute = DashboardSalesPaymentsRouteImport.update({
+  id: '/payments',
+  path: '/payments',
+  getParentRoute: () => DashboardSalesRoute,
+} as any)
+const DashboardSalesManageRoute = DashboardSalesManageRouteImport.update({
+  id: '/manage',
+  path: '/manage',
+  getParentRoute: () => DashboardSalesRoute,
+} as any)
+const DashboardSalesCustomersRoute = DashboardSalesCustomersRouteImport.update({
+  id: '/customers',
+  path: '/customers',
+  getParentRoute: () => DashboardSalesRoute,
+} as any)
+const DashboardSalesCreateRoute = DashboardSalesCreateRouteImport.update({
+  id: '/create',
+  path: '/create',
+  getParentRoute: () => DashboardSalesRoute,
+} as any)
+const DashboardPurchasesVendorsRoute =
+  DashboardPurchasesVendorsRouteImport.update({
+    id: '/vendors',
+    path: '/vendors',
+    getParentRoute: () => DashboardPurchasesRoute,
+  } as any)
+const DashboardPurchasesReturnsRoute =
+  DashboardPurchasesReturnsRouteImport.update({
+    id: '/returns',
+    path: '/returns',
+    getParentRoute: () => DashboardPurchasesRoute,
+  } as any)
+const DashboardPurchasesPaymentsRoute =
+  DashboardPurchasesPaymentsRouteImport.update({
+    id: '/payments',
+    path: '/payments',
+    getParentRoute: () => DashboardPurchasesRoute,
+  } as any)
+const DashboardPurchasesManageRoute =
+  DashboardPurchasesManageRouteImport.update({
+    id: '/manage',
+    path: '/manage',
+    getParentRoute: () => DashboardPurchasesRoute,
+  } as any)
+const DashboardPurchasesCreateRoute =
+  DashboardPurchasesCreateRouteImport.update({
+    id: '/create',
+    path: '/create',
+    getParentRoute: () => DashboardPurchasesRoute,
+  } as any)
+const DashboardExpensesVendorsRoute =
+  DashboardExpensesVendorsRouteImport.update({
+    id: '/vendors',
+    path: '/vendors',
+    getParentRoute: () => DashboardExpensesRoute,
+  } as any)
+const DashboardExpensesReturnsRoute =
+  DashboardExpensesReturnsRouteImport.update({
+    id: '/returns',
+    path: '/returns',
+    getParentRoute: () => DashboardExpensesRoute,
+  } as any)
+const DashboardExpensesPaymentsRoute =
+  DashboardExpensesPaymentsRouteImport.update({
+    id: '/payments',
+    path: '/payments',
+    getParentRoute: () => DashboardExpensesRoute,
+  } as any)
+const DashboardExpensesManageRoute = DashboardExpensesManageRouteImport.update({
+  id: '/manage',
+  path: '/manage',
+  getParentRoute: () => DashboardExpensesRoute,
+} as any)
+const DashboardExpensesCreateRoute = DashboardExpensesCreateRouteImport.update({
+  id: '/create',
+  path: '/create',
+  getParentRoute: () => DashboardExpensesRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -156,16 +272,34 @@ export interface FileRoutesByFullPath {
   '/verify-otp': typeof VerifyOtpRoute
   '/dashboard/accounts': typeof DashboardAccountsRoute
   '/dashboard/assistant': typeof DashboardAssistantRoute
+  '/dashboard/expenses': typeof DashboardExpensesRouteWithChildren
   '/dashboard/forecasting': typeof DashboardForecastingRoute
   '/dashboard/invoices': typeof DashboardInvoicesRoute
   '/dashboard/journal': typeof DashboardJournalRoute
   '/dashboard/notifications': typeof DashboardNotificationsRoute
   '/dashboard/ocr': typeof DashboardOcrRoute
+  '/dashboard/purchases': typeof DashboardPurchasesRouteWithChildren
   '/dashboard/reports': typeof DashboardReportsRoute
+  '/dashboard/sales': typeof DashboardSalesRouteWithChildren
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/transactions': typeof DashboardTransactionsRoute
   '/admin/': typeof AdminIndexRoute
   '/dashboard/': typeof DashboardIndexRoute
+  '/dashboard/expenses/create': typeof DashboardExpensesCreateRoute
+  '/dashboard/expenses/manage': typeof DashboardExpensesManageRoute
+  '/dashboard/expenses/payments': typeof DashboardExpensesPaymentsRoute
+  '/dashboard/expenses/returns': typeof DashboardExpensesReturnsRoute
+  '/dashboard/expenses/vendors': typeof DashboardExpensesVendorsRoute
+  '/dashboard/purchases/create': typeof DashboardPurchasesCreateRoute
+  '/dashboard/purchases/manage': typeof DashboardPurchasesManageRoute
+  '/dashboard/purchases/payments': typeof DashboardPurchasesPaymentsRoute
+  '/dashboard/purchases/returns': typeof DashboardPurchasesReturnsRoute
+  '/dashboard/purchases/vendors': typeof DashboardPurchasesVendorsRoute
+  '/dashboard/sales/create': typeof DashboardSalesCreateRoute
+  '/dashboard/sales/customers': typeof DashboardSalesCustomersRoute
+  '/dashboard/sales/manage': typeof DashboardSalesManageRoute
+  '/dashboard/sales/payments': typeof DashboardSalesPaymentsRoute
+  '/dashboard/sales/returns': typeof DashboardSalesReturnsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -178,16 +312,34 @@ export interface FileRoutesByTo {
   '/verify-otp': typeof VerifyOtpRoute
   '/dashboard/accounts': typeof DashboardAccountsRoute
   '/dashboard/assistant': typeof DashboardAssistantRoute
+  '/dashboard/expenses': typeof DashboardExpensesRouteWithChildren
   '/dashboard/forecasting': typeof DashboardForecastingRoute
   '/dashboard/invoices': typeof DashboardInvoicesRoute
   '/dashboard/journal': typeof DashboardJournalRoute
   '/dashboard/notifications': typeof DashboardNotificationsRoute
   '/dashboard/ocr': typeof DashboardOcrRoute
+  '/dashboard/purchases': typeof DashboardPurchasesRouteWithChildren
   '/dashboard/reports': typeof DashboardReportsRoute
+  '/dashboard/sales': typeof DashboardSalesRouteWithChildren
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/transactions': typeof DashboardTransactionsRoute
   '/admin': typeof AdminIndexRoute
   '/dashboard': typeof DashboardIndexRoute
+  '/dashboard/expenses/create': typeof DashboardExpensesCreateRoute
+  '/dashboard/expenses/manage': typeof DashboardExpensesManageRoute
+  '/dashboard/expenses/payments': typeof DashboardExpensesPaymentsRoute
+  '/dashboard/expenses/returns': typeof DashboardExpensesReturnsRoute
+  '/dashboard/expenses/vendors': typeof DashboardExpensesVendorsRoute
+  '/dashboard/purchases/create': typeof DashboardPurchasesCreateRoute
+  '/dashboard/purchases/manage': typeof DashboardPurchasesManageRoute
+  '/dashboard/purchases/payments': typeof DashboardPurchasesPaymentsRoute
+  '/dashboard/purchases/returns': typeof DashboardPurchasesReturnsRoute
+  '/dashboard/purchases/vendors': typeof DashboardPurchasesVendorsRoute
+  '/dashboard/sales/create': typeof DashboardSalesCreateRoute
+  '/dashboard/sales/customers': typeof DashboardSalesCustomersRoute
+  '/dashboard/sales/manage': typeof DashboardSalesManageRoute
+  '/dashboard/sales/payments': typeof DashboardSalesPaymentsRoute
+  '/dashboard/sales/returns': typeof DashboardSalesReturnsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -203,16 +355,34 @@ export interface FileRoutesById {
   '/verify-otp': typeof VerifyOtpRoute
   '/dashboard/accounts': typeof DashboardAccountsRoute
   '/dashboard/assistant': typeof DashboardAssistantRoute
+  '/dashboard/expenses': typeof DashboardExpensesRouteWithChildren
   '/dashboard/forecasting': typeof DashboardForecastingRoute
   '/dashboard/invoices': typeof DashboardInvoicesRoute
   '/dashboard/journal': typeof DashboardJournalRoute
   '/dashboard/notifications': typeof DashboardNotificationsRoute
   '/dashboard/ocr': typeof DashboardOcrRoute
+  '/dashboard/purchases': typeof DashboardPurchasesRouteWithChildren
   '/dashboard/reports': typeof DashboardReportsRoute
+  '/dashboard/sales': typeof DashboardSalesRouteWithChildren
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/transactions': typeof DashboardTransactionsRoute
   '/admin/': typeof AdminIndexRoute
   '/dashboard/': typeof DashboardIndexRoute
+  '/dashboard/expenses/create': typeof DashboardExpensesCreateRoute
+  '/dashboard/expenses/manage': typeof DashboardExpensesManageRoute
+  '/dashboard/expenses/payments': typeof DashboardExpensesPaymentsRoute
+  '/dashboard/expenses/returns': typeof DashboardExpensesReturnsRoute
+  '/dashboard/expenses/vendors': typeof DashboardExpensesVendorsRoute
+  '/dashboard/purchases/create': typeof DashboardPurchasesCreateRoute
+  '/dashboard/purchases/manage': typeof DashboardPurchasesManageRoute
+  '/dashboard/purchases/payments': typeof DashboardPurchasesPaymentsRoute
+  '/dashboard/purchases/returns': typeof DashboardPurchasesReturnsRoute
+  '/dashboard/purchases/vendors': typeof DashboardPurchasesVendorsRoute
+  '/dashboard/sales/create': typeof DashboardSalesCreateRoute
+  '/dashboard/sales/customers': typeof DashboardSalesCustomersRoute
+  '/dashboard/sales/manage': typeof DashboardSalesManageRoute
+  '/dashboard/sales/payments': typeof DashboardSalesPaymentsRoute
+  '/dashboard/sales/returns': typeof DashboardSalesReturnsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -229,16 +399,34 @@ export interface FileRouteTypes {
     | '/verify-otp'
     | '/dashboard/accounts'
     | '/dashboard/assistant'
+    | '/dashboard/expenses'
     | '/dashboard/forecasting'
     | '/dashboard/invoices'
     | '/dashboard/journal'
     | '/dashboard/notifications'
     | '/dashboard/ocr'
+    | '/dashboard/purchases'
     | '/dashboard/reports'
+    | '/dashboard/sales'
     | '/dashboard/settings'
     | '/dashboard/transactions'
     | '/admin/'
     | '/dashboard/'
+    | '/dashboard/expenses/create'
+    | '/dashboard/expenses/manage'
+    | '/dashboard/expenses/payments'
+    | '/dashboard/expenses/returns'
+    | '/dashboard/expenses/vendors'
+    | '/dashboard/purchases/create'
+    | '/dashboard/purchases/manage'
+    | '/dashboard/purchases/payments'
+    | '/dashboard/purchases/returns'
+    | '/dashboard/purchases/vendors'
+    | '/dashboard/sales/create'
+    | '/dashboard/sales/customers'
+    | '/dashboard/sales/manage'
+    | '/dashboard/sales/payments'
+    | '/dashboard/sales/returns'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -251,16 +439,34 @@ export interface FileRouteTypes {
     | '/verify-otp'
     | '/dashboard/accounts'
     | '/dashboard/assistant'
+    | '/dashboard/expenses'
     | '/dashboard/forecasting'
     | '/dashboard/invoices'
     | '/dashboard/journal'
     | '/dashboard/notifications'
     | '/dashboard/ocr'
+    | '/dashboard/purchases'
     | '/dashboard/reports'
+    | '/dashboard/sales'
     | '/dashboard/settings'
     | '/dashboard/transactions'
     | '/admin'
     | '/dashboard'
+    | '/dashboard/expenses/create'
+    | '/dashboard/expenses/manage'
+    | '/dashboard/expenses/payments'
+    | '/dashboard/expenses/returns'
+    | '/dashboard/expenses/vendors'
+    | '/dashboard/purchases/create'
+    | '/dashboard/purchases/manage'
+    | '/dashboard/purchases/payments'
+    | '/dashboard/purchases/returns'
+    | '/dashboard/purchases/vendors'
+    | '/dashboard/sales/create'
+    | '/dashboard/sales/customers'
+    | '/dashboard/sales/manage'
+    | '/dashboard/sales/payments'
+    | '/dashboard/sales/returns'
   id:
     | '__root__'
     | '/'
@@ -275,16 +481,34 @@ export interface FileRouteTypes {
     | '/verify-otp'
     | '/dashboard/accounts'
     | '/dashboard/assistant'
+    | '/dashboard/expenses'
     | '/dashboard/forecasting'
     | '/dashboard/invoices'
     | '/dashboard/journal'
     | '/dashboard/notifications'
     | '/dashboard/ocr'
+    | '/dashboard/purchases'
     | '/dashboard/reports'
+    | '/dashboard/sales'
     | '/dashboard/settings'
     | '/dashboard/transactions'
     | '/admin/'
     | '/dashboard/'
+    | '/dashboard/expenses/create'
+    | '/dashboard/expenses/manage'
+    | '/dashboard/expenses/payments'
+    | '/dashboard/expenses/returns'
+    | '/dashboard/expenses/vendors'
+    | '/dashboard/purchases/create'
+    | '/dashboard/purchases/manage'
+    | '/dashboard/purchases/payments'
+    | '/dashboard/purchases/returns'
+    | '/dashboard/purchases/vendors'
+    | '/dashboard/sales/create'
+    | '/dashboard/sales/customers'
+    | '/dashboard/sales/manage'
+    | '/dashboard/sales/payments'
+    | '/dashboard/sales/returns'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -400,11 +624,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardSettingsRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/sales': {
+      id: '/dashboard/sales'
+      path: '/sales'
+      fullPath: '/dashboard/sales'
+      preLoaderRoute: typeof DashboardSalesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/reports': {
       id: '/dashboard/reports'
       path: '/reports'
       fullPath: '/dashboard/reports'
       preLoaderRoute: typeof DashboardReportsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/purchases': {
+      id: '/dashboard/purchases'
+      path: '/purchases'
+      fullPath: '/dashboard/purchases'
+      preLoaderRoute: typeof DashboardPurchasesRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/dashboard/ocr': {
@@ -442,6 +680,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardForecastingRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/expenses': {
+      id: '/dashboard/expenses'
+      path: '/expenses'
+      fullPath: '/dashboard/expenses'
+      preLoaderRoute: typeof DashboardExpensesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/assistant': {
       id: '/dashboard/assistant'
       path: '/assistant'
@@ -456,6 +701,111 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardAccountsRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/sales/returns': {
+      id: '/dashboard/sales/returns'
+      path: '/returns'
+      fullPath: '/dashboard/sales/returns'
+      preLoaderRoute: typeof DashboardSalesReturnsRouteImport
+      parentRoute: typeof DashboardSalesRoute
+    }
+    '/dashboard/sales/payments': {
+      id: '/dashboard/sales/payments'
+      path: '/payments'
+      fullPath: '/dashboard/sales/payments'
+      preLoaderRoute: typeof DashboardSalesPaymentsRouteImport
+      parentRoute: typeof DashboardSalesRoute
+    }
+    '/dashboard/sales/manage': {
+      id: '/dashboard/sales/manage'
+      path: '/manage'
+      fullPath: '/dashboard/sales/manage'
+      preLoaderRoute: typeof DashboardSalesManageRouteImport
+      parentRoute: typeof DashboardSalesRoute
+    }
+    '/dashboard/sales/customers': {
+      id: '/dashboard/sales/customers'
+      path: '/customers'
+      fullPath: '/dashboard/sales/customers'
+      preLoaderRoute: typeof DashboardSalesCustomersRouteImport
+      parentRoute: typeof DashboardSalesRoute
+    }
+    '/dashboard/sales/create': {
+      id: '/dashboard/sales/create'
+      path: '/create'
+      fullPath: '/dashboard/sales/create'
+      preLoaderRoute: typeof DashboardSalesCreateRouteImport
+      parentRoute: typeof DashboardSalesRoute
+    }
+    '/dashboard/purchases/vendors': {
+      id: '/dashboard/purchases/vendors'
+      path: '/vendors'
+      fullPath: '/dashboard/purchases/vendors'
+      preLoaderRoute: typeof DashboardPurchasesVendorsRouteImport
+      parentRoute: typeof DashboardPurchasesRoute
+    }
+    '/dashboard/purchases/returns': {
+      id: '/dashboard/purchases/returns'
+      path: '/returns'
+      fullPath: '/dashboard/purchases/returns'
+      preLoaderRoute: typeof DashboardPurchasesReturnsRouteImport
+      parentRoute: typeof DashboardPurchasesRoute
+    }
+    '/dashboard/purchases/payments': {
+      id: '/dashboard/purchases/payments'
+      path: '/payments'
+      fullPath: '/dashboard/purchases/payments'
+      preLoaderRoute: typeof DashboardPurchasesPaymentsRouteImport
+      parentRoute: typeof DashboardPurchasesRoute
+    }
+    '/dashboard/purchases/manage': {
+      id: '/dashboard/purchases/manage'
+      path: '/manage'
+      fullPath: '/dashboard/purchases/manage'
+      preLoaderRoute: typeof DashboardPurchasesManageRouteImport
+      parentRoute: typeof DashboardPurchasesRoute
+    }
+    '/dashboard/purchases/create': {
+      id: '/dashboard/purchases/create'
+      path: '/create'
+      fullPath: '/dashboard/purchases/create'
+      preLoaderRoute: typeof DashboardPurchasesCreateRouteImport
+      parentRoute: typeof DashboardPurchasesRoute
+    }
+    '/dashboard/expenses/vendors': {
+      id: '/dashboard/expenses/vendors'
+      path: '/vendors'
+      fullPath: '/dashboard/expenses/vendors'
+      preLoaderRoute: typeof DashboardExpensesVendorsRouteImport
+      parentRoute: typeof DashboardExpensesRoute
+    }
+    '/dashboard/expenses/returns': {
+      id: '/dashboard/expenses/returns'
+      path: '/returns'
+      fullPath: '/dashboard/expenses/returns'
+      preLoaderRoute: typeof DashboardExpensesReturnsRouteImport
+      parentRoute: typeof DashboardExpensesRoute
+    }
+    '/dashboard/expenses/payments': {
+      id: '/dashboard/expenses/payments'
+      path: '/payments'
+      fullPath: '/dashboard/expenses/payments'
+      preLoaderRoute: typeof DashboardExpensesPaymentsRouteImport
+      parentRoute: typeof DashboardExpensesRoute
+    }
+    '/dashboard/expenses/manage': {
+      id: '/dashboard/expenses/manage'
+      path: '/manage'
+      fullPath: '/dashboard/expenses/manage'
+      preLoaderRoute: typeof DashboardExpensesManageRouteImport
+      parentRoute: typeof DashboardExpensesRoute
+    }
+    '/dashboard/expenses/create': {
+      id: '/dashboard/expenses/create'
+      path: '/create'
+      fullPath: '/dashboard/expenses/create'
+      preLoaderRoute: typeof DashboardExpensesCreateRouteImport
+      parentRoute: typeof DashboardExpensesRoute
+    }
   }
 }
 
@@ -469,15 +819,76 @@ const AdminRouteChildren: AdminRouteChildren = {
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
+interface DashboardExpensesRouteChildren {
+  DashboardExpensesCreateRoute: typeof DashboardExpensesCreateRoute
+  DashboardExpensesManageRoute: typeof DashboardExpensesManageRoute
+  DashboardExpensesPaymentsRoute: typeof DashboardExpensesPaymentsRoute
+  DashboardExpensesReturnsRoute: typeof DashboardExpensesReturnsRoute
+  DashboardExpensesVendorsRoute: typeof DashboardExpensesVendorsRoute
+}
+
+const DashboardExpensesRouteChildren: DashboardExpensesRouteChildren = {
+  DashboardExpensesCreateRoute: DashboardExpensesCreateRoute,
+  DashboardExpensesManageRoute: DashboardExpensesManageRoute,
+  DashboardExpensesPaymentsRoute: DashboardExpensesPaymentsRoute,
+  DashboardExpensesReturnsRoute: DashboardExpensesReturnsRoute,
+  DashboardExpensesVendorsRoute: DashboardExpensesVendorsRoute,
+}
+
+const DashboardExpensesRouteWithChildren =
+  DashboardExpensesRoute._addFileChildren(DashboardExpensesRouteChildren)
+
+interface DashboardPurchasesRouteChildren {
+  DashboardPurchasesCreateRoute: typeof DashboardPurchasesCreateRoute
+  DashboardPurchasesManageRoute: typeof DashboardPurchasesManageRoute
+  DashboardPurchasesPaymentsRoute: typeof DashboardPurchasesPaymentsRoute
+  DashboardPurchasesReturnsRoute: typeof DashboardPurchasesReturnsRoute
+  DashboardPurchasesVendorsRoute: typeof DashboardPurchasesVendorsRoute
+}
+
+const DashboardPurchasesRouteChildren: DashboardPurchasesRouteChildren = {
+  DashboardPurchasesCreateRoute: DashboardPurchasesCreateRoute,
+  DashboardPurchasesManageRoute: DashboardPurchasesManageRoute,
+  DashboardPurchasesPaymentsRoute: DashboardPurchasesPaymentsRoute,
+  DashboardPurchasesReturnsRoute: DashboardPurchasesReturnsRoute,
+  DashboardPurchasesVendorsRoute: DashboardPurchasesVendorsRoute,
+}
+
+const DashboardPurchasesRouteWithChildren =
+  DashboardPurchasesRoute._addFileChildren(DashboardPurchasesRouteChildren)
+
+interface DashboardSalesRouteChildren {
+  DashboardSalesCreateRoute: typeof DashboardSalesCreateRoute
+  DashboardSalesCustomersRoute: typeof DashboardSalesCustomersRoute
+  DashboardSalesManageRoute: typeof DashboardSalesManageRoute
+  DashboardSalesPaymentsRoute: typeof DashboardSalesPaymentsRoute
+  DashboardSalesReturnsRoute: typeof DashboardSalesReturnsRoute
+}
+
+const DashboardSalesRouteChildren: DashboardSalesRouteChildren = {
+  DashboardSalesCreateRoute: DashboardSalesCreateRoute,
+  DashboardSalesCustomersRoute: DashboardSalesCustomersRoute,
+  DashboardSalesManageRoute: DashboardSalesManageRoute,
+  DashboardSalesPaymentsRoute: DashboardSalesPaymentsRoute,
+  DashboardSalesReturnsRoute: DashboardSalesReturnsRoute,
+}
+
+const DashboardSalesRouteWithChildren = DashboardSalesRoute._addFileChildren(
+  DashboardSalesRouteChildren,
+)
+
 interface DashboardRouteChildren {
   DashboardAccountsRoute: typeof DashboardAccountsRoute
   DashboardAssistantRoute: typeof DashboardAssistantRoute
+  DashboardExpensesRoute: typeof DashboardExpensesRouteWithChildren
   DashboardForecastingRoute: typeof DashboardForecastingRoute
   DashboardInvoicesRoute: typeof DashboardInvoicesRoute
   DashboardJournalRoute: typeof DashboardJournalRoute
   DashboardNotificationsRoute: typeof DashboardNotificationsRoute
   DashboardOcrRoute: typeof DashboardOcrRoute
+  DashboardPurchasesRoute: typeof DashboardPurchasesRouteWithChildren
   DashboardReportsRoute: typeof DashboardReportsRoute
+  DashboardSalesRoute: typeof DashboardSalesRouteWithChildren
   DashboardSettingsRoute: typeof DashboardSettingsRoute
   DashboardTransactionsRoute: typeof DashboardTransactionsRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
@@ -486,12 +897,15 @@ interface DashboardRouteChildren {
 const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardAccountsRoute: DashboardAccountsRoute,
   DashboardAssistantRoute: DashboardAssistantRoute,
+  DashboardExpensesRoute: DashboardExpensesRouteWithChildren,
   DashboardForecastingRoute: DashboardForecastingRoute,
   DashboardInvoicesRoute: DashboardInvoicesRoute,
   DashboardJournalRoute: DashboardJournalRoute,
   DashboardNotificationsRoute: DashboardNotificationsRoute,
   DashboardOcrRoute: DashboardOcrRoute,
+  DashboardPurchasesRoute: DashboardPurchasesRouteWithChildren,
   DashboardReportsRoute: DashboardReportsRoute,
+  DashboardSalesRoute: DashboardSalesRouteWithChildren,
   DashboardSettingsRoute: DashboardSettingsRoute,
   DashboardTransactionsRoute: DashboardTransactionsRoute,
   DashboardIndexRoute: DashboardIndexRoute,

@@ -95,6 +95,8 @@ const dict = {
     // Dashboard Layout
     dashboard: "Dashboard",
     transactions: "Transactions",
+    sales: "Sales",
+    purchases: "Purchases",
     expenses: "Expenses",
     invoices: "Invoices",
     accounts: "Chart of Accounts",
@@ -105,6 +107,41 @@ const dict = {
     ocr: "OCR Upload",
     notifications: "Notifications",
     settings: "Settings",
+
+    // Sales / Purchases / Expenses shared
+    manageInvoices: "Manage Invoices",
+    payments: "Payments",
+    customers: "Customers",
+    vendors: "Vendors",
+    returns: "Returns",
+
+    // Sales
+    salesTitle: "Sales",
+    salesDesc: "Create and manage sales invoices.",
+    createSalesInvoice: "Create Sales Invoice",
+    salesInvoice: "Sales Invoice",
+    manageSales: "Manage Sales Invoices",
+
+    // Purchases
+    purchasesTitle: "Purchases",
+    purchasesDesc: "Create and manage purchase bills.",
+    createPurchaseBill: "Create Purchase Bill",
+    purchaseBill: "Purchase Bill",
+    managePurchases: "Manage Purchase Bills",
+
+    // Expense
+    expensesTitle: "Expenses",
+    expensesDesc: "Record and manage expenses.",
+    createExpense: "Create Expense",
+    expenseEntry: "Expense Entry",
+    manageExpenses: "Manage Expenses",
+
+    // Create Invoice with Upload
+    manualEntry: "Manual Entry",
+    uploadDocument: "Upload Document",
+    dropInvoiceHere: "Drop your invoice file here",
+    uploadInvoiceHint: "PDF, JPG, PNG — up to 10MB",
+    orCreateManually: "Or fill in the details manually below",
 
     // Dashboard Home
     welcomeBack: "Welcome back, Ahmad ",
@@ -177,7 +214,6 @@ const dict = {
     debit: "Debit",
     credit: "Credit",
     addJournalEntry: "New Journal Entry",
-    newManualInvoice: "New Manual Invoice",
     deleteEntry: "Delete entry",
     confirmDelete: "Are you sure you want to delete this entry? This cannot be undone.",
     addLine: "Add line",
@@ -195,6 +231,19 @@ const dict = {
     subtotal: "Subtotal",
     lineItems: "Line items",
     newCustomer: "New customer name",
+
+    // Vouchers
+    expenseVoucher: "Expense Voucher",
+    receiptVoucher: "Receipt Voucher",
+    voucherDesc: "Record a payment or receipt against invoices.",
+    party: "Party",
+    searchParty: "Search party…",
+    selectInvoice: "Select Invoice",
+    autoPayOldest: "Auto-pay oldest unpaid invoice",
+    voucherAmount: "Voucher Amount",
+    voucherDescription: "Description",
+    paymentMethod: "Payment Method",
+    recordVoucher: "Record Voucher",
 
     // Assistant
     astTitle: "AI Assistant",
@@ -351,6 +400,8 @@ const dict = {
     // Dashboard Layout
     dashboard: "الرئيسية",
     transactions: "المعاملات",
+    sales: "المبيعات",
+    purchases: "المشتريات",
     expenses: "المصروفات",
     invoices: "الفواتير",
     accounts: "شجرة الحسابات",
@@ -361,6 +412,41 @@ const dict = {
     ocr: "رفع المستندات",
     notifications: "التنبيهات",
     settings: "الإعدادات",
+
+    // Sales / Purchases / Expenses shared
+    manageInvoices: "إدارة الفواتير",
+    payments: "المدفوعات",
+    customers: "العملاء",
+    vendors: "الموردون",
+    returns: "المرتجعات",
+
+    // Sales
+    salesTitle: "المبيعات",
+    salesDesc: "إنشاء وإدارة فواتير المبيعات.",
+    createSalesInvoice: "إنشاء فاتورة مبيعات",
+    salesInvoice: "فاتورة مبيعات",
+    manageSales: "إدارة فواتير المبيعات",
+
+    // Purchases
+    purchasesTitle: "المشتريات",
+    purchasesDesc: "إنشاء وإدارة فواتير المشتريات.",
+    createPurchaseBill: "إنشاء فاتورة مشتريات",
+    purchaseBill: "فاتورة مشتريات",
+    managePurchases: "إدارة فواتير المشتريات",
+
+    // Expense
+    expensesTitle: "المصروفات",
+    expensesDesc: "تسجيل وإدارة المصروفات.",
+    createExpense: "إنشاء مصروف",
+    expenseEntry: "مصروف",
+    manageExpenses: "إدارة المصروفات",
+
+    // Create Invoice with Upload
+    manualEntry: "إدخال يدوي",
+    uploadDocument: "رفع مستند",
+    dropInvoiceHere: "أسقط ملف الفاتورة هنا",
+    uploadInvoiceHint: "PDF، JPG، PNG — حتى 10 ميجابايت",
+    orCreateManually: "أو قم بملء التفاصيل يدوياً أدناه",
 
     // Dashboard Home
     welcomeBack: "مرحباً بعودتك، أحمد ",
@@ -433,7 +519,6 @@ const dict = {
     debit: "مدين",
     credit: "دائن",
     addJournalEntry: "قيد يومية جديد",
-    newManualInvoice: "فاتورة يدوية جديدة",
     deleteEntry: "حذف القيد",
     confirmDelete: "هل أنت متأكد من حذف هذا القيد؟ لا يمكن التراجع.",
     addLine: "إضافة سطر",
@@ -451,6 +536,19 @@ const dict = {
     subtotal: "المجموع قبل الضريبة",
     lineItems: "بنود الفاتورة",
     newCustomer: "اسم العميل الجديد",
+
+    // Vouchers
+    expenseVoucher: "سند مصروفات",
+    receiptVoucher: "سند قبض",
+    voucherDesc: "تسجيل دفعة أو تحصيل ضد الفواتير.",
+    party: "الطرف",
+    searchParty: "بحث عن طرف…",
+    selectInvoice: "اختيار فاتورة",
+    autoPayOldest: "تسديد أقدم فاتورة غير مدفوعة تلقائياً",
+    voucherAmount: "مبلغ السند",
+    voucherDescription: "الوصف",
+    paymentMethod: "طريقة الدفع",
+    recordVoucher: "تسجيل السند",
 
     // Assistant
     astTitle: "المساعد الذكي",
