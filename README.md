@@ -38,10 +38,10 @@ Built with **React**, **NestJS**, **Prisma**, and **PostgreSQL**, the project de
 | Name | GitHub |
 |--------|---------|
 | Mohamed Ahmed | [@mohamedAbdEl-Kawy](https://github.com/mohamedAbdEl-Kawy) |
-| Hussien Ahmed | Coming Soon |
-| Mohamed Khaled | Coming Soon |
-| Omar Ezzat | Coming Soon |
-| Mario Nassif | Coming Soon |
+| Hussien Ahmed | [@hussien103](https://github.com/hussien103) |
+| Mohamed Khaled | [@Mohamedkhaled81](https://github.com/Mohamedkhaled81) |
+| Omar Ezzat | [@omar-ezzat](https://github.com/omar-ezzat) |
+| Mario Nassif | [@marionasef](https://github.com/marionasef) |
 
 ---
 ## ✨ Features
