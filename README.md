@@ -1,3 +1,4 @@
+
 <!--
 	README.md — Hesbtak.ai
 	A clear, actionable readme for the full project. Replace the SVGs in `/assets/` with polished artwork.
@@ -5,7 +6,7 @@
 
 # Hesbtak.ai
 
-![Hesbtak.ai Logo](./assets/logo.svg)
+![Hesbtak.ai Logo](https://github.com/user-attachments/assets/fd324e04-92f4-4975-948c-74777ad98511)
 
 Graduation project — ITI Intensive Program for MERN Stack
 
