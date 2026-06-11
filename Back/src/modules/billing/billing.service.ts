@@ -108,9 +108,7 @@ export class BillingService {
           plan_code: plan.code,
         },
         notification_url: `${this.backendUrl()}/api/v1/subscriptions/paymob/webhook`,
-        redirection_url:
-          `${this.backendUrl()}/api/v1/subscriptions/paymob/return` +
-          `?reference=${encodeURIComponent(reference)}`,
+        redirection_url: `${this.backendUrl()}/api/v1/subscriptions/paymob/return`,
       }),
     });
 
@@ -143,11 +141,24 @@ export class BillingService {
 
   async verify(organizationId: string, userId: string, reference: string) {
     await this.tenant.fromOrganizationId(organizationId, userId);
+
     const subscription = await this.db.subscription.findFirst({
       where: { organizationId, paymentReference: reference },
       include: { plan: true },
     });
     if (!subscription) throw new NotFoundException('Subscription payment not found');
+
+    // If still pending, proactively query Paymob to close the webhook race condition
+    if (subscription.status === 'pending' && subscription.paymobIntentionId) {
+      await this.syncFromPaymob(subscription.id, subscription.paymobIntentionId);
+
+      const updated = await this.db.subscription.findUnique({
+        where: { id: subscription.id },
+        include: { plan: true },
+      });
+      return this.serialize(updated!);
+    }
+
     return this.serialize(subscription);
   }
 
@@ -157,25 +168,43 @@ export class BillingService {
     }
 
     const obj = this.record(body.obj) ?? body;
-    const success = this.boolean(obj.success);
+    const success = obj.success === true;
     const reference =
       this.string(obj.special_reference) ??
       this.string(this.record(obj.order)?.merchant_order_id) ??
       this.findString(body, 'special_reference');
     const subscriptionId = this.findString(body, 'subscription_id');
-    const intentionId =
-      this.findString(body, 'intention_id') ??
-      this.findString(body, 'intention_order_id');
-    const subscription = await this.findSubscription(
-      subscriptionId,
-      reference,
-      intentionId,
-    );
+    const subscription = subscriptionId
+      ? await this.db.subscription.findUnique({ where: { id: subscriptionId } })
+      : reference
+        ? await this.db.subscription.findUnique({ where: { paymentReference: reference } })
+        : null;
     if (!subscription) throw new NotFoundException('Subscription webhook reference not found');
 
     const transactionId = this.string(obj.id);
     if (success) {
-      await this.activateSubscription(subscription, transactionId);
+      const now = new Date();
+      const periodEnd = new Date(now);
+      periodEnd.setUTCMonth(periodEnd.getUTCMonth() + 1);
+      await this.db.$transaction([
+        this.db.subscription.updateMany({
+          where: {
+            organizationId: subscription.organizationId,
+            status: 'active',
+            id: { not: subscription.id },
+          },
+          data: { status: 'replaced' },
+        }),
+        this.db.subscription.update({
+          where: { id: subscription.id },
+          data: {
+            status: 'active',
+            paymobTransactionId: transactionId,
+            currentPeriodStart: now,
+            currentPeriodEnd: periodEnd,
+          },
+        }),
+      ]);
     } else {
       await this.db.subscription.update({
         where: { id: subscription.id },
@@ -185,36 +214,105 @@ export class BillingService {
     return { received: true };
   }
 
-  async paymentReturn(query: Record<string, unknown>) {
-    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:8080';
-    const reference = this.string(query.reference);
-    const hmac = this.string(query.hmac);
-    const success = this.boolean(query.success);
-    const transactionId = this.string(query.id);
+  /**
+   * Handles Paymob's browser redirect after payment.
+   * Paymob appends query params like `success`, `merchant_order_id`, `txn_response_code`, etc.
+   * We redirect the user to the frontend settings page with the payment reference so it
+   * can call /verify and show the correct status.
+   */
+  async paymentReturn(query: Record<string, unknown>): Promise<string> {
+    const frontendUrl = (
+      process.env.FRONTEND_URL ?? 'http://localhost:8080'
+    ).replace(/\/+$/, '');
+
+    // Paymob sends the reference as `merchant_order_id` or `special_reference` in the redirect
+    const reference =
+      this.string(query['merchant_order_id']) ??
+      this.string(query['special_reference']) ??
+      this.string(query['order']) ??
+      '';
+
+    const success = query['success'] === 'true' || query['success'] === true;
 
     if (!reference) {
-      return `${frontendUrl}/dashboard/settings?payment=failed&reason=missing-reference`;
-    }
-    if (!this.validHmac(query, hmac)) {
-      return `${frontendUrl}/dashboard/settings?payment=failed&reference=${encodeURIComponent(reference)}&reason=invalid-signature`;
+      return `${frontendUrl}/dashboard/settings?payment=return`;
     }
 
-    const subscription = await this.findSubscription(undefined, reference);
-    if (!subscription) {
-      return `${frontendUrl}/dashboard/settings?payment=failed&reference=${encodeURIComponent(reference)}&reason=not-found`;
-    }
-
-    if (success) {
-      await this.activateSubscription(subscription, transactionId);
-      return `${frontendUrl}/dashboard/settings?payment=success&reference=${encodeURIComponent(reference)}`;
-    }
-
-    await this.db.subscription.update({
-      where: { id: subscription.id },
-      data: { status: 'failed', paymobTransactionId: transactionId },
-    });
-    return `${frontendUrl}/dashboard/settings?payment=failed&reference=${encodeURIComponent(reference)}`;
+    return (
+      `${frontendUrl}/dashboard/settings` +
+      `?payment=return` +
+      `&reference=${encodeURIComponent(reference)}` +
+      `&success=${success ? 'true' : 'false'}`
+    );
   }
+private async syncFromPaymob(subscriptionId: string, _intentionId: string) {
+  try {
+    const sub = await this.db.subscription.findUnique({
+      where: { id: subscriptionId },
+    });
+    if (!sub?.paymentReference) return;
+
+    const apiUrl = process.env.PAYMOB_API_URL ?? 'https://accept.paymob.com';
+
+    // Query transactions by special_reference
+    const response = await fetch(
+      `${apiUrl}/api/acceptance/transactions?special_reference=${encodeURIComponent(sub.paymentReference)}`,
+      {
+        headers: {
+          Authorization: `Token ${process.env.PAYMOB_SECRET_KEY}`,
+        },
+      },
+    );
+
+    console.log(`[syncFromPaymob] Response status: ${response.status}`);
+    if (!response.ok) {
+      console.error(`[syncFromPaymob] Error: ${await response.text()}`);
+      return;
+    }
+
+    const data = (await response.json()) as {
+      results?: Array<{ id: number; success: boolean; pending: boolean; error_occured: boolean }>;
+    };
+
+    console.log(`[syncFromPaymob] Transactions: ${JSON.stringify(data.results)}`);
+
+    const successfulTxn = data.results?.find((t) => t.success === true && !t.pending);
+    const failedTxn = data.results?.find((t) => t.error_occured === true && !t.pending);
+
+    if (successfulTxn) {
+      const now = new Date();
+      const periodEnd = new Date(now);
+      periodEnd.setUTCMonth(periodEnd.getUTCMonth() + 1);
+
+      await this.db.$transaction([
+        this.db.subscription.updateMany({
+          where: {
+            organizationId: sub.organizationId,
+            status: 'active',
+            id: { not: subscriptionId },
+          },
+          data: { status: 'replaced' },
+        }),
+        this.db.subscription.update({
+          where: { id: subscriptionId },
+          data: {
+            status: 'active',
+            paymobTransactionId: String(successfulTxn.id),
+            currentPeriodStart: now,
+            currentPeriodEnd: periodEnd,
+          },
+        }),
+      ]);
+    } else if (failedTxn) {
+      await this.db.subscription.update({
+        where: { id: subscriptionId },
+        data: { status: 'failed', paymobTransactionId: String(failedTxn.id) },
+      });
+    }
+  } catch (err) {
+    console.error('[syncFromPaymob] Unexpected error:', err);
+  }
+}
 
   private async ensurePlans() {
     const plans = [
@@ -266,63 +364,9 @@ export class BillingService {
   }
 
   private backendUrl() {
-    return process.env.BACKEND_URL ?? `http://localhost:${process.env.PORT ?? 3000}`;
-  }
-
-  private async findSubscription(
-    subscriptionId?: string,
-    reference?: string,
-    intentionId?: string,
-  ) {
-    if (subscriptionId) {
-      const subscription = await this.db.subscription.findUnique({
-        where: { id: subscriptionId },
-      });
-      if (subscription) return subscription;
-    }
-    if (reference) {
-      const subscription = await this.db.subscription.findUnique({
-        where: { paymentReference: reference },
-      });
-      if (subscription) return subscription;
-    }
-    if (intentionId) {
-      return this.db.subscription.findFirst({
-        where: { paymobIntentionId: intentionId },
-      });
-    }
-    return null;
-  }
-
-  private async activateSubscription(
-    subscription: { id: string; organizationId: string; status?: string },
-    transactionId?: string,
-  ) {
-    if (subscription.status === 'active') {
-      return;
-    }
-    const now = new Date();
-    const periodEnd = new Date(now);
-    periodEnd.setUTCMonth(periodEnd.getUTCMonth() + 1);
-    await this.db.$transaction([
-      this.db.subscription.updateMany({
-        where: {
-          organizationId: subscription.organizationId,
-          status: 'active',
-          id: { not: subscription.id },
-        },
-        data: { status: 'replaced' },
-      }),
-      this.db.subscription.update({
-        where: { id: subscription.id },
-        data: {
-          status: 'active',
-          paymobTransactionId: transactionId,
-          currentPeriodStart: now,
-          currentPeriodEnd: periodEnd,
-        },
-      }),
-    ]);
+    return (
+      process.env.BACKEND_URL ?? `http://localhost:${process.env.PORT ?? 3000}`
+    ).replace(/\/+$/, '');
   }
 
   private serialize(subscription: {
@@ -331,7 +375,14 @@ export class BillingService {
     currentPeriodStart: Date;
     currentPeriodEnd: Date;
     paymentReference: string | null;
-    plan: { id: string; code: string; name: string; price: unknown; currency: string; features: unknown };
+    plan: {
+      id: string;
+      code: string;
+      name: string;
+      price: unknown;
+      currency: string;
+      features: unknown;
+    };
   }) {
     return {
       id: subscription.id,
@@ -367,24 +418,28 @@ export class BillingService {
       obj.is_refunded,
       obj.is_standalone_payment,
       obj.is_voided,
-      order?.id ?? obj.order,
+      order?.id,
       obj.owner,
       obj.pending,
-      source?.pan ?? obj['source_data.pan'],
-      source?.sub_type ?? obj['source_data.sub_type'],
-      source?.type ?? obj['source_data.type'],
+      source?.pan,
+      source?.sub_type,
+      source?.type,
       obj.success,
-    ].map((value) => String(value ?? '')).join('');
+    ]
+      .map((value) => String(value ?? ''))
+      .join('');
     const expected = createHmac('sha512', secret).update(values).digest('hex');
     const expectedBuffer = Buffer.from(expected);
     const suppliedBuffer = Buffer.from(supplied);
-    return expectedBuffer.length === suppliedBuffer.length &&
-      timingSafeEqual(expectedBuffer, suppliedBuffer);
+    return (
+      expectedBuffer.length === suppliedBuffer.length &&
+      timingSafeEqual(expectedBuffer, suppliedBuffer)
+    );
   }
 
   private record(value: unknown): Record<string, unknown> | null {
     return value && typeof value === 'object' && !Array.isArray(value)
-      ? value as Record<string, unknown>
+      ? (value as Record<string, unknown>)
       : null;
   }
 
@@ -392,10 +447,6 @@ export class BillingService {
     return typeof value === 'string' || typeof value === 'number'
       ? String(value)
       : undefined;
-  }
-
-  private boolean(value: unknown) {
-    return value === true || value === 'true' || value === 1 || value === '1';
   }
 
   private findString(value: unknown, key: string): string | undefined {
