@@ -18,7 +18,7 @@ function Page() {
       <div className="flex justify-center mb-8"><BrandMark to="/" /></div>
       <div className="bg-card border border-border-default rounded-2xl p-6">
         <h1 className="text-2xl font-bold">Choose an organization</h1>
-        <p className="text-sm text-on-surface-variant mt-1">Select the financial workspace you want to open.</p>
+        <p className="text-sm text-on-surface-variant mt-1">{session?.tenants.length ? "Select the financial workspace you want to open.":"No Available Organizations. Start by adding one or get an invitation." }</p>
         <div className="grid sm:grid-cols-2 gap-3 mt-6">
           {(session?.tenants ?? []).map((tenant) => (
             <button key={tenant.organizationId} onClick={() => select(tenant.organizationId)} className="text-start border border-border-default rounded-xl p-4 hover:border-primary">
