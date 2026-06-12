@@ -27,6 +27,7 @@ function ManagePurchases() {
   const { t } = useI18n();
   const [bills, setBills] = useState<Bill[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
@@ -155,7 +156,7 @@ function ManagePurchases() {
               <tr><td colSpan={7} className="p-8 text-center text-on-surface-variant text-sm">No bills found.</td></tr>
             ) : (
               filtered.map((b) => (
-                <tr key={b.id} className="hover:bg-surface-subtle">
+                <tr key={b.id} className="hover:bg-surface-subtle cursor-pointer" onClick={() => setEditingId(b.id)}>
                   <td className="p-3 font-medium text-primary">{b.bill_number}</td>
                   <td className="p-3">{b.vendor_name}</td>
                   <td className="p-3 text-on-surface-variant">{String(b.issue_date).slice(0, 10)}</td>
@@ -163,7 +164,7 @@ function ManagePurchases() {
                   <td className="p-3"><StatusBadge status={b.status} /></td>
                   <td className="p-3 text-end font-semibold">{money(b.total)}</td>
                   <td className="p-3">
-                    <button onClick={() => handleDelete(b.id)} className="p-1 rounded text-on-surface-variant hover:text-status-error hover:bg-status-error/10 transition" title="Delete">
+                    <button onClick={(event) => { event.stopPropagation(); void handleDelete(b.id); }} className="p-1 rounded text-on-surface-variant hover:text-status-error hover:bg-status-error/10 transition" title="Delete">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </td>
@@ -178,6 +179,14 @@ function ManagePurchases() {
         onOpenChange={setCreateOpen}
         title={t("purchaseBill")}
         type="purchases"
+        onCreated={load}
+      />
+      <CreateInvoiceDialog
+        open={Boolean(editingId)}
+        onOpenChange={(open) => { if (!open) setEditingId(null); }}
+        title={t("purchaseBill")}
+        type="purchases"
+        documentId={editingId ?? undefined}
         onCreated={load}
       />
     </div>

@@ -140,15 +140,14 @@ export class DocumentLineDto {
 
   @IsNumber()
   @IsOptional()
-  discountAmount?: number;
+  discountAmount?: number = 0;
 
   @IsNumber()
   @IsOptional()
-  taxRate?: number;
+  taxRate?: number = 0;
 
   @IsString()
-  @IsOptional()
-  accountId?: string;
+  accountId!: string;
 }
 
 export class InvoiceDto {

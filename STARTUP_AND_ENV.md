@@ -28,7 +28,7 @@ GOOGLE_APP_PASSWORD=
 GOOGLE_SMTP_REJECT_UNAUTHORIZED=true
 GROQ_API_KEY=
 AI_EMBEDDING_PROVIDER=mock
-HF_TOKEN=
+HF_TOKEN=your_hugging_face_token
 HF_EMBEDDING_MODEL=BAAI/bge-m3
 ```
 
@@ -37,6 +37,8 @@ HF_EMBEDDING_MODEL=BAAI/bge-m3
 `GROQ_API_KEY` enables the tenant financial assistant. Local embeddings default to
 the deterministic `mock` provider. Set `AI_EMBEDDING_PROVIDER=huggingface` and
 provide `HF_TOKEN` to use hosted Hugging Face embeddings.
+The same token enables invoice image extraction with
+`Qwen/Qwen3-VL-235B-A22B-Instruct` through the Novita inference provider.
 
 If your local Windows machine shows `SELF_SIGNED_CERT_IN_CHAIN` while sending OTP, set:
 

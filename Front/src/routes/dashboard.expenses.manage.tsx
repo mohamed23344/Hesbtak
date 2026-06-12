@@ -27,6 +27,7 @@ function ManageExpenses() {
   const { t } = useI18n();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
@@ -155,7 +156,7 @@ function ManageExpenses() {
               <tr><td colSpan={7} className="p-8 text-center text-on-surface-variant text-sm">No expenses found.</td></tr>
             ) : (
               filtered.map((e) => (
-                <tr key={e.id} className="hover:bg-surface-subtle">
+                <tr key={e.id} className="hover:bg-surface-subtle cursor-pointer" onClick={() => setEditingId(e.id)}>
                   <td className="p-3 font-medium text-primary">{e.bill_number}</td>
                   <td className="p-3">{e.vendor_name}</td>
                   <td className="p-3 text-on-surface-variant">{String(e.issue_date).slice(0, 10)}</td>
@@ -163,7 +164,7 @@ function ManageExpenses() {
                   <td className="p-3"><StatusBadge status={e.status} /></td>
                   <td className="p-3 text-end font-semibold">{money(e.total)}</td>
                   <td className="p-3">
-                    <button onClick={() => handleDelete(e.id)} className="p-1 rounded text-on-surface-variant hover:text-status-error hover:bg-status-error/10 transition" title="Delete">
+                    <button onClick={(event) => { event.stopPropagation(); void handleDelete(e.id); }} className="p-1 rounded text-on-surface-variant hover:text-status-error hover:bg-status-error/10 transition" title="Delete">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </td>
@@ -178,6 +179,14 @@ function ManageExpenses() {
         onOpenChange={setCreateOpen}
         title={t("expenseEntry")}
         type="expenses"
+        onCreated={load}
+      />
+      <CreateInvoiceDialog
+        open={Boolean(editingId)}
+        onOpenChange={(open) => { if (!open) setEditingId(null); }}
+        title={t("expenseEntry")}
+        type="expenses"
+        documentId={editingId ?? undefined}
         onCreated={load}
       />
     </div>

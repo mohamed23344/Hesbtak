@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Delete, Get, Headers, Param, Post, UseGuards,
+  Body, Controller, Delete, Get, Headers, Param, Patch, Post, UseGuards,
 } from '@nestjs/common';
 import { CurrentUser, JwtUser } from '../../common/auth/current-user.decorator';
 import { JwtAuthGuard } from '../../common/auth/jwt-auth.guard';
@@ -100,9 +100,19 @@ export class AccountingController {
     return this.accounting.listUnpaidInvoices(await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'invoices'));
   }
 
+  @Get('invoices/:id')
+  async invoice(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser, @Param('id') id: string) {
+    return this.accounting.getInvoice(await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'invoices'), id);
+  }
+
   @Post('invoices')
   async createInvoice(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser, @Body() dto: InvoiceDto) {
     return this.accounting.createInvoice(await this.tenant.fromOrganizationId(orgId, user.sub, ['owner', 'accountant']), user.sub, dto);
+  }
+
+  @Patch('invoices/:id')
+  async updateInvoice(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: InvoiceDto) {
+    return this.accounting.updateInvoice(await this.tenant.fromOrganizationId(orgId, user.sub, ['owner', 'accountant']), user.sub, id, dto);
   }
 
   @Delete('invoices/:id')
@@ -134,9 +144,19 @@ export class AccountingController {
     return this.accounting.listUnpaidBills(await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'accounting'));
   }
 
+  @Get('vendor-bills/:id')
+  async vendorBill(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser, @Param('id') id: string) {
+    return this.accounting.getVendorBill(await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'accounting'), id);
+  }
+
   @Post('vendor-bills')
   async createVendorBill(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser, @Body() dto: VendorBillDto) {
     return this.accounting.createVendorBill(await this.tenant.fromOrganizationId(orgId, user.sub, ['owner', 'accountant']), user.sub, dto);
+  }
+
+  @Patch('vendor-bills/:id')
+  async updateVendorBill(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser, @Param('id') id: string, @Body() dto: VendorBillDto) {
+    return this.accounting.updateVendorBill(await this.tenant.fromOrganizationId(orgId, user.sub, ['owner', 'accountant']), user.sub, id, dto);
   }
 
   @Delete('vendor-bills/:id')
