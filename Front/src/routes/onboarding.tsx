@@ -453,7 +453,7 @@ function Onboarding() {
 
   return (
     <div dir={dir} className="min-h-screen bg-gradient-hero">
-      <header className="flex items-center justify-between p-4 md:px-8 border-b border-border-default bg-card/70 backdrop-blur">
+      <header className="flex items-center justify-between p-4 md:px-8 border-b border-border-default bg-card/75 backdrop-blur-md sticky top-0 z-50">
         <BrandMark />
         <div className="flex items-center gap-2">
           <LangToggle />
@@ -466,11 +466,11 @@ function Onboarding() {
           {STEPS.map((s, i) => (
             <li key={s} className="flex-1 flex items-center gap-2">
               <div
-                className={`h-8 w-8 rounded-full grid place-items-center text-xs font-semibold border-2 ${
+                className={`h-8 w-8 rounded-full grid place-items-center text-xs font-bold border-2 transition-all duration-200 ${
                   i < step
                     ? "bg-status-success border-status-success text-white"
                     : i === step
-                    ? "bg-gradient-primary border-transparent text-primary-foreground"
+                    ? "bg-gradient-primary border-transparent text-primary-foreground shadow-soft"
                     : "bg-card border-border-default text-on-surface-variant"
                 }`}
               >
@@ -478,32 +478,32 @@ function Onboarding() {
               </div>
               <span
                 className={`text-sm hidden sm:inline ${
-                  i === step ? "font-medium text-on-surface" : "text-on-surface-variant"
+                  i === step ? "font-semibold text-on-surface" : "text-on-surface-variant font-medium"
                 }`}
               >
                 {s}
               </span>
-              {i < STEPS.length - 1 && <div className="flex-1 h-px bg-border-default" />}
+              {i < STEPS.length - 1 && <div className="flex-1 h-px bg-border-default/60" />}
             </li>
           ))}
         </ol>
 
-        <div className="bg-card border border-border-default rounded-2xl shadow-card p-8">
+        <div className="bg-card/80 glass-panel shadow-card p-8 hover-glow rounded-2xl">
           {step === 0 && (
             <StepWrap icon={Building2} title="Organization basics" desc="Only the essentials for now.">
               <div className="space-y-1.5">
-                <Label htmlFor="company">{t("companyNameLabel")}</Label>
-                <Input id="company" value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Acme LLC" />
+                <Label htmlFor="company" className="font-semibold">{t("companyNameLabel")}</Label>
+                <Input id="company" value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Acme LLC" className="bg-background/50" />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="size">{t("teamSizeLabel")}</Label>
+                <Label htmlFor="size" className="font-semibold">{t("teamSizeLabel")}</Label>
                 <select
                   id="size"
                   value={teamSize}
                   onChange={(event) => setTeamSize(event.target.value)}
-                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  className="w-full h-10 rounded-md border border-input bg-background/50 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                 >
-                  {TEAM_SIZES.map((size) => <option key={size}>{size}</option>)}
+                  {TEAM_SIZES.map((size) => <option key={size} className="bg-card">{size}</option>)}
                 </select>
               </div>
             </StepWrap>
@@ -520,10 +520,10 @@ function Onboarding() {
                       setIndustryCategory(category);
                       setBusinessType(INDUSTRY_GROUPS[category][0] ?? "");
                     }}
-                    className={`p-3 rounded-lg border text-sm transition ${
+                    className={`p-3.5 rounded-xl border text-sm font-medium transition-all duration-200 cursor-pointer shadow-soft ${
                       industryCategory === category
-                        ? "border-primary bg-primary/5 text-primary font-medium"
-                        : "border-border-default hover:border-primary/40"
+                        ? "border-primary bg-primary/8 text-primary ring-1 ring-primary/20"
+                        : "border-border-default bg-background/30 hover:border-primary/40 hover:bg-background/60"
                     }`}
                   >
                     {category}
@@ -532,16 +532,16 @@ function Onboarding() {
               </div>
 
               {industryCategory !== "Others" ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
                   {INDUSTRY_GROUPS[industryCategory].map((item) => (
                     <button
                       type="button"
                       key={item}
                       onClick={() => setBusinessType(item)}
-                      className={`p-3 rounded-lg border text-sm text-start transition ${
+                      className={`p-3.5 rounded-xl border text-sm text-start font-medium transition-all duration-200 cursor-pointer shadow-soft ${
                         businessType === item
-                          ? "border-primary bg-primary/5 text-primary font-medium"
-                          : "border-border-default hover:border-primary/40"
+                          ? "border-primary bg-primary/8 text-primary ring-1 ring-primary/20"
+                          : "border-border-default bg-background/30 hover:border-primary/40 hover:bg-background/60"
                       }`}
                     >
                       {item}
@@ -549,9 +549,9 @@ function Onboarding() {
                   ))}
                 </div>
               ) : (
-                <div className="space-y-1.5">
-                  <Label htmlFor="otherBusiness">Your business</Label>
-                  <Input id="otherBusiness" value={otherBusiness} onChange={(e) => setOtherBusiness(e.target.value)} placeholder="Describe your business" />
+                <div className="space-y-1.5 mt-4">
+                  <Label htmlFor="otherBusiness" className="font-semibold">Your business</Label>
+                  <Input id="otherBusiness" value={otherBusiness} onChange={(e) => setOtherBusiness(e.target.value)} placeholder="Describe your business" className="bg-background/50" />
                 </div>
               )}
             </StepWrap>
@@ -567,33 +567,33 @@ function Onboarding() {
                       type="button"
                       key={c.code}
                       onClick={() => toggleCurrency(c.code)}
-                      className={`flex items-center justify-between p-3 rounded-lg border text-sm transition ${
+                      className={`flex items-center justify-between p-3.5 rounded-xl border text-sm font-medium transition-all duration-200 cursor-pointer shadow-soft ${
                         selected
-                          ? "border-primary bg-primary/5"
-                          : "border-border-default hover:border-primary/40"
+                          ? "border-primary bg-primary/8 text-primary ring-1 ring-primary/20"
+                          : "border-border-default bg-background/30 hover:border-primary/40 hover:bg-background/60"
                       }`}
                     >
                       <span className="flex items-center gap-3">
-                        <span className="h-8 w-12 rounded-md bg-surface-container grid place-items-center font-semibold text-primary text-xs">
+                        <span className="h-8 w-12 rounded-lg bg-primary/10 grid place-items-center font-bold text-primary text-xs">
                           {c.symbol}
                         </span>
                         <span><strong>{c.code}</strong> - {c.name}</span>
                       </span>
-                      {selected && <Check className="h-4 w-4 text-primary" />}
+                      {selected && <Check className="h-4.5 w-4.5 text-primary shrink-0" />}
                     </button>
                   );
                 })}
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="primaryCurrency">Main reporting currency</Label>
+              <div className="space-y-1.5 mt-4">
+                <Label htmlFor="primaryCurrency" className="font-semibold">Main reporting currency</Label>
                 <select
                   id="primaryCurrency"
                   value={primaryCurrency}
                   onChange={(event) => setPrimaryCurrency(event.target.value)}
-                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  className="w-full h-10 rounded-md border border-input bg-background/50 px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                 >
-                  {selectedCurrencies.map((code) => <option key={code}>{code}</option>)}
+                  {selectedCurrencies.map((code) => <option key={code} className="bg-card">{code}</option>)}
                 </select>
               </div>
             </StepWrap>
@@ -609,9 +609,9 @@ function Onboarding() {
                       const lockedByContext = (INDUSTRY_DEFAULT_QUESTIONS[industryCategory] ?? []).includes(q.key)
                         || (q.key === "multi_currency" && selectedCurrencies.length > 1);
                       return (
-                        <div key={q.key} className="flex items-center justify-between gap-3 p-3 border border-border-default rounded-lg">
+                        <div key={q.key} className="flex items-center justify-between gap-3 p-3.5 border border-border-default/60 rounded-xl bg-background/30 shadow-soft">
                           <div className="flex items-center gap-2 min-w-0">
-                            <Label htmlFor={`coa-${q.key}`} className="text-sm cursor-pointer leading-snug">
+                            <Label htmlFor={`coa-${q.key}`} className="text-sm cursor-pointer leading-snug font-medium truncate">
                               {q.label}
                             </Label>
                             <Tooltip>
@@ -635,14 +635,14 @@ function Onboarding() {
                   </div>
                 </TooltipProvider>
 
-                <div className="mt-8 border-t border-border-default pt-6">
+                <div className="mt-8 border-t border-border-default/60 pt-6">
                   <div className="flex items-center justify-between gap-3 mb-4">
-                    <h3 className="font-semibold">{t("customAccountsPreview")}</h3>
-                    <Button variant="outline" size="sm" onClick={() => setAddDialogOpen(true)} className="gap-1">
+                    <h3 className="font-semibold text-lg">{t("customAccountsPreview")}</h3>
+                    <Button variant="outline" size="sm" onClick={() => setAddDialogOpen(true)} className="gap-1 cursor-pointer">
                       <Plus className="h-4 w-4" /> {t("addCustomAccount")}
                     </Button>
                   </div>
-                  <div className="bg-surface-container rounded-xl p-3 max-h-72 overflow-y-auto space-y-1">
+                  <div className="bg-surface-container/60 border border-border-default/40 rounded-2xl p-4 max-h-72 overflow-y-auto space-y-1">
                     {customCOA.map((n) => (
                       <TreeRow
                         key={n.id}
@@ -663,16 +663,16 @@ function Onboarding() {
 
           <div className="mt-8 flex items-center justify-between">
             {step === 3 ? (
-              <Button variant="ghost" onClick={handleSkipCOA} className="text-on-surface-variant" disabled={saving}>
+              <Button variant="ghost" onClick={handleSkipCOA} className="text-on-surface-variant cursor-pointer hover:bg-surface-container" disabled={saving}>
                 {t("skipCOA")}
               </Button>
             ) : (
-              <Button variant="ghost" onClick={back} disabled={step === 0 || saving} className="gap-1.5">
+              <Button variant="ghost" onClick={back} disabled={step === 0 || saving} className="gap-1.5 cursor-pointer hover:bg-surface-container">
                 <ArrowLeft className="h-4 w-4 rtl:rotate-180" /> {t("back")}
               </Button>
             )}
 
-            <Button onClick={handleNext} disabled={saving} className="bg-gradient-primary gap-1.5">
+            <Button onClick={handleNext} disabled={saving} className="bg-gradient-primary gap-1.5 cursor-pointer shadow-soft hover-glow">
               {saving ? "..." : step === STEPS.length - 1 ? t("finish") : t("continue")}
               <ArrowRight className="h-4 w-4 rtl:rotate-180" />
             </Button>
@@ -681,17 +681,17 @@ function Onboarding() {
       </main>
 
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent>
+        <DialogContent className="rounded-2xl max-w-md">
           <DialogHeader>
-            <DialogTitle>{t("addCustomAccount")}</DialogTitle>
+            <DialogTitle className="text-lg font-bold">{t("addCustomAccount")}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-3">
             <div className="space-y-1.5">
-              <Label>Parent account</Label>
+              <Label className="font-semibold">Parent account</Label>
               <select
                 value={newAccParent}
                 onChange={(e) => setNewAccParent(e.target.value)}
-                className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
               >
                 {parentOptions.map((n) => (
                   <option key={n.id} value={n.id}>
@@ -702,17 +702,17 @@ function Onboarding() {
               <p className="text-xs text-on-surface-variant">Choose a level 1, 2, or 3 parent to create a child account.</p>
             </div>
             <div className="space-y-1.5">
-              <Label>{t("accountCode")}</Label>
+              <Label className="font-semibold">{t("accountCode")}</Label>
               <Input value={newAccCode} onChange={(e) => setNewAccCode(e.target.value)} placeholder="e.g. 5800" />
             </div>
             <div className="space-y-1.5">
-              <Label>{t("accountName")}</Label>
+              <Label className="font-semibold">{t("accountName")}</Label>
               <Input value={newAccName} onChange={(e) => setNewAccName(e.target.value)} placeholder="e.g. Marketing" />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setAddDialogOpen(false)}>{t("cancel")}</Button>
-            <Button className="bg-gradient-primary" onClick={handleAddCustomAccount}>{t("saveChanges")}</Button>
+            <Button className="bg-gradient-primary shadow-soft" onClick={handleAddCustomAccount}>{t("saveChanges")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -720,42 +720,39 @@ function Onboarding() {
   );
 }
 
-function StepWrap({
-  icon: Icon, title, desc, children,
-}: { icon: ElementType; title: string; desc: string; children: ReactNode }) {
+type StepWrapProps = { icon: ElementType; title: string; desc: string; children: ReactNode };
+
+function StepWrap({ icon: Icon, title, desc, children }: StepWrapProps) {
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
-        <div className="h-11 w-11 rounded-xl bg-gradient-primary text-primary-foreground grid place-items-center">
+        <div className="h-11 w-11 rounded-xl bg-gradient-primary text-primary-foreground grid place-items-center shadow-soft">
           <Icon className="h-5 w-5" />
         </div>
         <div>
-          <h2 className="text-xl font-semibold">{title}</h2>
+          <h2 className="text-xl font-bold text-on-surface leading-snug">{title}</h2>
           <p className="text-sm text-on-surface-variant">{desc}</p>
         </div>
       </div>
-      <div className="space-y-4">{children}</div>
+      <div className="space-y-4 mt-2">{children}</div>
     </div>
   );
 }
 
-function TreeRow({
-  node,
-  depth,
-  onAdd,
-  onRemove,
-}: {
+type TreeRowProps = {
   node: COANode;
   depth: number;
   onAdd: (id: string) => void;
   onRemove: (id: string) => void;
-}) {
+};
+
+function TreeRow({ node, depth, onAdd, onRemove }: TreeRowProps) {
   const [open, setOpen] = useState(depth < 2);
   const hasChildren = !!node.children?.length;
   return (
     <>
       <div
-        className="group flex items-center gap-2 p-1.5 rounded-lg hover:bg-surface-subtle"
+        className="group flex items-center gap-2 p-1.5 rounded-xl hover:bg-surface-subtle transition-colors duration-200"
         style={{ paddingInlineStart: depth * 20 + 4 }}
       >
         <button
@@ -765,12 +762,16 @@ function TreeRow({
           aria-label={hasChildren ? "Toggle account branch" : "Account leaf"}
         >
           {hasChildren ? (
-            <ChevronRight className={`h-4 w-4 text-on-surface-variant transition-transform ${open ? "rotate-90" : ""}`} />
+            open ? (
+              <ChevronRight className="h-4 w-4 text-on-surface-variant transition-transform rotate-90" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-on-surface-variant transition-transform rtl:rotate-180" />
+            )
           ) : <span className="w-4" />}
         </button>
         {hasChildren ? <Folder className="h-4 w-4 text-primary" /> : <FileText className="h-4 w-4 text-on-surface-variant" />}
         <span className="text-xs text-on-surface-variant font-mono w-12 shrink-0">{node.code}</span>
-        <span className={`text-sm min-w-0 flex-1 truncate ${hasChildren ? "font-semibold" : ""}`}>{node.name}</span>
+        <span className={`text-sm min-w-0 flex-1 truncate ${hasChildren ? "font-bold text-on-surface" : ""}`}>{node.name}</span>
         {depth < 3 && (
           <button
             type="button"

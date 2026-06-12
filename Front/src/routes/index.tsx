@@ -47,30 +47,30 @@ function Landing() {
   return (
     <div dir={dir} className="min-h-screen bg-surface text-on-surface">
       {/* Nav */}
-      <header className="sticky top-0 z-40 backdrop-blur bg-surface/80 border-b border-border-default">
+      <header className="sticky top-0 z-40 backdrop-blur-md bg-surface/75 border-b border-border-default/60">
         <div className="mx-auto max-w-7xl px-4 md:px-6 h-16 flex items-center justify-between">
           <BrandMark />
-          <nav className="hidden md:flex items-center gap-6 text-sm text-on-surface-variant">
-            <a href="#features" className="hover:text-primary">{t("featuresTitle")}</a>
-            <a href="#ai" className="hover:text-primary">{t("astTitle")}</a>
-            <a href="#pricing" className="hover:text-primary">{t("ctaTitle")}</a>
+          <nav className="hidden md:flex items-center gap-6 text-sm text-on-surface-variant font-medium">
+            <a href="#features" className="hover:text-primary transition-colors">{t("featuresTitle")}</a>
+            <a href="#ai" className="hover:text-primary transition-colors">{t("astTitle")}</a>
+            <a href="#pricing" className="hover:text-primary transition-colors">{t("ctaTitle")}</a>
           </nav>
           <div className="flex items-center gap-2">
             <LangToggle />
             <ThemeToggle />
             {loggedIn ? (
               <Link to={appTarget}>
-                <Button size="sm" className="bg-gradient-primary gap-2">
+                <Button size="sm" className="bg-gradient-primary gap-2 cursor-pointer shadow-soft hover-glow">
                   {t("goToDashboard")} <ArrowRight className="h-4 w-4 rtl:rotate-180" />
                 </Button>
               </Link>
             ) : (
               <>
                 <Link to="/login">
-                  <Button variant="ghost" size="sm">{t("signIn")}</Button>
+                  <Button variant="ghost" size="sm" className="cursor-pointer">{t("signIn")}</Button>
                 </Link>
                 <Link to="/register">
-                  <Button size="sm" className="bg-gradient-primary">{t("getStarted")}</Button>
+                  <Button size="sm" className="bg-gradient-primary cursor-pointer shadow-soft hover-glow">{t("getStarted")}</Button>
                 </Link>
               </>
             )}
@@ -79,29 +79,33 @@ function Landing() {
       </header>
 
       {/* Hero */}
-      <section className="bg-gradient-hero">
-        <div className="mx-auto max-w-7xl px-4 md:px-6 pt-20 pb-28 grid lg:grid-cols-2 gap-12 items-center">
+      <section className="bg-gradient-hero relative overflow-hidden">
+        {/* Decorative background glows */}
+        <div className="absolute top-20 right-10 w-72 h-72 bg-accent/10 blur-3xl rounded-full" />
+        <div className="absolute bottom-10 left-10 w-72 h-72 bg-primary/10 blur-3xl rounded-full" />
+        
+        <div className="mx-auto max-w-7xl px-4 md:px-6 pt-16 pb-24 grid lg:grid-cols-2 gap-12 items-center relative z-10">
           <div>
-            <span className="inline-flex items-center gap-2 rounded-full bg-surface-container px-3 py-1 text-xs font-medium text-primary">
-              <Sparkles className="h-3.5 w-3.5" /> New · GPT-powered insights
+            <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 border border-primary/20 px-3 py-1 text-xs font-semibold text-primary">
+              <Sparkles className="h-3.5 w-3.5 animate-pulse" /> New · GPT-powered insights
             </span>
-            <h1 className="mt-5 text-4xl md:text-6xl font-bold tracking-tight text-on-surface leading-[1.05]">
+            <h1 className="mt-5 text-4xl md:text-6xl font-bold tracking-tight text-on-surface leading-[1.1]">
               {t("heroTitle")}
             </h1>
-            <p className="mt-5 text-lg text-on-surface-variant max-w-xl">{t("heroSubtitle")}</p>
+            <p className="mt-5 text-lg text-on-surface-variant max-w-xl leading-relaxed">{t("heroSubtitle")}</p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link to={startTarget}>
-                <Button size="lg" className="bg-gradient-primary gap-2">
+                <Button size="lg" className="bg-gradient-primary gap-2 cursor-pointer shadow-card hover-glow">
                   {t("getStarted")} <ArrowRight className="h-4 w-4 rtl:rotate-180" />
                 </Button>
               </Link>
               <Link to={appTarget}>
-                <Button size="lg" variant="outline">{t("seeDemo")}</Button>
+                <Button size="lg" variant="outline" className="cursor-pointer hover:bg-surface-container/50">{t("seeDemo")}</Button>
               </Link>
             </div>
             <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-on-surface-variant">
               {["No credit card", "Arabic & English", "Setup in 2 min"].map((x) => (
-                <span key={x} className="inline-flex items-center gap-1.5">
+                <span key={x} className="inline-flex items-center gap-1.5 font-medium">
                   <CheckCircle2 className="h-4 w-4 text-status-success" /> {x}
                 </span>
               ))}
@@ -112,16 +116,16 @@ function Landing() {
       </section>
 
       {/* Features */}
-      <section id="features" className="mx-auto max-w-7xl px-4 md:px-6 py-24">
+      <section id="features" className="mx-auto max-w-7xl px-4 md:px-6 py-20">
         <div className="text-center max-w-2xl mx-auto">
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight">
             {t("featuresTitle")}
           </h2>
-          <p className="mt-3 text-on-surface-variant">
+          <p className="mt-3 text-on-surface-variant text-base">
             {t("featuresSubtitle")}
           </p>
         </div>
-        <div className="mt-14 grid md:grid-cols-3 gap-6">
+        <div className="mt-12 grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {[
             {
               icon: Receipt,
@@ -156,29 +160,32 @@ function Landing() {
           ].map((f) => (
             <div
               key={f.title}
-              className="rounded-2xl border border-border-default bg-card p-6 shadow-soft hover:shadow-card transition-shadow"
+              className="rounded-2xl border border-border-default bg-card/60 glass-panel p-6 shadow-soft hover-glow transition-all duration-300 group"
             >
-              <div className="h-10 w-10 rounded-lg bg-surface-container text-primary grid place-items-center">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary grid place-items-center transition-transform group-hover:scale-105">
                 <f.icon className="h-5 w-5" />
               </div>
-              <h3 className="mt-4 font-semibold">{f.title}</h3>
-              <p className="mt-1.5 text-sm text-on-surface-variant">{f.desc}</p>
+              <h3 className="mt-4 font-bold text-lg">{f.title}</h3>
+              <p className="mt-2 text-sm text-on-surface-variant leading-relaxed">{f.desc}</p>
             </div>
           ))}
         </div>
       </section>
 
       {/* AI Section */}
-      <section id="ai" className="bg-surface-container/60 border-y border-border-default">
-        <div className="mx-auto max-w-7xl px-4 md:px-6 py-24 grid lg:grid-cols-2 gap-12 items-center">
+      <section id="ai" className="bg-surface-container/40 border-y border-border-default/60 relative overflow-hidden">
+        {/* Soft decorative glow */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-primary/5 blur-3xl rounded-full" />
+        
+        <div className="mx-auto max-w-7xl px-4 md:px-6 py-20 grid lg:grid-cols-2 gap-12 items-center relative z-10">
           <div>
-            <span className="inline-flex items-center gap-2 rounded-full bg-card px-3 py-1 text-xs font-medium text-primary border border-border-default">
+            <span className="inline-flex items-center gap-2 rounded-full bg-card border border-border-default px-3 py-1 text-xs font-semibold text-primary shadow-soft">
               <Bot className="h-3.5 w-3.5" /> {t("astTitle")}
             </span>
-            <h2 className="mt-4 text-3xl md:text-4xl font-bold tracking-tight">
+            <h2 className="mt-4 text-3xl md:text-4xl font-bold tracking-tight leading-tight">
               {t("aiAssistantLabel")}
             </h2>
-            <p className="mt-3 text-on-surface-variant max-w-lg">
+            <p className="mt-4 text-on-surface-variant text-base leading-relaxed max-w-lg">
               {t("aiAssistantDesc")}
             </p>
             <ul className="mt-6 space-y-3">
@@ -188,13 +195,13 @@ function Landing() {
                 "Suggest tax-saving moves",
                 "Explain cash trends from your ledger",
               ].map((x) => (
-                <li key={x} className="flex items-start gap-2 text-sm">
+                <li key={x} className="flex items-center gap-2.5 text-sm font-medium">
                   <CheckCircle2 className="h-5 w-5 text-status-success shrink-0" /> {x}
                 </li>
               ))}
             </ul>
           </div>
-          <div className="rounded-2xl bg-card border border-border-default p-6 shadow-card">
+          <div className="rounded-2xl bg-card/70 glass-panel p-6 shadow-card hover-glow transition-all duration-300">
             <div className="space-y-4">
               <ChatBubble who="you">What's my net profit this month?</ChatBubble>
               <ChatBubble who="ai">
@@ -208,16 +215,17 @@ function Landing() {
       </section>
 
       {/* CTA */}
-      <section id="pricing" className="mx-auto max-w-5xl px-4 md:px-6 py-24 text-center">
-        <h2 className="text-3xl md:text-5xl font-bold tracking-tight">
+      <section id="pricing" className="mx-auto max-w-5xl px-4 md:px-6 py-24 text-center relative">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-accent/10 blur-3xl rounded-full -z-10" />
+        <h2 className="text-3xl md:text-5xl font-extrabold tracking-tight">
           {t("ctaTitle")}
         </h2>
-        <p className="mt-4 text-on-surface-variant">
+        <p className="mt-4 text-on-surface-variant text-lg max-w-xl mx-auto">
           {t("ctaSubtitle")}
         </p>
         <div className="mt-8 flex justify-center gap-3">
           <Link to={startTarget}>
-            <Button size="lg" className="bg-gradient-primary gap-2">
+            <Button size="lg" className="bg-gradient-primary gap-2 cursor-pointer shadow-card hover-glow">
               {t("getStarted")} <ArrowRight className="h-4 w-4 rtl:rotate-180" />
             </Button>
           </Link>
@@ -225,16 +233,16 @@ function Landing() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-border-default bg-card">
-        <div className="mx-auto max-w-7xl px-4 md:px-6 py-10 flex flex-col md:flex-row items-center justify-between gap-4">
+      <footer className="border-t border-border-default/60 bg-card/65 backdrop-blur-sm">
+        <div className="mx-auto max-w-7xl px-4 md:px-6 py-10 flex flex-col md:flex-row items-center justify-between gap-6">
           <BrandMark />
-          <p className="text-sm text-on-surface-variant">
+          <p className="text-sm text-on-surface-variant font-medium">
             © {new Date().getFullYear()} Hesbetak.AI — Built for SMBs.
           </p>
-          <div className="flex gap-4 text-sm text-on-surface-variant">
-            <a href="#" className="hover:text-primary">Privacy</a>
-            <a href="#" className="hover:text-primary">Terms</a>
-            <a href="#" className="hover:text-primary">Contact</a>
+          <div className="flex gap-6 text-sm text-on-surface-variant font-medium">
+            <a href="#" className="hover:text-primary transition-colors">Privacy</a>
+            <a href="#" className="hover:text-primary transition-colors">Terms</a>
+            <a href="#" className="hover:text-primary transition-colors">Contact</a>
           </div>
         </div>
       </footer>

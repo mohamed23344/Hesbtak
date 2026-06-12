@@ -1,19 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNavigate, useLocation } from "@tanstack/react-router";
 
 import { getSession } from "@/lib/api";
-import { GlobalLoader } from "@/components/common/global-loader";
 
 export function AuthGuard() {
   const navigate = useNavigate();
   const location = useLocation();
-
-  const [checking, setChecking] = useState(true);
-
-  // Show loader on every route change
-  useEffect(() => {
-    setChecking(true);
-  }, [location.pathname]);
 
   useEffect(() => {
     const session = getSession();
@@ -21,7 +13,6 @@ export function AuthGuard() {
 
     // Landing page is public for everyone
     if (path === "/") {
-      setChecking(false);
       return;
     }
 
@@ -35,7 +26,7 @@ export function AuthGuard() {
 
     const isPublic = publicRoutes.includes(path);
 
-    // Guest user
+    // Guest user – redirect to login
     if (!session && !isPublic) {
       navigate({
         to: "/login",
@@ -44,7 +35,7 @@ export function AuthGuard() {
       return;
     }
 
-    // Protect admin routes
+    // Protect admin routes from non-admins
     if (
       path.startsWith("/admin") &&
       session?.user?.globalRole !== "admin"
@@ -58,17 +49,16 @@ export function AuthGuard() {
 
     const isAdmin = session?.user?.globalRole === "admin";
 
-    // Admin bypasses tenant checks
+    // Admin: redirect away from login/register to the admin panel
     if (session && isAdmin) {
       if (["/login", "/register"].includes(path)) {
         navigate({
-          to: "/admin/dashboard",
+          to: "/admin",
           replace: true,
         });
         return;
       }
-
-      setChecking(false);
+      // Admin is allowed everywhere else – no further checks
       return;
     }
 
@@ -76,12 +66,12 @@ export function AuthGuard() {
       !!session?.activeTenantId &&
       session.tenants.length > 0;
 
-    // User authenticated but has no organization
+    // User authenticated but has no organization yet
     if (
       session &&
       !hasOrganization &&
-      path !== "/select-organization" && 
-      !path.startsWith("/onboarding") 
+      path !== "/select-organization" &&
+      !path.startsWith("/onboarding")
     ) {
       navigate({
         to: "/select-organization",
@@ -90,7 +80,7 @@ export function AuthGuard() {
       return;
     }
 
-    // User authenticated and already has organization
+    // Authenticated user with org trying to visit login/register
     if (
       session &&
       hasOrganization &&
@@ -102,13 +92,8 @@ export function AuthGuard() {
       });
       return;
     }
-
-    setChecking(false);
   }, [navigate, location.pathname]);
 
-  if (checking) {
-    return <GlobalLoader />;
-  }
-
+  // Never blocks rendering – redirects happen imperatively above
   return null;
 }

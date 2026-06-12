@@ -117,17 +117,25 @@ export default function AuthLayout({
   const { dir } = useI18n();
   return (
     <div dir={dir} className="min-h-screen bg-gradient-hero grid lg:grid-cols-2">
-      <div className="hidden lg:flex flex-col justify-between p-10 bg-gradient-primary text-primary-foreground">
-        <BrandMark />
-        <div>
-          <h2 className="text-3xl font-bold leading-tight">
+      <div className="hidden lg:flex flex-col justify-between p-10 bg-gradient-primary text-primary-foreground relative overflow-hidden">
+        {/* Glow overlay */}
+        <div className="absolute -top-32 -left-32 w-80 h-80 bg-accent/20 blur-3xl rounded-full" />
+        <div className="absolute -bottom-32 -right-32 w-80 h-80 bg-indigo-400/20 blur-3xl rounded-full" />
+        
+        <div className="relative z-10">
+          <BrandMark forceLight />
+        </div>
+        
+        <div className="relative z-10 my-auto py-12">
+          <h2 className="text-4xl font-bold leading-tight tracking-tight">
             Your finances, simplified — in English and العربية.
           </h2>
-          <p className="mt-3 text-primary-foreground/80 max-w-md">
-            Join thousands of SMBs using Hesbetak.AI to automate their bookkeeping.
+          <p className="mt-4 text-primary-foreground/80 max-w-md text-base leading-relaxed">
+            Join thousands of SMBs using Hesbetak.AI to automate their bookkeeping with bilingual artificial intelligence.
           </p>
         </div>
-        <div className="text-sm text-primary-foreground/70">
+        
+        <div className="relative z-10 text-sm text-primary-foreground/70">
           © {new Date().getFullYear()} Hesbetak.AI
         </div>
       </div>
@@ -142,7 +150,7 @@ export default function AuthLayout({
         </div>
         <div className="flex-1 flex items-center justify-center px-4 pb-10">
           <div className="w-full max-w-md">
-            <div className="bg-card rounded-2xl border border-border-default shadow-card p-7">
+            <div className="bg-card/80 glass-panel shadow-card p-8 hover-glow rounded-2xl">
               <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
               {subtitle && <p className="mt-1 text-sm text-on-surface-variant">{subtitle}</p>}
               <div className="mt-6">{children}</div>

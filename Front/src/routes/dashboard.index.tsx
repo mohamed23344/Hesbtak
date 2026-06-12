@@ -59,9 +59,11 @@ function DashboardHome() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">{greeting}</h1>
-        <p className="text-on-surface-variant text-sm">{t("dashboardDesc")}</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{greeting}</h1>
+          <p className="text-on-surface-variant text-sm mt-0.5">{t("dashboardDesc")}</p>
+        </div>
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -72,8 +74,8 @@ function DashboardHome() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 bg-card border border-border-default rounded-2xl p-5 shadow-soft">
-          <h3 className="font-semibold mb-1">{t("cashflow")}</h3>
+        <div className="lg:col-span-2 bg-card/80 glass-panel rounded-2xl p-5 shadow-soft hover-glow">
+          <h3 className="font-semibold text-lg mb-0.5">{t("cashflow")}</h3>
           <p className="text-xs text-on-surface-variant mb-4">Tenant ledger snapshot</p>
           <div className="h-64">
             <ResponsiveContainer>
@@ -81,7 +83,7 @@ function DashboardHome() {
                 <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="m" stroke="var(--on-surface-variant)" fontSize={12} tickLine={false} axisLine={false} />
                 <YAxis stroke="var(--on-surface-variant)" fontSize={12} tickLine={false} axisLine={false} />
-                <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12 }} />
+                <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.05)" }} />
                 <Area type="monotone" dataKey="in" stroke="var(--primary)" fill="var(--primary)" fillOpacity={0.18} strokeWidth={2} />
                 <Area type="monotone" dataKey="out" stroke="var(--status-error)" fill="var(--status-error)" fillOpacity={0.14} strokeWidth={2} />
               </AreaChart>
@@ -89,8 +91,8 @@ function DashboardHome() {
           </div>
         </div>
 
-        <div className="bg-card border border-border-default rounded-2xl p-5 shadow-soft">
-          <h3 className="font-semibold mb-1">{t("topExpenseCategories")}</h3>
+        <div className="bg-card/80 glass-panel rounded-2xl p-5 shadow-soft hover-glow">
+          <h3 className="font-semibold text-lg mb-0.5">{t("topExpenseCategories")}</h3>
           <p className="text-xs text-on-surface-variant mb-3">Current balances</p>
           <div className="h-64">
             <ResponsiveContainer>
@@ -98,8 +100,8 @@ function DashboardHome() {
                 <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" horizontal={false} />
                 <XAxis type="number" hide />
                 <YAxis dataKey="c" type="category" stroke="var(--on-surface-variant)" fontSize={12} tickLine={false} axisLine={false} width={86} />
-                <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12 }} />
-                <Bar dataKey="v" fill="var(--accent)" radius={[0, 8, 8, 0]} />
+                <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.05)" }} />
+                <Bar dataKey="v" fill="var(--accent)" radius={dir === "rtl" ? [8, 0, 0, 8] : [0, 8, 8, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -107,30 +109,31 @@ function DashboardHome() {
       </div>
 
       <div className="grid lg:grid-cols-2 gap-4">
-        <div className="bg-gradient-primary text-primary-foreground rounded-2xl p-6 shadow-card">
-          <div className="flex items-center gap-2 text-sm opacity-90"><Sparkles className="h-4 w-4" /> {t("aiInsights")}</div>
-          <h3 className="mt-1 text-lg font-semibold">{t("thingsToKnow")}</h3>
-          <ul className="mt-4 space-y-3 text-sm">
+        <div className="bg-gradient-primary text-primary-foreground rounded-2xl p-6 shadow-card hover-glow relative overflow-hidden">
+          <div className="absolute -top-20 -left-20 w-64 h-64 bg-accent/20 blur-2xl rounded-full" />
+          <div className="relative z-10 flex items-center gap-2 text-sm opacity-90"><Sparkles className="h-4 w-4" /> {t("aiInsights")}</div>
+          <h3 className="relative z-10 mt-1 text-lg font-semibold">{t("thingsToKnow")}</h3>
+          <ul className="relative z-10 mt-4 space-y-3 text-sm">
             {(suggestions.length ? suggestions : [{ id: "empty", title: "Add transactions", description: "Suggestions appear after invoices, bills, or expenses are posted." }]).map((item) => (
-              <li key={item.id} className="flex gap-2 bg-white/10 rounded-lg p-3">
-                <Lightbulb className="h-4 w-4 shrink-0 mt-0.5" /> {item.title}: {item.description}
+              <li key={item.id} className="flex gap-2 bg-white/10 backdrop-blur-xs rounded-lg p-3">
+                <Lightbulb className="h-4 w-4 shrink-0 mt-0.5 text-accent" /> {item.title}: {item.description}
               </li>
             ))}
           </ul>
         </div>
 
-        <div className="bg-card border border-border-default rounded-2xl p-6 shadow-soft">
-          <div className="flex items-center gap-2 text-sm text-status-warning">
+        <div className="bg-card/80 glass-panel rounded-2xl p-6 shadow-soft hover-glow">
+          <div className="flex items-center gap-2 text-sm text-status-warning font-semibold">
             <AlertTriangle className="h-4 w-4" /> {t("alerts")}
           </div>
           <h3 className="mt-1 text-lg font-semibold">{t("thingsAttention")}</h3>
-          <ul className="mt-4 divide-y divide-border-default">
+          <ul className="mt-4 divide-y divide-border-default/60">
             {(alerts.length ? alerts.slice(0, 5) : [{ id: "none", title: "No alerts", message: "Due date and threshold alerts will show here.", severity: "info" }]).map((alert) => (
               <li key={alert.id} className="py-3 flex items-start gap-3">
-                <span className={`mt-1.5 h-2 w-2 rounded-full ${alert.severity === "critical" ? "bg-status-error" : "bg-status-warning"}`} />
+                <span className={`mt-1.5 h-2 w-2 rounded-full ${alert.severity === "critical" ? "bg-status-error animate-pulse" : "bg-status-warning"}`} />
                 <div>
-                  <p className="font-medium text-sm">{alert.title}</p>
-                  <p className="text-xs text-on-surface-variant">{alert.message}</p>
+                  <p className="font-semibold text-sm">{alert.title}</p>
+                  <p className="text-xs text-on-surface-variant mt-0.5">{alert.message}</p>
                 </div>
               </li>
             ))}
@@ -149,16 +152,16 @@ function Kpi({
   const Trend = up ? TrendingUp : down ? TrendingDown : TrendingUp;
   const tone = up ? "text-status-success bg-status-success/10" : down ? "text-status-error bg-status-error/10" : "text-on-surface-variant bg-surface-container";
   return (
-    <div className="bg-card border border-border-default rounded-2xl p-5 shadow-soft">
+    <div className="bg-card/80 glass-panel rounded-2xl p-5 shadow-soft hover-glow">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-on-surface-variant">{label}</p>
-        <div className="h-9 w-9 rounded-lg bg-surface-container text-primary grid place-items-center">
-          <Icon className="h-4 w-4" />
+        <p className="text-sm text-on-surface-variant font-medium">{label}</p>
+        <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary grid place-items-center">
+          <Icon className="h-4.5 w-4.5" />
         </div>
       </div>
-      <p className="mt-3 text-2xl font-bold tracking-tight">{value}</p>
-      <span className={`mt-2 inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${tone}`}>
-        <Trend className="h-3 w-3" /> {delta}
+      <p className="mt-3 text-2xl font-bold tracking-tight text-on-surface">{value}</p>
+      <span className={`mt-2.5 inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${tone}`}>
+        <Trend className="h-3 w-3 rtl:rotate-180" /> {delta}
       </span>
     </div>
   );

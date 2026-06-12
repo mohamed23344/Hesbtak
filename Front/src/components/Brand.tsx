@@ -7,17 +7,33 @@ import { Languages, Sun, Moon } from "lucide-react";
 export function BrandMark({
   withText = true,
   to = "/",
+  forceLight = false,
 }: {
   withText?: boolean;
   to?: string;
+  forceLight?: boolean;
 }) {
-  const { t } = useI18n();
+  const { theme } = useTheme();
+  
+  const isDark = 
+    forceLight ||
+    theme === "dark" || 
+    (theme === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+
   return (
-    <Link to={to} className="flex items-center gap-2 group">
-      {/* <div className="h-8 w-8 rounded-lg bg-gradient-primary grid place-items-center text-primary-foreground font-bold shadow-soft">
-      </div> */}
-      {withText && (
-        <span className="font-bold text-on-surface tracking-tight">{t("appName")}</span>
+    <Link to={to} className="flex items-center gap-2 group focus-visible:outline-none">
+      {withText ? (
+        <img
+          src={isDark ? "/logo-light.png" : "/logo-dark.png"}
+          alt="Hesbetak.AI Logo"
+          className="h-8 md:h-9 w-auto object-contain transition-transform duration-300 group-hover:scale-102"
+        />
+      ) : (
+        <img
+          src="/brand-icon.png"
+          alt="Hesbetak.AI Icon"
+          className="h-8 w-8 rounded-lg object-contain transition-transform duration-300 group-hover:scale-105"
+        />
       )}
     </Link>
   );

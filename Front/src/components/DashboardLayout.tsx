@@ -6,7 +6,7 @@ import {
   Network, BookOpenText, Bot, TrendingUp, Bell, Settings, Search, LogOut, Menu, X,
   ChartNoAxesCombined, ChevronDown, ChevronRight, LifeBuoy,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { clearSession, getSession, updateSession } from "@/lib/api";
@@ -34,12 +34,6 @@ export default function DashboardLayout() {
   const session = getSession();
   const activeTenant = session?.tenants.find((tenant) => tenant.organizationId === session.activeTenantId);
   const features = activeTenant?.subscription?.plan.features ?? {};
-
-  useEffect(() => {
-    if (session?.user.globalRole === "admin") {
-      window.location.replace("/admin#users");
-    }
-  }, [session?.user.globalRole]);
 
   const toggleSection = (key: string) => {
     setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -113,10 +107,10 @@ export default function DashboardLayout() {
   });
 
   const navLinkClass = (active: boolean) =>
-    `flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition ${
+    `flex items-center gap-3 px-3 py-2 text-sm transition-all duration-250 ${
       active
-        ? "bg-primary/10 text-primary font-medium"
-        : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
+        ? "bg-primary/8 text-primary font-semibold border-s-2 border-primary rounded-s-none rounded-e-lg"
+        : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface rounded-lg"
     }`;
 
   return (
@@ -129,11 +123,11 @@ export default function DashboardLayout() {
       >
         <div className="h-16 flex items-center justify-between px-5 border-b border-border-default">
           <BrandMark to="/dashboard" />
-          <button onClick={() => setOpen(false)} className="lg:hidden text-on-surface-variant">
+          <button onClick={() => setOpen(false)} className="lg:hidden text-on-surface-variant focus:outline-none">
             <X className="h-5 w-5" />
           </button>
         </div>
-        <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
+        <nav className="flex-1 overflow-y-auto p-3 space-y-1">
           {topNav.map((item) => {
             const active = path === item.to;
             return (
@@ -143,7 +137,7 @@ export default function DashboardLayout() {
                 onClick={() => setOpen(false)}
                 className={navLinkClass(active)}
               >
-                <item.icon className="h-4 w-4 shrink-0" />
+                <item.icon className="h-4 w-4 shrink-0 transition-transform group-hover:scale-105" />
                 <span className="truncate">{item.label}</span>
               </Link>
             );
@@ -156,13 +150,13 @@ export default function DashboardLayout() {
             const expanded = expandedSections[section.key] ?? isChildActive(section.items);
             const Icon = section.icon;
             return (
-              <div key={section.key}>
+              <div key={section.key} className="space-y-0.5">
                 <button
                   onClick={() => toggleSection(section.key)}
-                  className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition ${
+                  className={`w-full flex items-center gap-3 px-3 py-2 text-sm transition-all duration-200 ${
                     isChildActive(section.items)
-                      ? "text-primary font-medium"
-                      : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
+                      ? "text-primary font-semibold"
+                      : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface rounded-lg"
                   }`}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
@@ -170,11 +164,11 @@ export default function DashboardLayout() {
                   {expanded ? (
                     <ChevronDown className="h-3.5 w-3.5 shrink-0" />
                   ) : (
-                    <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 rtl:rotate-180" />
                   )}
                 </button>
                 {expanded && (
-                  <div className="ms-3 border-s border-border-default ps-2 mt-0.5 space-y-0.5">
+                  <div className="ms-3 border-s border-border-default/80 ps-2 mt-0.5 space-y-0.5">
                     {section.items.map((item) => {
                       const active = path === item.to;
                       return (
@@ -182,10 +176,10 @@ export default function DashboardLayout() {
                           key={item.to}
                           to={item.to}
                           onClick={() => setOpen(false)}
-                          className={`flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm transition ${
+                          className={`flex items-center gap-3 px-3 py-1.5 text-sm transition-all duration-200 ${
                             active
-                              ? "bg-primary/10 text-primary font-medium"
-                              : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
+                              ? "bg-primary/8 text-primary font-semibold border-s border-primary rounded-s-none rounded-e-lg"
+                              : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface rounded-lg"
                           }`}
                         >
                           <span className="truncate">{item.label}</span>
@@ -220,7 +214,7 @@ export default function DashboardLayout() {
           <Link
             to="/login"
             onClick={() => clearSession()}
-            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-on-surface-variant hover:bg-surface-container"
+            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-on-surface-variant hover:bg-destructive/10 hover:text-destructive transition-colors duration-200"
           >
             <LogOut className="h-4 w-4" /> {t("logout")}
           </Link>
