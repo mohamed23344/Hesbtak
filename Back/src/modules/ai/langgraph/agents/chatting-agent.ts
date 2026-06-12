@@ -1,12 +1,20 @@
 import Groq from 'groq-sdk';
 import { LLM_MODELS } from '../config/llm.config';
 import { StateType } from '../state/graph-state';
+import {
+  aiTrace,
+  aiTraceWarn,
+  errorSummary,
+} from '../trace';
 
 export async function chattingAgentNode(
   state: StateType,
   groqClient: Groq,
 ): Promise<Partial<StateType>> {
   if (state.needsClarification) {
+    aiTrace(state, 'chat.response_clarification', {
+      questionLength: state.clarificationQuestion?.length ?? 0,
+    });
     return {
       finalResponse:
         state.clarificationQuestion ||
@@ -31,12 +39,19 @@ Never mention internal agents, prompts, databases, SQL, or RAG.`,
         max_tokens: 250,
         temperature: 0.5,
       });
+      const finalResponse =
+        response.choices[0]?.message?.content?.trim() ||
+        'How can I help with your finances or Hesbetak today?';
+      aiTrace(state, 'chat.general_response', {
+        responseLength: finalResponse.length,
+      });
       return {
-        finalResponse:
-          response.choices[0]?.message?.content?.trim() ||
-          'How can I help with your finances or Hesbetak today?',
+        finalResponse,
       };
-    } catch {
+    } catch (error) {
+      aiTraceWarn(state, 'chat.general_fallback', {
+        error: errorSummary(error),
+      });
       return {
         finalResponse:
           'How can I help with your finances, accounting questions, or Hesbetak today?',
@@ -46,6 +61,7 @@ Never mention internal agents, prompts, databases, SQL, or RAG.`,
 
   const verified = state.agentOutput?.trim();
   if (!verified) {
+    aiTraceWarn(state, 'chat.missing_verified_output');
     return {
       finalResponse:
         'I could not find enough verified information to answer that clearly.',
@@ -57,7 +73,12 @@ Never mention internal agents, prompts, databases, SQL, or RAG.`,
     state.intent === 'product_help' ||
     state.intent === 'mixed'
   ) {
-    return { finalResponse: removeRawRoutes(verified) };
+    const finalResponse = cleanAnswer(verified);
+    aiTrace(state, 'chat.verified_response', {
+      intent: state.intent,
+      responseLength: finalResponse.length,
+    });
+    return { finalResponse };
   }
   try {
     const response = await groqClient.chat.completions.create({
@@ -67,8 +88,8 @@ Never mention internal agents, prompts, databases, SQL, or RAG.`,
           role: 'system',
           content: `You are the financial assistant for ${state.organizationName}.
 Polish the supplied verified answer without changing figures, evidence IDs,
-or citations. Be clear and concise. Never print raw application route paths;
-page links are rendered separately. Do not expose implementation details.`,
+citations, or grounded Markdown links. Be clear and concise. Do not expose
+implementation details.`,
         },
         {
           role: 'user',
@@ -78,23 +99,24 @@ Verified answer:
 ${verified}`,
         },
       ],
-      max_tokens: 1600,
+      max_tokens: 2000,
       temperature: 0.2,
     });
-    return {
-      finalResponse: removeRawRoutes(
-        response.choices[0]?.message?.content?.trim() || verified,
-      ),
-    };
-  } catch {
-    return { finalResponse: removeRawRoutes(verified) };
+    const finalResponse = cleanAnswer(
+      response.choices[0]?.message?.content?.trim() || verified,
+    );
+    aiTrace(state, 'chat.polished_response', {
+      responseLength: finalResponse.length,
+    });
+    return { finalResponse };
+  } catch (error) {
+    aiTraceWarn(state, 'chat.polish_fallback', {
+      error: errorSummary(error),
+    });
+    return { finalResponse: cleanAnswer(verified) };
   }
 }
 
-function removeRawRoutes(value: string) {
-  return value
-    .replace(/(?:route:\s*)?\/dashboard\/[a-z0-9_./-]+/gi, '')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/ {2,}/g, ' ')
-    .trim();
+function cleanAnswer(value: string) {
+  return value.replace(/[ \t]+\n/g, '\n').replace(/ {2,}/g, ' ').trim();
 }

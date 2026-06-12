@@ -4,11 +4,11 @@ import { InferenceClient } from '@huggingface/inference';
 import Groq from 'groq-sdk';
 
 export const LLM_MODELS = {
-  CHATTING_AGENT: 'meta-llama/llama-4-scout-17b-16e-instruct',
-  ORCHESTRATOR_AGENT: 'meta-llama/llama-4-scout-17b-16e-instruct',
-  DATABASE_SEARCH_AGENT: 'meta-llama/llama-4-scout-17b-16e-instruct',
-  FINANCIAL_REASONING_AGENT: 'meta-llama/llama-4-scout-17b-16e-instruct',
-  REPORT_GENERATION_AGENT: 'meta-llama/llama-4-scout-17b-16e-instruct',
+  CHATTING_AGENT: 'openai/gpt-oss-20b',
+  ORCHESTRATOR_AGENT: 'openai/gpt-oss-20b',
+  DATABASE_SEARCH_AGENT: 'openai/gpt-oss-20b',
+  FINANCIAL_REASONING_AGENT: 'openai/gpt-oss-20b',
+  REPORT_GENERATION_AGENT: 'openai/gpt-oss-20b',
 };
 
 export function getGroqClient(config: ConfigService): Groq {

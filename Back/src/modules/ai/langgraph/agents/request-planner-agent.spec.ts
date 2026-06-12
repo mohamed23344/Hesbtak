@@ -21,6 +21,7 @@ describe('requestPlannerAgentNode', () => {
                       'accounting_workbook',
                       'product_guide',
                     ],
+                    requiresFinancialData: true,
                     requiresClarification: false,
                   }),
                 },
@@ -44,6 +45,48 @@ describe('requestPlannerAgentNode', () => {
       'accounting_workbook',
       'product_guide',
     ]);
+    expect(result.requestPlan?.requiresFinancialData).toBe(true);
+  });
+
+  it('allows accounting and product guidance without querying tenant data', async () => {
+    const groq = {
+      chat: {
+        completions: {
+          create: jest.fn().mockResolvedValue({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    intent: 'mixed',
+                    goals: ['explain the accounting', 'show the workflow'],
+                    outputMode: 'chat',
+                    entities: [],
+                    knowledgeCorpora: [
+                      'accounting_workbook',
+                      'product_guide',
+                    ],
+                    requiresFinancialData: false,
+                    requiresClarification: false,
+                  }),
+                },
+              },
+            ],
+          }),
+        },
+      },
+    };
+
+    const result = await requestPlannerAgentNode(
+      {
+        userQuery:
+          'Explain the accounting treatment and how to record it in Hesbetak',
+        conversationHistory: '',
+      } as never,
+      groq as never,
+    );
+
+    expect(result.intent).toBe('mixed');
+    expect(result.requestPlan?.requiresFinancialData).toBe(false);
   });
 });
 

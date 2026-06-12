@@ -1,6 +1,7 @@
 import Groq from 'groq-sdk';
 import { LLM_MODELS } from '../config/llm.config';
 import { StateType } from '../state/graph-state';
+import { aiTrace, aiTraceWarn } from '../trace';
 
 export async function reportGenerationAgentNode(
   state: StateType,
@@ -12,12 +13,23 @@ export async function reportGenerationAgentNode(
     state.agentOutput;
 
   if (!reportSource) {
+    aiTraceWarn(state, 'report.skipped', {
+      reason: 'missing_grounded_source',
+    });
     return {
       reportMarkdown: '',
       agentOutput: 'No grounded analysis is available to generate the report.',
     };
   }
 
+  aiTrace(state, 'report.generation_started', {
+    sourceLength: reportSource.length,
+    sourceType: state.reasoningOutput
+      ? 'financial_or_synthesized'
+      : state.knowledgeEvidence?.answer
+        ? 'knowledge'
+        : 'agent_output',
+  });
   const response = await groqClient.chat.completions.create({
     model: LLM_MODELS.REPORT_GENERATION_AGENT,
     messages: [
@@ -58,6 +70,10 @@ ${reportSource}`,
 
   const reportMarkdown =
     response.choices[0]?.message?.content?.trim() ?? '';
+  aiTrace(state, 'report.generation_completed', {
+    reportLength: reportMarkdown.length,
+    generated: Boolean(reportMarkdown),
+  });
   return {
     reportMarkdown,
     agentOutput: reportMarkdown

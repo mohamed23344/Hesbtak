@@ -2,6 +2,12 @@ import Groq from 'groq-sdk';
 import { LLM_MODELS } from '../config/llm.config';
 import { RequestPlan } from '../contracts';
 import { StateType } from '../state/graph-state';
+import {
+  aiTrace,
+  aiTraceWarn,
+  errorSummary,
+  summarizeText,
+} from '../trace';
 
 const DEFAULT_PLAN: RequestPlan = {
   intent: 'general',
@@ -9,6 +15,7 @@ const DEFAULT_PLAN: RequestPlan = {
   outputMode: 'chat',
   entities: [],
   knowledgeCorpora: [],
+  requiresFinancialData: false,
   requiresClarification: false,
 };
 
@@ -18,14 +25,10 @@ Classify each request into one intent:
 - financial_data: exact tenant figures, transactions, balances, analysis, recommendations, forecasting, or financial reports.
 - accounting_knowledge: accounting concepts, workbook exercises, journal treatment, formulas, or financial statement guidance.
 - product_help: how to use Hesbetak, where a page or action is, or a product tour.
-- mixed: the answer requires live organization data plus accounting or product guidance.
+- mixed: the answer needs more than one source, including accounting plus
+  product guidance, or live organization data plus guidance.
 - general: greetings or unrelated conversation.
 
-Available accounting modules:
-1 Financial Statements; 2 Recording Transactions; 3 Adjusting and Closing;
-4 Cash; 5 Receivables; 6 Inventory Purchases and Sales; 7 Inventory Costing;
-8 Property Plant and Equipment; 9 Liabilities; 10 Equity;
-11 Cash Flows; 12 Ratios and Financial Statement Analysis.
 
 Product modules:
 dashboard, accounts, journal, sales, purchases, expenses, transactions,
@@ -33,8 +36,8 @@ OCR, forecasting, reports, notifications, settings, support, assistant.
 
 Current date: ${new Date().toISOString().slice(0, 10)}.
 Resolve relative dates such as today, this month, this quarter, and last year
-into exact ISO dateRange values. Do not assume a quarter when the user did not
-ask for one.
+into exact ISO dateRange values. ask for clarification if needed depends on the task, like if analysis then i will need quarter or period and so on
+DONT ASSUME QUARTER
 Set outputMode to pdf_report only when the user explicitly asks for a PDF,
 downloadable report, formal report, or document. A normal analysis is chat.
 Ask one clarification question only when a missing period, entity, comparison
@@ -44,10 +47,20 @@ recommendations, forecasts, or reports are financial_data unless the user
 explicitly asks for accounting education or product instructions. Do not add
 product_help merely because a financial recommendation might later be acted on
 inside Hesbetak.
+Use mixed when the request genuinely combines sources, for example:
+- live organization figures plus an accounting explanation;
+- live records plus steps for acting on them in Hesbetak;
+- accounting treatment plus the exact Hesbetak workflow for recording it.
+For mixed requests, choose every required knowledge corpus. For a pure product
+navigation request, use only product_guide. For a pure accounting question, use
+only accounting_workbook.
+Set requiresFinancialData=true only when answering requires tenant-specific
+records or figures and when intent is not mixed. Accounting plus product guidance without live records is
+mixed with requiresFinancialData=false.
 
 Return valid JSON only with:
 intent, goals, outputMode, dateRange, entities, knowledgeCorpora,
-requiresClarification, clarificationQuestion.`;
+requiresFinancialData, requiresClarification, clarificationQuestion.`;
 
 export async function requestPlannerAgentNode(
   state: StateType,
@@ -93,6 +106,9 @@ export async function requestPlannerAgentNode(
               value === 'accounting_workbook' || value === 'product_guide',
           )
         : [],
+      requiresFinancialData:
+        parsed.intent === 'financial_data' ||
+        Boolean(parsed.requiresFinancialData),
       outputMode: explicitlyRequestsReport(
         state.originalUserQuery || state.userQuery,
       )
@@ -102,6 +118,16 @@ export async function requestPlannerAgentNode(
           : 'chat',
       requiresClarification: Boolean(parsed.requiresClarification),
     };
+    aiTrace(state, 'planner.plan_created', {
+      intent: plan.intent,
+      goals: plan.goals.map((goal) => summarizeText(goal, 80)),
+      outputMode: plan.outputMode,
+      corpora: plan.knowledgeCorpora,
+      requiresFinancialData: plan.requiresFinancialData,
+      requiresClarification: plan.requiresClarification,
+      entityCount: plan.entities.length,
+      dateRange: plan.dateRange,
+    });
     return {
       requestPlan: plan,
       intent: plan.intent,
@@ -109,7 +135,10 @@ export async function requestPlannerAgentNode(
       needsClarification: plan.requiresClarification,
       clarificationQuestion: plan.clarificationQuestion,
     };
-  } catch {
+  } catch (error) {
+    aiTraceWarn(state, 'planner.fallback', {
+      error: errorSummary(error),
+    });
     return {
       requestPlan: DEFAULT_PLAN,
       intent: 'general',

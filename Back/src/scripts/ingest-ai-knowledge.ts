@@ -75,7 +75,9 @@ async function main() {
     const products = await loadJson<ProductPage[]>(productPath);
     const workbook = await loadJson<KnowledgeChunkInput[]>(workbookPath);
     const productResult = await knowledge.upsert(productChunks(products));
-    const workbookResult = await knowledge.upsert(workbook);
+    const workbookResult = await knowledge.upsert(workbook, {
+      replaceCorpus: 'accounting_workbook',
+    });
     console.log({ productResult, workbookResult });
   } finally {
     await app.close();

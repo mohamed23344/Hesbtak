@@ -12,22 +12,23 @@ from typing import Any
 import pdfplumber
 
 
-MODULE_RE = re.compile(r"^Module\s+(\d+)\s*[:\-]?\s*(.*)$", re.IGNORECASE)
-EXERCISE_RE = re.compile(r"^(Exercise|Problem)\s+([\w.\-]+)", re.IGNORECASE)
-MODULES = [
-    (3, 1, "Introduction to Financial Statements"),
-    (13, 2, "Recording Transactions"),
-    (22, 3, "Adjusting Entries and Closing Entries"),
-    (31, 4, "Cash"),
-    (36, 5, "Receivables"),
-    (43, 6, "Inventory Purchases, Sales, Returns and Discounts"),
-    (52, 7, "Cost of Inventory: FIFO, LIFO, Weighted Average, and Specific Identification"),
-    (59, 8, "Property, Plant and Equipment"),
-    (67, 9, "Liabilities"),
-    (80, 10, "Equity"),
-    (87, 11, "Statement of Cash Flows"),
-    (96, 12, "Ratios and Financial Statement Analysis"),
-]
+CHAPTER_RE = re.compile(r"^CHAPTER\s+([A-Z]+|\d+)\s*(.*)$", re.IGNORECASE)
+EXERCISE_RE = re.compile(
+    r"^(Exercise|Problem|Solved Question|Self[- ]Evaluation)\s*[:#-]?\s*([\w.\-]*)",
+    re.IGNORECASE,
+)
+NUMBER_WORDS = {
+    "ONE": 1,
+    "TWO": 2,
+    "THREE": 3,
+    "FOUR": 4,
+    "FIVE": 5,
+    "SIX": 6,
+    "SEVEN": 7,
+    "EIGHT": 8,
+    "NINE": 9,
+    "TEN": 10,
+}
 
 
 def clean_text(value: str | None) -> str:
@@ -89,40 +90,44 @@ def split_blocks(text: str, target_words: int = 500) -> list[str]:
 
 def extract(pdf_path: Path) -> list[dict[str, Any]]:
     chunks: list[dict[str, Any]] = []
-    module_number: int | None = None
-    module_title: str | None = None
+    chapter_number: int | None = None
+    chapter_title: str | None = None
     exercise_id: str | None = None
     with pdfplumber.open(pdf_path) as pdf:
         for page_number, page in enumerate(pdf.pages, 1):
-            if page_number < 3:
+            if page_number < 4:
                 continue
-            known_module = next(
-                (
-                    (number, title)
-                    for start, number, title in reversed(MODULES)
-                    if page_number >= start
-                ),
-                None,
-            )
-            if known_module:
-                module_number, module_title = known_module
             text = clean_text(page.extract_text(x_tolerance=2, y_tolerance=3))
             lines = text.splitlines()
-            for line in lines[:12]:
-                module_match = MODULE_RE.match(line)
-                if module_match and not known_module:
-                    module_number = int(module_match.group(1))
-                    module_title = module_match.group(2).strip() or module_title
+            for line_index, line in enumerate(lines[:12]):
+                chapter_match = CHAPTER_RE.match(line)
+                if chapter_match:
+                    raw_number = chapter_match.group(1).upper()
+                    chapter_number = (
+                        int(raw_number)
+                        if raw_number.isdigit()
+                        else NUMBER_WORDS.get(raw_number)
+                    )
+                    inline_title = chapter_match.group(2).strip()
+                    following = []
+                    for item in lines[line_index + 1 : line_index + 4]:
+                        if item.lower().startswith("learning objective"):
+                            break
+                        following.append(item)
+                    chapter_title = inline_title or " ".join(following).strip()
+                    exercise_id = None
                 exercise_match = EXERCISE_RE.match(line)
                 if exercise_match:
-                    exercise_id = exercise_match.group(2)
+                    exercise_id = " ".join(
+                        item for item in exercise_match.groups() if item
+                    )
 
             context = " > ".join(
                 value
                 for value in [
-                    f"Module {module_number}" if module_number else None,
-                    module_title,
-                    f"Exercise {exercise_id}" if exercise_id else None,
+                    f"Chapter {chapter_number}" if chapter_number else None,
+                    chapter_title,
+                    exercise_id,
                 ]
                 if value
             )
@@ -134,8 +139,8 @@ def extract(pdf_path: Path) -> list[dict[str, Any]]:
                         f"page-{page_number}-text-{index}",
                         content,
                         "prose",
-                        module_number,
-                        module_title,
+                        chapter_number,
+                        chapter_title,
                         exercise_id,
                         pdf_path.name,
                     )
@@ -176,8 +181,8 @@ def extract(pdf_path: Path) -> list[dict[str, Any]]:
                             f"page-{page_number}-table-{table_index}-{digest[:8]}",
                             content,
                             "table",
-                            module_number,
-                            module_title,
+                            chapter_number,
+                            chapter_title,
                             exercise_id,
                             pdf_path.name,
                         )
@@ -192,19 +197,19 @@ def make_chunk(
     chunk_id: str,
     content: str,
     content_type: str,
-    module_number: int | None,
-    module_title: str | None,
+    chapter_number: int | None,
+    chapter_title: str | None,
     exercise_id: str | None,
     source_file: str,
 ) -> dict[str, Any]:
     return {
         "corpus": "accounting_workbook",
-        "documentId": "financial-accounting-workbook-v4",
+        "documentId": "cairo-university-introduction-financial-accounting-part-2",
         "chunkId": chunk_id,
         "content": content,
         "metadata": {
-            "moduleNumber": module_number,
-            "moduleTitle": module_title,
+            "chapterNumber": chapter_number,
+            "chapterTitle": chapter_title,
             "exerciseId": exercise_id,
             "pageStart": page,
             "pageEnd": page,

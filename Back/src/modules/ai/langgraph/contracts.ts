@@ -27,6 +27,7 @@ export type RequestPlan = {
     value: string;
   }>;
   knowledgeCorpora: KnowledgeCorpus[];
+  requiresFinancialData: boolean;
   requiresClarification: boolean;
   clarificationQuestion?: string;
 };

@@ -2,6 +2,7 @@ import Groq from 'groq-sdk';
 import { AssistantCitation } from '../contracts';
 import { LLM_MODELS } from '../config/llm.config';
 import { StateType } from '../state/graph-state';
+import { aiTrace } from '../trace';
 
 export async function responseSynthesisAgentNode(
   state: StateType,
@@ -9,6 +10,12 @@ export async function responseSynthesisAgentNode(
 ): Promise<Partial<StateType>> {
   const financial = state.reasoningOutput?.trim();
   const knowledge = state.knowledgeEvidence?.answer?.trim();
+  aiTrace(state, 'synthesis.inputs', {
+    hasFinancial: Boolean(financial),
+    financialLength: financial?.length ?? 0,
+    hasKnowledge: Boolean(knowledge),
+    knowledgeLength: knowledge?.length ?? 0,
+  });
   if (!financial) return { agentOutput: knowledge };
   if (!knowledge) return { agentOutput: financial };
 
@@ -20,8 +27,9 @@ export async function responseSynthesisAgentNode(
         content: `Combine verified live financial analysis with accounting and product guidance.
 Keep live organization facts separate from general guidance.
 Preserve inline evidence IDs such as [FIN-1] and knowledge citations such as [K1].
-Refer to Hesbetak pages by title only. Do not print raw route paths; structured
-links are rendered separately by the application. Do not invent facts or routes.
+Preserve grounded product-page Markdown links exactly as supplied. Keep the
+answer focused on the user's task and omit unrelated retrieved material.
+Do not invent facts or routes.
 Return the answer only.`,
       },
       {
@@ -38,10 +46,14 @@ ${knowledge}`,
     temperature: 0.15,
     max_tokens: 2200,
   });
-  const agentOutput = removeRawRoutes(
+  const agentOutput = cleanAnswer(
     response.choices[0]?.message?.content?.trim() ||
       `${financial}\n\n${knowledge}`,
   );
+  aiTrace(state, 'synthesis.completed', {
+    outputLength: agentOutput.length,
+    linkCount: state.knowledgeEvidence?.links.length ?? 0,
+  });
   const citations: AssistantCitation[] = [
     ...(state.queryEvidence ?? [])
       .filter((item) => item.status === 'success')
@@ -69,10 +81,6 @@ ${knowledge}`,
   };
 }
 
-function removeRawRoutes(value: string) {
-  return value
-    .replace(/(?:route:\s*)?\/dashboard\/[a-z0-9_./-]+/gi, '')
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/ {2,}/g, ' ')
-    .trim();
+function cleanAnswer(value: string) {
+  return value.replace(/[ \t]+\n/g, '\n').replace(/ {2,}/g, ' ').trim();
 }

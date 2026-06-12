@@ -27,6 +27,7 @@ import {
  *  - reportType         : type of report being generated (inferred by reasoning agent)
  */
 export const MultiAgentState = Annotation.Root({
+  traceId: Annotation<string>(),
   userQuery: Annotation<string>(),
   originalUserQuery: Annotation<string>(),
   conversationHistory: Annotation<string>(),

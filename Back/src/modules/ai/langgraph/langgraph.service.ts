@@ -8,6 +8,7 @@ import { END, START, StateGraph } from '@langchain/langgraph';
 import Groq from 'groq-sdk';
 import { TenantContext } from '../../tenant/tenant.service';
 import { KnowledgeService } from '../knowledge/knowledge.service';
+import { ProductGuideCatalogService } from '../product-guide/product-guide-catalog.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { chattingAgentNode } from './agents/chatting-agent';
 import { DatabaseSearchAgentGraph } from './agents/database-search-agent';
@@ -23,6 +24,12 @@ import {
 } from './config/llm.config';
 import { RunGraphDto } from './dto/run-graph.dto';
 import { MultiAgentState, StateType } from './state/graph-state';
+import {
+  aiTrace,
+  aiTraceWarn,
+  errorSummary,
+  summarizeText,
+} from './trace';
 
 type GraphRunInput = RunGraphDto & { conversationHistory?: string };
 
@@ -35,31 +42,50 @@ export class LanggraphService {
     private readonly config: ConfigService,
     private readonly databaseAgent: DatabaseSearchAgentGraph,
     private readonly knowledge: KnowledgeService,
+    private readonly productCatalog: ProductGuideCatalogService,
     private readonly prisma: PrismaService,
   ) {
     this.groqClient = getGroqClient(this.config);
     const workflow = new StateGraph(MultiAgentState)
       .addNode('requestPlanner', (state) =>
-        requestPlannerAgentNode(state, this.groqClient),
+        this.runNode('requestPlanner', state, () =>
+          requestPlannerAgentNode(state, this.groqClient),
+        ),
       )
       .addNode('financialReasoning', (state) =>
-        financialReasoningAgentNode(
-          state,
-          this.groqClient,
-          this.databaseAgent,
+        this.runNode('financialReasoning', state, () =>
+          financialReasoningAgentNode(
+            state,
+            this.groqClient,
+            this.databaseAgent,
+          ),
         ),
       )
       .addNode('knowledgeGuide', (state) =>
-        knowledgeGuideAgentNode(state, this.groqClient, this.knowledge),
+        this.runNode('knowledgeGuide', state, () =>
+          knowledgeGuideAgentNode(
+            state,
+            this.groqClient,
+            this.knowledge,
+            this.databaseAgent,
+            this.productCatalog,
+          ),
+        ),
       )
       .addNode('synthesize', (state) =>
-        responseSynthesisAgentNode(state, this.groqClient),
+        this.runNode('synthesize', state, () =>
+          responseSynthesisAgentNode(state, this.groqClient),
+        ),
       )
       .addNode('reportGeneration', (state) =>
-        reportGenerationAgentNode(state, this.groqClient),
+        this.runNode('reportGeneration', state, () =>
+          reportGenerationAgentNode(state, this.groqClient),
+        ),
       )
       .addNode('chattingAgent', (state) =>
-        chattingAgentNode(state, this.groqClient),
+        this.runNode('chattingAgent', state, () =>
+          chattingAgentNode(state, this.groqClient),
+        ),
       )
       .addEdge(START, 'requestPlanner')
       .addConditionalEdges(
@@ -89,6 +115,18 @@ export class LanggraphService {
         'AI assistant is not configured. Set GROQ_API_KEY in the backend environment.',
       );
     }
+    const traceId = dto.sessionId ?? `run-${Date.now()}`;
+    const startedAt = Date.now();
+    aiTrace(
+      { traceId },
+      'graph.started',
+      {
+        organizationId: ctx.organizationId,
+        queryLength: dto.userQuery.length,
+        queryPreview: summarizeText(dto.userQuery),
+        hasConversationHistory: Boolean(dto.conversationHistory?.trim()),
+      },
+    );
     try {
       const organization = await this.prisma.organization.findUnique({
         where: { id: ctx.organizationId },
@@ -98,8 +136,10 @@ export class LanggraphService {
       const contextualQuery = await this.contextualizeQuery(
         dto.userQuery,
         conversationHistory,
+        traceId,
       );
       const initialState: Partial<StateType> = {
+        traceId,
         userQuery: contextualQuery,
         originalUserQuery: dto.userQuery,
         conversationHistory,
@@ -107,7 +147,25 @@ export class LanggraphService {
         tenantContext: ctx,
         organizationName: organization?.name ?? 'your organization',
       };
+      aiTrace(initialState, 'graph.context_ready', {
+        organizationName: initialState.organizationName,
+        queryWasContextualized: contextualQuery !== dto.userQuery,
+        contextualQueryPreview: summarizeText(contextualQuery),
+        historyLength: conversationHistory.length,
+      });
       const result = await this.compiledGraph.invoke(initialState);
+      aiTrace(result, 'graph.completed', {
+        intent: result.intent,
+        needsClarification: result.needsClarification ?? false,
+        evidenceCount: result.queryEvidence?.length ?? 0,
+        retrievedChunkCount: result.retrievedChunks?.length ?? 0,
+        citationCount: result.citations?.length ?? 0,
+        linkCount: result.links?.length ?? 0,
+        hasReport: Boolean(result.reportMarkdown),
+        responseLength:
+          result.finalResponse?.length ?? result.agentOutput?.length ?? 0,
+        elapsedMs: Date.now() - startedAt,
+      });
       return {
         intent: result.intent,
         agentOutput: result.agentOutput,
@@ -120,6 +178,10 @@ export class LanggraphService {
         reportMarkdown: result.reportMarkdown ?? null,
       };
     } catch (error) {
+      aiTraceWarn({ traceId }, 'graph.failed', {
+        error: errorSummary(error),
+        elapsedMs: Date.now() - startedAt,
+      });
       if (error instanceof ServiceUnavailableException) throw error;
       throw new InternalServerErrorException(
         `LangGraph execution failed: ${String(error)}`,
@@ -130,6 +192,7 @@ export class LanggraphService {
   private async contextualizeQuery(
     userQuery: string,
     conversationHistory: string,
+    traceId: string,
   ) {
     if (!conversationHistory) return userQuery;
     try {
@@ -150,43 +213,107 @@ export class LanggraphService {
         max_tokens: 350,
       });
       return response.choices[0]?.message?.content?.trim() || userQuery;
-    } catch {
+    } catch (error) {
+      aiTraceWarn({ traceId }, 'contextualizer.fallback', {
+        error: errorSummary(error),
+      });
       return userQuery;
     }
   }
 
   private routeFromPlanner(state: StateType) {
-    if (state.needsClarification) return 'chattingAgent';
-    if (state.intent === 'financial_data' || state.intent === 'mixed') {
-      return 'financialReasoning';
-    }
-    if (
-      state.intent === 'accounting_knowledge' ||
-      state.intent === 'product_help'
+    let destination: string;
+    if (state.needsClarification) destination = 'chattingAgent';
+    else if (
+      state.intent === 'financial_data' ||
+      (state.intent === 'mixed' &&
+        state.requestPlan?.requiresFinancialData)
     ) {
-      return 'knowledgeGuide';
+      destination = 'financialReasoning';
+    } else if (
+      state.intent === 'accounting_knowledge' ||
+      state.intent === 'product_help' ||
+      state.intent === 'mixed'
+    ) {
+      destination = 'knowledgeGuide';
+    } else {
+      destination = 'chattingAgent';
     }
-    return 'chattingAgent';
+    aiTrace(state, 'route.after_planner', {
+      intent: state.intent,
+      requiresFinancialData:
+        state.requestPlan?.requiresFinancialData ?? false,
+      destination,
+    });
+    return destination;
   }
 
   private routeAfterFinancial(state: StateType) {
-    if (state.needsClarification) return 'chattingAgent';
-    if (state.intent === 'mixed') return 'knowledgeGuide';
-    return state.requestPlan?.outputMode === 'pdf_report'
-      ? 'reportGeneration'
-      : 'chattingAgent';
+    const destination = state.needsClarification
+      ? 'chattingAgent'
+      : state.intent === 'mixed'
+        ? 'knowledgeGuide'
+        : state.requestPlan?.outputMode === 'pdf_report'
+          ? 'reportGeneration'
+          : 'chattingAgent';
+    aiTrace(state, 'route.after_financial', {
+      destination,
+      evidenceCount: state.queryEvidence?.length ?? 0,
+    });
+    return destination;
   }
 
   private routeAfterKnowledge(state: StateType) {
-    if (state.requestPlan?.outputMode === 'pdf_report') {
-      return state.intent === 'mixed' ? 'synthesize' : 'reportGeneration';
-    }
-    return state.intent === 'mixed' ? 'synthesize' : 'chattingAgent';
+    const destination =
+      state.requestPlan?.outputMode === 'pdf_report'
+        ? state.intent === 'mixed'
+          ? 'synthesize'
+          : 'reportGeneration'
+        : state.intent === 'mixed'
+          ? 'synthesize'
+          : 'chattingAgent';
+    aiTrace(state, 'route.after_knowledge', {
+      destination,
+      retrievedChunkCount: state.retrievedChunks?.length ?? 0,
+    });
+    return destination;
   }
 
   private routeAfterSynthesis(state: StateType) {
-    return state.requestPlan?.outputMode === 'pdf_report'
-      ? 'reportGeneration'
-      : 'chattingAgent';
+    const destination =
+      state.requestPlan?.outputMode === 'pdf_report'
+        ? 'reportGeneration'
+        : 'chattingAgent';
+    aiTrace(state, 'route.after_synthesis', { destination });
+    return destination;
+  }
+
+  private async runNode(
+    name: string,
+    state: StateType,
+    run: () => Promise<Partial<StateType>>,
+  ) {
+    const startedAt = Date.now();
+    aiTrace(state, 'agent.started', { agent: name });
+    try {
+      const result = await run();
+      aiTrace(state, 'agent.completed', {
+        agent: name,
+        elapsedMs: Date.now() - startedAt,
+        outputLength:
+          result.finalResponse?.length ??
+          result.agentOutput?.length ??
+          result.reportMarkdown?.length ??
+          0,
+      });
+      return result;
+    } catch (error) {
+      aiTraceWarn(state, 'agent.failed', {
+        agent: name,
+        error: errorSummary(error),
+        elapsedMs: Date.now() - startedAt,
+      });
+      throw error;
+    }
   }
 }

@@ -6,6 +6,12 @@ import {
 } from '../contracts';
 import { LLM_MODELS } from '../config/llm.config';
 import { StateType } from '../state/graph-state';
+import {
+  aiTrace,
+  aiTraceWarn,
+  errorSummary,
+  summarizeText,
+} from '../trace';
 
 type ReasoningDraft = {
   answer?: string;
@@ -19,6 +25,7 @@ type ReasoningDraft = {
 type DataPlan = {
   requests: FinancialDataRequest[];
   clarificationQuestion?: string;
+  requiresReasoning?: boolean;
 };
 
 export async function financialReasoningAgentNode(
@@ -26,7 +33,19 @@ export async function financialReasoningAgentNode(
   groqClient: Groq,
   databaseAgent: DatabaseSearchAgentGraph,
 ): Promise<Partial<StateType>> {
-  const dataPlan = await planDataRequests(state, groqClient);
+  const dataPlan = await planDataRequests(
+    state,
+    groqClient,
+    databaseAgent.schemaPrompt(state.orgSlug),
+  );
+  aiTrace(state, 'financial.data_plan', {
+    requestCount: dataPlan.requests.length,
+    requiresReasoning: dataPlan.requiresReasoning !== false,
+    objectives: dataPlan.requests.map((request) =>
+      summarizeText(request.objective, 100),
+    ),
+    needsClarification: Boolean(dataPlan.clarificationQuestion),
+  });
   if (dataPlan.clarificationQuestion) {
     return {
       needsClarification: true,
@@ -52,12 +71,30 @@ export async function financialReasoningAgentNode(
       groqClient,
     );
     evidence = [...evidence, ...newEvidence];
+    aiTrace(state, 'financial.evidence_round', {
+      round: round + 1,
+      requested: normalized.length,
+      statuses: newEvidence.map((item) => ({
+        requestId: item.requestId,
+        status: item.status,
+        rowCount: item.rowCount,
+        executionMs: item.executionMs,
+      })),
+      totalEvidence: evidence.length,
+    });
     draft = await reasonOverEvidence(
       state,
       evidence,
       groqClient,
-      round < 2,
+      dataPlan.requiresReasoning !== false && round < 2,
     );
+    aiTrace(state, 'financial.reasoning_round', {
+      round: round + 1,
+      answerLength: draft.answer?.length ?? 0,
+      needsMoreData: draft.needsMoreData ?? false,
+      nextRequestCount: draft.nextDataRequests?.length ?? 0,
+      needsClarification: draft.needsClarification ?? false,
+    });
     if (draft.needsClarification) {
       return {
         queryEvidence: evidence,
@@ -70,7 +107,9 @@ export async function financialReasoningAgentNode(
       };
     }
     pending =
-      draft.needsMoreData && draft.nextDataRequests?.length
+      dataPlan.requiresReasoning !== false &&
+      draft.needsMoreData &&
+      draft.nextDataRequests?.length
         ? draft.nextDataRequests
         : [];
   }
@@ -78,6 +117,13 @@ export async function financialReasoningAgentNode(
   const answer =
     draft.answer?.trim() ||
     'I could not collect enough verified financial evidence to answer that request.';
+  aiTrace(state, 'financial.completed', {
+    evidenceCount: evidence.length,
+    successfulEvidence: evidence.filter(
+      (item) => item.status === 'success',
+    ).length,
+    answerLength: answer.length,
+  });
   return {
     queryEvidence: evidence,
     reasoningOutput: answer,
@@ -96,6 +142,7 @@ export async function financialReasoningAgentNode(
 async function planDataRequests(
   state: StateType,
   groqClient: Groq,
+  databaseSchema: string,
 ): Promise<DataPlan> {
   const response = await groqClient.chat.completions.create({
     model: LLM_MODELS.FINANCIAL_REASONING_AGENT,
@@ -106,11 +153,9 @@ async function planDataRequests(
 Current date: ${new Date().toISOString().slice(0, 10)}.
 
 Read the user's actual request and create only the database evidence requests
-needed to answer it. Never force quarter, month, comparison, cost, revenue, or
-working-capital queries unless the user request requires them.
-
+needed to answer it.
 Planning rules:
-- Simple factual lookup: usually 1 request.
+- Simple factual lookup: make it as few as possible be smart when creating queries if i am looking for category or something get all records and see if its there or there similar one.
 - Analysis, diagnosis, recommendation, or report: usually 3-8 complementary requests.
 - Cover totals, breakdowns, trends, counterparties, and transaction detail only
   when they help answer the stated goal.
@@ -126,12 +171,24 @@ Return JSON only:
 {
   "requiresClarification": boolean,
   "clarificationQuestion": string | null,
+  "requiresReasoning": boolean,
   "requests": FinancialDataRequest[]
 }
 
 Every request includes objective, businessQuestion, metrics, dimensions,
 filters, dateRange when relevant, expectedColumns, preferredGranularity,
-maxRows, and reason.`,
+maxRows, and reason.
+
+Set requiresReasoning=false for direct lookups or lists that need one query and
+a short factual response. Set it true for analysis, explanation, diagnosis,
+comparison, recommendations, forecasting, or reports.
+
+Available tenant database schema and financial metric definitions:
+${databaseSchema}
+
+Plan requests using only tables and columns present in this schema. Put the
+required table fields in expectedColumns so the database search agent receives
+clear, executable evidence requirements.`,
       },
       {
         role: 'user',
@@ -152,6 +209,7 @@ maxRows, and reason.`,
     ) as {
       requiresClarification?: boolean;
       clarificationQuestion?: string;
+      requiresReasoning?: boolean;
       requests?: FinancialDataRequest[];
     };
     if (parsed.requiresClarification) {
@@ -163,9 +221,15 @@ maxRows, and reason.`,
       };
     }
     if (parsed.requests?.length) {
-      return { requests: parsed.requests.slice(0, 10) };
+      return {
+        requests: parsed.requests.slice(0, 10),
+        requiresReasoning: parsed.requiresReasoning !== false,
+      };
     }
-  } catch {
+  } catch (error) {
+    aiTraceWarn(state, 'financial.data_plan_fallback', {
+      error: errorSummary(error),
+    });
     // Use one dynamic request as a resilient fallback.
   }
   return {
@@ -257,6 +321,8 @@ Rules:
 - Do not invent recommendations, dates, comparisons, or missing figures.
 - Do not output raw SQL, raw routes, placeholder IDs, or internal terminology.
 - Use clean GitHub Markdown: headings, lists, and tables where they improve clarity.
+- For a direct lookup or list, answer immediately and briefly without generic
+  analysis headings, recommendations, or a limitations section.
 - Write formulas as plain Markdown or inline code, not malformed LaTeX delimiters.
 - For recommendations, tie actions to named evidence and amounts.
 - Put empty or failed requests in a short limitations section only when relevant.
@@ -292,7 +358,11 @@ Return JSON only:
     return JSON.parse(
       response.choices[0]?.message?.content || '{}',
     ) as ReasoningDraft;
-  } catch {
+  } catch (error) {
+    aiTraceWarn(state, 'financial.reasoning_parse_fallback', {
+      error: errorSummary(error),
+      evidenceCount: evidence.length,
+    });
     return {
       answer:
         'The financial evidence was retrieved, but the analysis could not be formatted reliably.',

@@ -8,10 +8,12 @@ export function BrandMark({
   withText = true,
   to = "/",
   forceLight = false,
+  large = false,
 }: {
   withText?: boolean;
   to?: string;
   forceLight?: boolean;
+  large?: boolean;
 }) {
   const { theme } = useTheme();
   
@@ -26,7 +28,7 @@ export function BrandMark({
         <img
           src={isDark ? "/logo-light.png" : "/logo-dark.png"}
           alt="Hesbetak.AI Logo"
-          className="h-10 md:h-11 w-auto object-contain transition-transform duration-300 group-hover:scale-102"
+          className={`${large ? "h-14 md:h-16" : "h-10 md:h-11"} w-auto object-contain transition-transform duration-300 group-hover:scale-102`}
         />
       ) : (
         <img

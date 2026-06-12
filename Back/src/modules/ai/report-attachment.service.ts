@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import PDFDocument from 'pdfkit';
 import { DataBaseService } from '../../database/database.service';
@@ -6,6 +10,8 @@ import { TenantContext, TenantService } from '../tenant/tenant.service';
 
 @Injectable()
 export class ReportAttachmentService {
+  private readonly logger = new Logger(ReportAttachmentService.name);
+
   constructor(
     private readonly db: DataBaseService,
     private readonly tenant: TenantService,
@@ -32,6 +38,15 @@ export class ReportAttachmentService {
       title,
       markdown,
     );
+    this.logger.log(
+      `[AI_TRACE] ${JSON.stringify({
+        traceId: sessionId,
+        event: 'report.attachment_saved',
+        reportId: id,
+        title,
+        markdownLength: markdown.length,
+      })}`,
+    );
     return {
       id,
       title,
@@ -42,6 +57,7 @@ export class ReportAttachmentService {
   }
 
   async pdf(ctx: TenantContext, userId: string, reportId: string) {
+    const startedAt = Date.now();
     await this.ensureStore(ctx);
     const schema = this.tenant.quote(ctx.schemaName);
     const rows = await this.db.$queryRawUnsafe<
@@ -53,9 +69,19 @@ export class ReportAttachmentService {
       userId,
     );
     if (!rows[0]) throw new NotFoundException('Report not found');
+    const buffer = await this.render(rows[0].markdown);
+    this.logger.log(
+      `[AI_TRACE] ${JSON.stringify({
+        traceId: reportId,
+        event: 'report.pdf_rendered',
+        reportId,
+        byteLength: buffer.length,
+        elapsedMs: Date.now() - startedAt,
+      })}`,
+    );
     return {
       fileName: `${this.slug(rows[0].title)}.pdf`,
-      buffer: await this.render(rows[0].markdown),
+      buffer,
     };
   }
 

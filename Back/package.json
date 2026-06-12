@@ -12,7 +12,7 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
-    "knowledge:extract": "python knowledge/ingestion/ingest_financial_workbook.py",
+    "knowledge:extract": "python knowledge/ingestion/ingest_financial_workbook.py knowledge/source/part-2-Accounting.pdf",
     "knowledge:ingest": "ts-node -r tsconfig-paths/register src/scripts/ingest-ai-knowledge.ts",
     "knowledge:verify": "ts-node -r tsconfig-paths/register src/scripts/verify-ai-knowledge.ts",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",

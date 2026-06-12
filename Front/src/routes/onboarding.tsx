@@ -459,7 +459,7 @@ function Onboarding() {
   return (
     <div dir={dir} className="min-h-screen bg-gradient-hero">
       <header className="flex items-center justify-between p-4 md:px-8 border-b border-border-default bg-card/75 backdrop-blur-md sticky top-0 z-50">
-        <BrandMark />
+        <BrandMark large />
         <div className="flex items-center gap-2">
           <LangToggle />
           <ThemeToggle />
@@ -615,10 +615,11 @@ function Onboarding() {
                         || (q.key === "multi_currency" && selectedCurrencies.length > 1);
                       return (
                         <div key={q.key} className="flex items-center justify-between gap-3 p-3.5 border border-border-default/60 rounded-xl bg-background/30 shadow-soft">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <Label htmlFor={`coa-${q.key}`} className="text-sm cursor-pointer leading-snug font-medium truncate">
-                              {q.label}
-                            </Label>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <Label htmlFor={`coa-${q.key}`} className="text-sm cursor-pointer leading-snug font-medium">
+                                {q.label}
+                              </Label>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Info className="h-4 w-4 shrink-0 text-on-surface-variant hover:text-primary cursor-help" />
@@ -627,6 +628,8 @@ function Onboarding() {
                                 <p>{q.hint}</p>
                               </TooltipContent>
                             </Tooltip>
+                            </div>
+                            <p className="mt-1 text-xs leading-4 text-on-surface-variant">{q.hint}</p>
                           </div>
                           <Switch
                             id={`coa-${q.key}`}

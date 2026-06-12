@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   Injectable,
-  Logger,
 } from '@nestjs/common';
 import Groq from 'groq-sdk';
 import { DatabaseCatalogService } from '../../database-catalog/database-catalog.service';
@@ -12,16 +11,24 @@ import {
 } from '../contracts';
 import { LLM_MODELS } from '../config/llm.config';
 import { StateType } from '../state/graph-state';
+import {
+  aiTrace,
+  aiTraceWarn,
+  errorSummary,
+  summarizeText,
+} from '../trace';
 import { qualifyTenantTables, TENANT_SQL_TABLES } from './tenant-sql';
 
 @Injectable()
 export class DatabaseSearchAgentGraph {
-  private readonly logger = new Logger(DatabaseSearchAgentGraph.name);
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly catalog: DatabaseCatalogService,
   ) {}
+
+  schemaPrompt(schemaName: string) {
+    return this.catalog.prompt(schemaName);
+  }
 
   async executeRequests(
     state: StateType,
@@ -29,6 +36,18 @@ export class DatabaseSearchAgentGraph {
     groqClient: Groq,
   ): Promise<QueryEvidence[]> {
     const bounded = requests.slice(0, 10);
+    aiTrace(state, 'database.batch_started', {
+      requestCount: bounded.length,
+      requests: bounded.map((request) => ({
+        requestId: request.requestId,
+        objective: summarizeText(request.objective, 100),
+        metricCount: request.metrics.length,
+        dimensionCount: request.dimensions.length,
+        filterCount: request.filters.length,
+        dateRange: request.dateRange,
+        maxRows: request.maxRows,
+      })),
+    });
     return Promise.all(
       bounded.map((request) =>
         this.executeRequest(state, request, groqClient),
@@ -60,15 +79,27 @@ export class DatabaseSearchAgentGraph {
     return { queryEvidence, unresolvedIntent: false };
   }
 
-  private async executeRequest(
+ private async executeRequest(
     state: StateType,
     request: FinancialDataRequest,
     groqClient: Groq,
   ): Promise<QueryEvidence> {
     const maxRows = Math.min(Math.max(request.maxRows || 50, 1), 200);
     const startedAt = Date.now();
-    try {
-      const response = await groqClient.chat.completions.create({
+    const MAX_ATTEMPTS = 3;
+    const BASE_DELAY_MS = 500;
+
+    aiTrace(state, 'database.request_started', {
+      requestId: request.requestId,
+      objective: summarizeText(request.objective, 100),
+      maxRows,
+    });
+
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const response = await groqClient.chat.completions.create({
           model: LLM_MODELS.DATABASE_SEARCH_AGENT,
           messages: [
             {
@@ -97,62 +128,119 @@ ${this.catalog.prompt(state.orgSlug)}`,
           temperature: 0,
           max_tokens: 1400,
         });
-      const rawSql = this.extractSql(
-        response.choices[0]?.message?.content ?? '',
-      );
-      const sql = qualifyTenantTables(rawSql, state.orgSlug);
-      this.validateSql(sql, state.orgSlug);
-      const boundedSql = `WITH ai_evidence AS (${sql})
+
+        const rawSql = this.extractSql(
+          response.choices[0]?.message?.content ?? '',
+        );
+        const sql = qualifyTenantTables(rawSql, state.orgSlug);
+        this.validateSql(sql, state.orgSlug);
+
+        const boundedSql = `WITH ai_evidence AS (${sql})
 SELECT * FROM ai_evidence LIMIT ${maxRows + 1}`;
-      const rows = await this.prisma.$transaction(
-        async (tx) => {
-          await tx.$executeRawUnsafe('SET TRANSACTION READ ONLY');
-          await tx.$executeRawUnsafe(
-            `SET LOCAL statement_timeout = '5000ms'`,
-          );
-          return tx.$queryRawUnsafe<Record<string, unknown>[]>(boundedSql);
-        },
-        { maxWait: 5_000, timeout: 7_000 },
-      );
-      const normalized = this.normalizeRows(rows).slice(0, maxRows);
-      return {
-        requestId: request.requestId,
-        objective: request.objective,
-        dateRange: request.dateRange,
-        status: normalized.length ? 'success' : 'empty',
-        sql,
-        columns: normalized[0] ? Object.keys(normalized[0]) : [],
-        rows: normalized,
-        rowCount: normalized.length,
-        truncation: {
-          applied: rows.length > maxRows,
-          limit: maxRows,
-        },
-        assumptions: this.periodAssumptions(request),
-        warnings:
-          rows.length > maxRows
-            ? [`Result was truncated to ${maxRows} rows.`]
-            : [],
-        executionMs: Date.now() - startedAt,
-      };
-    } catch (error) {
-      const rejected = error instanceof BadRequestException;
-      this.logger.warn(
-        `Database evidence ${request.requestId} ${rejected ? 'rejected' : 'failed'}: ${String(error)}`,
-      );
-      return {
-        requestId: request.requestId,
-        objective: request.objective,
-        dateRange: request.dateRange,
-        status: rejected ? 'rejected' : 'error',
-        columns: [],
-        rows: [],
-        rowCount: 0,
-        assumptions: this.periodAssumptions(request),
-        warnings: [error instanceof Error ? error.message : String(error)],
-        executionMs: Date.now() - startedAt,
-      };
+
+        const rows = await this.prisma.$transaction(
+          async (tx) => {
+            await tx.$executeRawUnsafe('SET TRANSACTION READ ONLY');
+            await tx.$executeRawUnsafe(`SET LOCAL statement_timeout = '5000ms'`);
+            return tx.$queryRawUnsafe<Record<string, unknown>[]>(boundedSql);
+          },
+          { maxWait: 5_000, timeout: 7_000 },
+        );
+
+        const normalized = this.normalizeRows(rows).slice(0, maxRows);
+
+        aiTrace(state, 'database.request_completed', {
+          requestId: request.requestId,
+          status: normalized.length ? 'success' : 'empty',
+          rowCount: normalized.length,
+          columns: normalized[0] ? Object.keys(normalized[0]) : [],
+          truncated: rows.length > maxRows,
+          executionMs: Date.now() - startedAt,
+          attempt,
+        });
+
+        return {
+          requestId: request.requestId,
+          objective: request.objective,
+          dateRange: request.dateRange,
+          status: normalized.length ? 'success' : 'empty',
+          sql,
+          columns: normalized[0] ? Object.keys(normalized[0]) : [],
+          rows: normalized,
+          rowCount: normalized.length,
+          truncation: {
+            applied: rows.length > maxRows,
+            limit: maxRows,
+          },
+          assumptions: this.periodAssumptions(request),
+          warnings:
+            rows.length > maxRows
+              ? [`Result was truncated to ${maxRows} rows.`]
+              : [],
+          executionMs: Date.now() - startedAt,
+        };
+      } catch (error) {
+        // Validation rejections are deterministic — retrying won't help.
+        if (error instanceof BadRequestException) {
+          aiTraceWarn(state, 'database.request_failed', {
+            requestId: request.requestId,
+            status: 'rejected',
+            error: errorSummary(error),
+            executionMs: Date.now() - startedAt,
+            attempt,
+          });
+          return {
+            requestId: request.requestId,
+            objective: request.objective,
+            dateRange: request.dateRange,
+            status: 'rejected',
+            columns: [],
+            rows: [],
+            rowCount: 0,
+            assumptions: this.periodAssumptions(request),
+            warnings: [error.message],
+            executionMs: Date.now() - startedAt,
+          };
+        }
+
+        lastError = error;
+
+        if (attempt < MAX_ATTEMPTS) {
+          const delayMs = BASE_DELAY_MS * 2 ** (attempt - 1); // 500ms, 1000ms
+          aiTraceWarn(state, 'database.request_retrying', {
+            requestId: request.requestId,
+            attempt,
+            nextAttemptIn: delayMs,
+            error: errorSummary(error),
+          });
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+      }
     }
+
+    // All attempts exhausted.
+    aiTraceWarn(state, 'database.request_failed', {
+      requestId: request.requestId,
+      status: 'error',
+      error: errorSummary(lastError),
+      executionMs: Date.now() - startedAt,
+      attempt: MAX_ATTEMPTS,
+    });
+
+    return {
+      requestId: request.requestId,
+      objective: request.objective,
+      dateRange: request.dateRange,
+      status: 'error',
+      columns: [],
+      rows: [],
+      rowCount: 0,
+      assumptions: this.periodAssumptions(request),
+      warnings: [
+        lastError instanceof Error ? lastError.message : String(lastError),
+      ],
+      executionMs: Date.now() - startedAt,
+    };
   }
 
   private extractSql(value: string) {

@@ -32,7 +32,10 @@ export class KnowledgeService {
     private readonly embeddings: EmbeddingProviderService,
   ) {}
 
-  async upsert(chunks: KnowledgeChunkInput[]) {
+  async upsert(
+    chunks: KnowledgeChunkInput[],
+    options?: { replaceCorpus?: KnowledgeCorpus },
+  ) {
     await this.ensureStore();
     const valid = chunks.filter((chunk) => chunk.content.trim()).slice(0, 5000);
     const vectors = await this.embeddings.embedMany(
@@ -40,6 +43,17 @@ export class KnowledgeService {
     );
     await this.prisma.$transaction(
       async (tx) => {
+        if (options?.replaceCorpus) {
+          if (valid.some((chunk) => chunk.corpus !== options.replaceCorpus)) {
+            throw new BadRequestException(
+              'All replacement chunks must belong to the replaced corpus.',
+            );
+          }
+          await tx.$executeRawUnsafe(
+            'DELETE FROM public.ai_knowledge_chunks WHERE corpus = $1',
+            options.replaceCorpus,
+          );
+        }
         for (let index = 0; index < valid.length; index += 1) {
           const chunk = valid[index];
           const hash = createHash('sha256')
@@ -143,6 +157,27 @@ export class KnowledgeService {
     return [...best.values()]
       .sort((a, b) => Number(b.fused_score) - Number(a.fused_score))
       .slice(0, limit);
+  }
+
+  async getByChunkIds(
+    corpus: KnowledgeCorpus,
+    chunkIds: string[],
+  ): Promise<KnowledgeChunkResult[]> {
+    await this.ensureStore();
+    const uniqueIds = [...new Set(chunkIds.map((id) => id.trim()))].filter(Boolean);
+    if (!uniqueIds.length) return [];
+
+    return this.prisma.$queryRawUnsafe<KnowledgeChunkResult[]>(
+      `SELECT id, corpus, document_id, chunk_id, content, metadata,
+         NULL::bigint AS vector_rank,
+         NULL::bigint AS lexical_rank,
+         1.0::double precision AS fused_score
+       FROM public.ai_knowledge_chunks
+       WHERE corpus = $1 AND chunk_id = ANY($2::text[])
+       ORDER BY array_position($2::text[], chunk_id)`,
+      corpus,
+      uniqueIds,
+    );
   }
 
   async listCorpus(
