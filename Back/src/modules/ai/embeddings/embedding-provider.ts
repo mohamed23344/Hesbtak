@@ -9,11 +9,18 @@ export interface EmbeddingProvider {
 
 @Injectable()
 export class EmbeddingProviderService implements EmbeddingProvider {
-  private readonly dimensions = 1024;
+  readonly dimensions: number;
   private readonly provider: string;
   private readonly hfClient?: InferenceClient;
 
   constructor(private readonly config: ConfigService) {
+    this.dimensions = Math.min(
+      Math.max(
+        Number(this.config.get<string>('AI_EMBEDDING_DIMENSIONS')) || 2000,
+        128,
+      ),
+      2000,
+    );
     this.provider =
       this.config.get<string>('AI_EMBEDDING_PROVIDER') ?? 'mock';
     const token = this.config.get<string>('HF_TOKEN');
@@ -26,6 +33,9 @@ export class EmbeddingProviderService implements EmbeddingProvider {
     if (this.provider === 'mock') {
       return texts.map((text) => this.deterministicVector(text));
     }
+    if (this.provider === 'tei') {
+      return this.embedWithTei(texts);
+    }
     if (!this.hfClient) {
       throw new ServiceUnavailableException(
         'HF_TOKEN is required when AI_EMBEDDING_PROVIDER=huggingface',
@@ -33,17 +43,23 @@ export class EmbeddingProviderService implements EmbeddingProvider {
     }
 
     try {
-      const embeddings = await Promise.all(
-        texts.map(async (text) => {
-          const vector = await this.hfClient!.featureExtraction({
+      const embeddings: number[][] = [];
+      for (let offset = 0; offset < texts.length; offset += 16) {
+        const batch = texts.slice(offset, offset + 16);
+        const output = await this.hfClient.featureExtraction({
             model:
-              this.config.get<string>('HF_EMBEDDING_MODEL') ?? 'BAAI/bge-m3',
+              this.config.get<string>('HF_EMBEDDING_MODEL') ??
+              'Qwen/Qwen3-Embedding-8B',
             provider: 'hf-inference',
-            inputs: text,
-          });
-          return Array.from(vector as number[]);
-        }),
-      );
+            inputs: batch,
+          }) as unknown;
+        const raw = output as number[] | number[][];
+        const vectors =
+          Array.isArray(raw[0]) ? (raw as number[][]) : [raw as number[]];
+        embeddings.push(
+          ...vectors.map((vector) => this.normalizeVector(Array.from(vector))),
+        );
+      }
       this.assertVectors(embeddings, texts.length);
       return embeddings;
     } catch (error) {
@@ -65,6 +81,50 @@ export class EmbeddingProviderService implements EmbeddingProvider {
       vector.reduce((sum, value) => sum + value * value, 0),
     );
     return norm ? vector.map((value) => value / norm) : vector;
+  }
+
+  private async embedWithTei(texts: string[]) {
+    const baseUrl = this.config
+      .get<string>('AI_EMBEDDING_BASE_URL')
+      ?.replace(/\/+$/, '');
+    if (!baseUrl) {
+      throw new ServiceUnavailableException(
+        'AI_EMBEDDING_BASE_URL is required when AI_EMBEDDING_PROVIDER=tei',
+      );
+    }
+    const token =
+      this.config.get<string>('AI_EMBEDDING_API_KEY') ||
+      this.config.get<string>('HF_TOKEN');
+    const response = await fetch(`${baseUrl}/embed`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        inputs: texts,
+        truncate: true,
+        normalize: true,
+      }),
+    });
+    if (!response.ok) {
+      throw new ServiceUnavailableException(
+        `TEI embedding request failed with status ${response.status}`,
+      );
+    }
+    const output = (await response.json()) as number[][];
+    const vectors = output.map((vector) => this.normalizeVector(vector));
+    this.assertVectors(vectors, texts.length);
+    return vectors;
+  }
+
+  private normalizeVector(vector: number[]) {
+    const selected = vector.slice(0, this.dimensions);
+    if (selected.length !== this.dimensions) return selected;
+    const norm = Math.sqrt(
+      selected.reduce((sum, value) => sum + value * value, 0),
+    );
+    return norm ? selected.map((value) => value / norm) : selected;
   }
 
   private assertVectors(vectors: number[][], expectedCount: number) {

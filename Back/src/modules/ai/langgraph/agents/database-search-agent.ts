@@ -1,493 +1,317 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
-import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
-import { PrismaService } from '../../prisma/prisma.service';
-import { StateType } from '../state/graph-state';
-import { LLM_MODELS } from '../config/llm.config';
+import {
+  BadRequestException,
+  Injectable,
+} from '@nestjs/common';
 import Groq from 'groq-sdk';
+import { DatabaseCatalogService } from '../../database-catalog/database-catalog.service';
+import { PrismaService } from '../../prisma/prisma.service';
+import {
+  FinancialDataRequest,
+  QueryEvidence,
+} from '../contracts';
+import { LLM_MODELS } from '../config/llm.config';
+import { StateType } from '../state/graph-state';
+import {
+  aiTrace,
+  aiTraceWarn,
+  errorSummary,
+  summarizeText,
+} from '../trace';
 import { qualifyTenantTables, TENANT_SQL_TABLES } from './tenant-sql';
-import { buildFinancialSnapshotQuery } from './financial-snapshot-query';
-
-const SqlAgentState = Annotation.Root({
-  userQuery: Annotation<string>(),
-  orgSlug: Annotation<string>(),
-
-  availableTables: Annotation<string | undefined>(),
-  schemaInfo: Annotation<string | undefined>(),
-  generatedSql: Annotation<string | undefined>(),
-  checkedSql: Annotation<string | undefined>(),
-  queryResult: Annotation<string | undefined>(),
-
-  agentOutput: Annotation<string | undefined>(),
-  finalResponse: Annotation<string | undefined>(),
-});
 
 @Injectable()
 export class DatabaseSearchAgentGraph {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly catalog: DatabaseCatalogService,
+  ) {}
 
-  private quoteSchema(orgSlug: string): string {
-    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(orgSlug)) {
-      throw new BadRequestException('Invalid org schema');
-    }
-
-    return `"${orgSlug}"`;
+  schemaPrompt(schemaName: string) {
+    return this.catalog.prompt(schemaName);
   }
 
-  private listTables(): string {
-    return TENANT_SQL_TABLES.join(', ');
-  }
-
-  private getSchemaInfo(orgSlug: string): string {
-    const schema = this.quoteSchema(orgSlug);
-
-    return `
-${schema}.invoices(
-  id uuid,
-  invoice_number varchar,
-  customer_id uuid,
-  issue_date date,
-  due_date date,
-  subtotal decimal,
-  tax_amount decimal,
-  total decimal,
-  status varchar,
-  journal_entry_id uuid,
-  created_by uuid,
-  created_at timestamp
-)
-
-${schema}.customers(
-  id uuid,
-  name varchar,
-  email varchar,
-  phone varchar,
-  address text,
-  payment_terms int,
-  currency varchar,
-  is_active boolean,
-  created_at timestamp,
-  created_by uuid
-)
-
-${schema}.vendors(
-  id uuid,
-  name varchar,
-  email varchar,
-  phone varchar,
-  address text,
-  payment_terms int,
-  is_active boolean,
-  created_at timestamp,
-  created_by uuid
-)
-
-${schema}.vendor_bills(
-  id uuid,
-  bill_number varchar,
-  vendor_id uuid,
-  issue_date date,
-  due_date date,
-  subtotal decimal,
-  tax_amount decimal,
-  total decimal,
-  status varchar,
-  journal_entry_id uuid,
-  created_by uuid,
-  created_at timestamp
-)
-
-${schema}.customer_payments(
-  id uuid,
-  customer_id uuid,
-  invoice_id uuid,
-  amount decimal,
-  payment_method varchar,
-  bank_account_id uuid,
-  payment_date date,
-  reference varchar,
-  journal_entry_id uuid,
-  notes text,
-  created_by uuid,
-  created_at timestamp
-)
-
-${schema}.vendor_payments(
-  id uuid,
-  vendor_bill_id uuid,
-  vendor_id uuid,
-  amount decimal,
-  payment_method varchar,
-  bank_account_id uuid,
-  payment_date date,
-  reference varchar,
-  journal_entry_id uuid,
-  notes text,
-  created_by uuid,
-  created_at timestamp
-)
-
-${schema}.accounts(
-  id uuid,
-  parent_id uuid,
-  code varchar,
-  name varchar,
-  type varchar,
-  is_leaf boolean,
-  level int,
-  is_active boolean,
-  created_at timestamp
-)
-
-${schema}.journal_entries(
-  id uuid,
-  date date,
-  description text,
-  status varchar,
-  reference_type varchar,
-  reference_id uuid,
-  created_by uuid,
-  created_at timestamp
-)
-
-${schema}.journal_lines(
-  id uuid,
-  journal_entry_id uuid,
-  account_id uuid,
-  debit decimal,
-  credit decimal,
-  description text
-)
-
-${schema}.bank_accounts(
-  id uuid,
-  name varchar,
-  account_number varchar,
-  bank_name varchar,
-  currency varchar,
-  gl_account_id uuid,
-  is_active boolean,
-  created_at timestamp
-)
-
-${schema}.forecasts(
-  id uuid,
-  forecast_month date,
-  predicted_revenue decimal,
-  predicted_expense decimal,
-  predicted_cashflow decimal,
-  model_version varchar,
-  confidence_low decimal,
-  confidence_high decimal,
-  created_at timestamp
-)
-
-${schema}.alerts(
-  id uuid,
-  type varchar,
-  severity varchar,
-  title varchar,
-  message text,
-  entity_type varchar,
-  entity_id uuid,
-  is_read boolean,
-  created_at timestamp
-)
-`;
-  }
-
-  private async callGroq(
+  async executeRequests(
+    state: StateType,
+    requests: FinancialDataRequest[],
     groqClient: Groq,
-    systemPrompt: string,
-    userPrompt: string,
-    maxTokens = 700,
-  ): Promise<string> {
-    const response = await groqClient.chat.completions.create({
-      model: LLM_MODELS.CHATTING_AGENT,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0,
-      max_tokens: maxTokens,
+  ): Promise<QueryEvidence[]> {
+    const bounded = requests.slice(0, 10);
+    aiTrace(state, 'database.batch_started', {
+      requestCount: bounded.length,
+      requests: bounded.map((request) => ({
+        requestId: request.requestId,
+        objective: summarizeText(request.objective, 100),
+        metricCount: request.metrics.length,
+        dimensionCount: request.dimensions.length,
+        filterCount: request.filters.length,
+        dateRange: request.dateRange,
+        maxRows: request.maxRows,
+      })),
     });
-
-    return response.choices[0]?.message?.content?.trim() ?? '';
-  }
-
-  private extractSql(content: string): string {
-    return content
-      .replace(/```sql/gi, '')
-      .replace(/```/g, '')
-      .trim();
-  }
-
-  private validateSql(sql: string, schemaName?: string): void {
-    const normalized = sql.trim().toLowerCase();
-
-    if (!normalized.startsWith('select')) {
-      throw new BadRequestException('Only SELECT queries are allowed.');
-    }
-
-    const blocked = [
-      'insert',
-      'update',
-      'delete',
-      'drop',
-      'alter',
-      'truncate',
-      'create',
-      'grant',
-      'revoke',
-      'copy',
-      'call',
-      'execute',
-    ];
-
-    for (const word of blocked) {
-      if (new RegExp(`\\b${word}\\b`, 'i').test(sql)) {
-        throw new BadRequestException(`Unsafe SQL keyword: ${word}`);
-      }
-    }
-
-    const statements = sql.split(';').filter((s) => s.trim().length > 0);
-
-    if (statements.length > 1) {
-      throw new BadRequestException('Multiple SQL statements are not allowed.');
-    }
-    if (schemaName) {
-      const referencedSchemas = Array.from(
-        sql.matchAll(
-          /\b(?:FROM|JOIN)\s+(?:"([a-zA-Z_][a-zA-Z0-9_]*)"|([a-zA-Z_][a-zA-Z0-9_]*))\s*\./gi,
-        ),
-        (match) => match[1] ?? match[2],
-      );
-      if (referencedSchemas.some((schema) => schema !== schemaName)) {
-        throw new BadRequestException('Cross-tenant SQL is not allowed.');
-      }
-    }
-  }
-
-  build(groqClient: Groq) {
-    const listTables = async () => {
-      return {
-        availableTables: this.listTables(),
-      };
-    };
-
-    const callGetSchema = async (state: typeof SqlAgentState.State) => {
-      return {
-        schemaInfo: this.getSchemaInfo(state.orgSlug),
-      };
-    };
-
-    const getSchema = async (state: typeof SqlAgentState.State) => {
-      return {
-        schemaInfo: state.schemaInfo,
-      };
-    };
-
-    const generateQuery = async (state: typeof SqlAgentState.State) => {
-      if (state.queryResult) {
-        const answer = await this.callGroq(
-          groqClient,
-          `
-You are a financial database assistant.
-
-Answer the user's question using only the SQL result.
-Do not invent data.
-Be concise.
-`,
-          `
-User question:
-${state.userQuery}
-
-SQL used:
-${state.checkedSql}
-
-SQL result:
-${state.queryResult}
-`,
-          400,
-        );
-
-        return {
-          agentOutput: answer,
-          finalResponse: answer,
-        };
-      }
-
-      const financialSnapshotQuery = buildFinancialSnapshotQuery(
-        state.userQuery,
-        state.orgSlug,
-      );
-      if (financialSnapshotQuery) {
-        return { generatedSql: financialSnapshotQuery };
-      }
-
-      const sql = await this.callGroq(
-        groqClient,
-        `
-You are a PostgreSQL expert for an accounting SaaS.
-
-Generate ONE safe PostgreSQL SELECT query only.
-
-Rules:
-- Return SQL only.
-- No markdown.
-- No explanation.
-- Only SELECT queries are allowed.
-- Do not use INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, CREATE.
-- Use schema-qualified table names exactly as provided.
-- Never select all columns.
-- For non-aggregate queries, add LIMIT 10.
-- For revenue, use invoices.total and issue_date.
-- For cash inflow, use customer_payments.amount and payment_date.
-- For cash outflow, use vendor_payments.amount and payment_date.
-- Account types are case-sensitive and stored as 'Asset', 'Liability', 'Equity', 'Revenue', and 'Expense'.
-- For expenses, use journal_lines joined with accounts where accounts.type = 'Expense'.
-- For revenue, use accounts.type = 'Revenue' when reading the ledger.
-- Account balance is SUM(debit - credit).
-
-Available tables:
-${state.availableTables}
-
-Schema:
-${state.schemaInfo}
-`,
-        `
-User question:
-${state.userQuery}
-`,
-      );
-
-      return {
-        generatedSql: this.extractSql(sql),
-      };
-    };
-
-    const checkQuery = async (state: typeof SqlAgentState.State) => {
-      const financialSnapshotQuery = buildFinancialSnapshotQuery(
-        state.userQuery,
-        state.orgSlug,
-      );
-      if (financialSnapshotQuery) {
-        this.validateSql(financialSnapshotQuery, state.orgSlug);
-        return { checkedSql: financialSnapshotQuery };
-      }
-
-      const checkedSql = await this.callGroq(
-        groqClient,
-        `
-You are a PostgreSQL query checker.
-
-Check the SQL for:
-- unsafe statements
-- missing schema qualification
-- wrong joins
-- missing LIMIT for non-aggregate queries
-- incorrect accounting logic
-- invalid PostgreSQL syntax
-
-Required tenant schema:
-${this.quoteSchema(state.orgSlug)}
-
-Every accounting table after FROM or JOIN must use that exact tenant schema.
-For example: FROM ${this.quoteSchema(state.orgSlug)}."vendors"
-
-If it is correct, return the same SQL.
-If it is wrong, return the corrected SQL.
-
-Return SQL only.
-No markdown.
-No explanation.
-`,
-        `
-User question:
-${state.userQuery}
-
-SQL:
-${state.generatedSql}
-`,
-      );
-
-      const sql = qualifyTenantTables(
-        this.extractSql(checkedSql),
-        state.orgSlug,
-      );
-      this.validateSql(sql, state.orgSlug);
-
-      return {
-        checkedSql: sql,
-      };
-    };
-
-    const runQuery = async (state: typeof SqlAgentState.State) => {
-      const sql = state.checkedSql;
-
-      if (!sql) {
-        throw new BadRequestException('No SQL query to execute.');
-      }
-
-      this.validateSql(sql, state.orgSlug);
-
-      try {
-        console.log('sql running --------------------------------------- ' + sql)
-        const rows = await this.prisma.$queryRawUnsafe(sql);
-        console.log("rows ---------------------"  + rows)
-
-        return {
-          queryResult: JSON.stringify(rows, null, 2),
-        };
-      } catch (error: any) {
-        return {
-          queryResult: `SQL_ERROR: ${error.message}`,
-        };
-      }
-    };
-
-    const shouldContinue = (state: typeof SqlAgentState.State) => {
-      if (state.finalResponse) {
-        return END;
-      }
-
-      return 'check_query';
-    };
-
-    return new StateGraph(SqlAgentState)
-      .addNode('list_tables', listTables)
-      .addNode('call_get_schema', callGetSchema)
-      .addNode('get_schema', getSchema)
-      .addNode('generate_query', generateQuery)
-      .addNode('check_query', checkQuery)
-      .addNode('run_query', runQuery)
-      .addEdge(START, 'list_tables')
-      .addEdge('list_tables', 'call_get_schema')
-      .addEdge('call_get_schema', 'get_schema')
-      .addEdge('get_schema', 'generate_query')
-      .addConditionalEdges('generate_query', shouldContinue, {
-        check_query: 'check_query',
-        [END]: END,
-      })
-      .addEdge('check_query', 'run_query')
-      .addEdge('run_query', 'generate_query')
-      .compile();
+    return Promise.all(
+      bounded.map((request) =>
+        this.executeRequest(state, request, groqClient),
+      ),
+    );
   }
 
   async invoke(
     state: StateType,
     groqClient: Groq,
   ): Promise<Partial<StateType>> {
-    const graph = this.build(groqClient);
+    const request: FinancialDataRequest = {
+      requestId: 'FIN-1',
+      objective: state.userQuery,
+      businessQuestion: state.userQuery,
+      metrics: [],
+      dimensions: [],
+      filters: [],
+      expectedColumns: [],
+      preferredGranularity: 'summary',
+      maxRows: 50,
+      reason: 'Answer the user request with verified organization data.',
+    };
+    const queryEvidence = await this.executeRequests(
+      state,
+      [request],
+      groqClient,
+    );
+    return { queryEvidence, unresolvedIntent: false };
+  }
 
-    const result = await graph.invoke({
-      userQuery: state.userQuery,
-      orgSlug: state.orgSlug,
+ private async executeRequest(
+    state: StateType,
+    request: FinancialDataRequest,
+    groqClient: Groq,
+  ): Promise<QueryEvidence> {
+    const maxRows = Math.min(Math.max(request.maxRows || 50, 1), 200);
+    const startedAt = Date.now();
+    const MAX_ATTEMPTS = 3;
+    const BASE_DELAY_MS = 500;
+
+    aiTrace(state, 'database.request_started', {
+      requestId: request.requestId,
+      objective: summarizeText(request.objective, 100),
+      maxRows,
+    });
+
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const response = await groqClient.chat.completions.create({
+          model: LLM_MODELS.DATABASE_SEARCH_AGENT,
+          messages: [
+            {
+              role: 'system',
+              content: `You generate one PostgreSQL read-only query for an accounting SaaS.
+Return SQL only, without Markdown or explanation.
+Use SELECT or WITH ... SELECT only.
+Never use SELECT *.
+Never use DDL, DML, COPY, CALL, system catalogs, or cross-schema access.
+Use explicit aliases and column names.
+Use the supplied metric definitions.
+Honor the request dateRange exactly. Never include records after the current
+as-of date ${new Date().toISOString().slice(0, 10)}.
+Aggregate queries must return COALESCE values so a valid zero is distinguishable
+from missing evidence.
+For detail queries include LIMIT ${maxRows}.
+For aggregate queries, limit grouped output to ${maxRows}.
+
+${this.catalog.prompt(state.orgSlug)}`,
+            },
+            {
+              role: 'user',
+              content: JSON.stringify(request),
+            },
+          ],
+          temperature: 0,
+          max_tokens: 1400,
+        });
+
+        const rawSql = this.extractSql(
+          response.choices[0]?.message?.content ?? '',
+        );
+        const sql = qualifyTenantTables(rawSql, state.orgSlug);
+        this.validateSql(sql, state.orgSlug);
+
+        const boundedSql = `WITH ai_evidence AS (${sql})
+SELECT * FROM ai_evidence LIMIT ${maxRows + 1}`;
+
+        const rows = await this.prisma.$transaction(
+          async (tx) => {
+            await tx.$executeRawUnsafe('SET TRANSACTION READ ONLY');
+            await tx.$executeRawUnsafe(`SET LOCAL statement_timeout = '5000ms'`);
+            return tx.$queryRawUnsafe<Record<string, unknown>[]>(boundedSql);
+          },
+          { maxWait: 5_000, timeout: 7_000 },
+        );
+
+        const normalized = this.normalizeRows(rows).slice(0, maxRows);
+
+        aiTrace(state, 'database.request_completed', {
+          requestId: request.requestId,
+          status: normalized.length ? 'success' : 'empty',
+          rowCount: normalized.length,
+          columns: normalized[0] ? Object.keys(normalized[0]) : [],
+          truncated: rows.length > maxRows,
+          executionMs: Date.now() - startedAt,
+          attempt,
+        });
+
+        return {
+          requestId: request.requestId,
+          objective: request.objective,
+          dateRange: request.dateRange,
+          status: normalized.length ? 'success' : 'empty',
+          sql,
+          columns: normalized[0] ? Object.keys(normalized[0]) : [],
+          rows: normalized,
+          rowCount: normalized.length,
+          truncation: {
+            applied: rows.length > maxRows,
+            limit: maxRows,
+          },
+          assumptions: this.periodAssumptions(request),
+          warnings:
+            rows.length > maxRows
+              ? [`Result was truncated to ${maxRows} rows.`]
+              : [],
+          executionMs: Date.now() - startedAt,
+        };
+      } catch (error) {
+        // Validation rejections are deterministic — retrying won't help.
+        if (error instanceof BadRequestException) {
+          aiTraceWarn(state, 'database.request_failed', {
+            requestId: request.requestId,
+            status: 'rejected',
+            error: errorSummary(error),
+            executionMs: Date.now() - startedAt,
+            attempt,
+          });
+          return {
+            requestId: request.requestId,
+            objective: request.objective,
+            dateRange: request.dateRange,
+            status: 'rejected',
+            columns: [],
+            rows: [],
+            rowCount: 0,
+            assumptions: this.periodAssumptions(request),
+            warnings: [error.message],
+            executionMs: Date.now() - startedAt,
+          };
+        }
+
+        lastError = error;
+
+        if (attempt < MAX_ATTEMPTS) {
+          const delayMs = BASE_DELAY_MS * 2 ** (attempt - 1); // 500ms, 1000ms
+          aiTraceWarn(state, 'database.request_retrying', {
+            requestId: request.requestId,
+            attempt,
+            nextAttemptIn: delayMs,
+            error: errorSummary(error),
+          });
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+      }
+    }
+
+    // All attempts exhausted.
+    aiTraceWarn(state, 'database.request_failed', {
+      requestId: request.requestId,
+      status: 'error',
+      error: errorSummary(lastError),
+      executionMs: Date.now() - startedAt,
+      attempt: MAX_ATTEMPTS,
     });
 
     return {
-      agentOutput: result.agentOutput,
-      finalResponse: result.finalResponse,
-      unresolvedIntent: false,
+      requestId: request.requestId,
+      objective: request.objective,
+      dateRange: request.dateRange,
+      status: 'error',
+      columns: [],
+      rows: [],
+      rowCount: 0,
+      assumptions: this.periodAssumptions(request),
+      warnings: [
+        lastError instanceof Error ? lastError.message : String(lastError),
+      ],
+      executionMs: Date.now() - startedAt,
     };
+  }
+
+  private extractSql(value: string) {
+    return value
+      .replace(/```sql/gi, '')
+      .replace(/```/g, '')
+      .trim()
+      .replace(/;+\s*$/, '');
+  }
+
+  private validateSql(sql: string, schemaName: string) {
+    const normalized = sql
+      .replace(/'(?:''|[^'])*'/g, "''")
+      .replace(/--.*$/gm, '')
+      .trim();
+    if (!/^(select|with)\b/i.test(normalized)) {
+      throw new BadRequestException('Only SELECT queries are allowed.');
+    }
+    if (/\bselect\s+\*/i.test(normalized)) {
+      throw new BadRequestException('SELECT * is not allowed.');
+    }
+    if (normalized.includes(';')) {
+      throw new BadRequestException('Multiple SQL statements are not allowed.');
+    }
+    const blocked =
+      /\b(insert|update|delete|merge|drop|alter|truncate|create|grant|revoke|copy|call|execute|do|vacuum|analyze|refresh|set|show)\b/i;
+    if (blocked.test(normalized)) {
+      throw new BadRequestException('Unsafe SQL operation was rejected.');
+    }
+    if (
+      /\b(pg_catalog|information_schema|pg_read_file|pg_ls_dir|dblink|lo_import|lo_export)\b/i.test(
+        normalized,
+      )
+    ) {
+      throw new BadRequestException('System database access is not allowed.');
+    }
+    const references = Array.from(
+      normalized.matchAll(
+        /\b(?:from|join)\s+(?:"([^"]+)"|([a-zA-Z_][\w]*))\s*\.\s*"?(?<table>[a-zA-Z_][\w]*)"?/gi,
+      ),
+    );
+    if (references.length === 0) {
+      throw new BadRequestException('Query must use tenant-qualified tables.');
+    }
+    for (const match of references) {
+      const referencedSchema = match[1] ?? match[2];
+      const table = match.groups?.table?.toLowerCase();
+      if (referencedSchema !== schemaName) {
+        throw new BadRequestException('Cross-tenant SQL is not allowed.');
+      }
+      if (!TENANT_SQL_TABLES.includes(table as never)) {
+        throw new BadRequestException(`Table is not allowed: ${table}`);
+      }
+    }
+  }
+
+  private normalizeRows(rows: Record<string, unknown>[]) {
+    return rows.map((row) =>
+      Object.fromEntries(
+        Object.entries(row).map(([key, value]) => [
+          key,
+          typeof value === 'bigint' ? Number(value) : value,
+        ]),
+      ),
+    );
+  }
+
+  private periodAssumptions(request: FinancialDataRequest) {
+    if (!request.dateRange?.from && !request.dateRange?.to) return [];
+    return [
+      `Requested period: ${request.dateRange.from ?? 'unbounded'} through ${request.dateRange.to ?? 'unbounded'}.`,
+    ];
   }
 }

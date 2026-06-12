@@ -2,7 +2,6 @@ import {
   Body,
   BadRequestException,
   Controller,
-  Delete,
   Get,
   Headers,
   Param,
@@ -18,13 +17,7 @@ import { CurrentUser, JwtUser } from '../../common/auth/current-user.decorator';
 import { JwtAuthGuard } from '../../common/auth/jwt-auth.guard';
 import { TenantService } from '../tenant/tenant.service';
 import { ChatbotService } from './chatbot.service';
-import { IngestSourceDto } from './embeddings/dto/ingest-source.dto';
-import { UpsertEmbeddingsDto } from './embeddings/dto/upsert-embeddings.dto';
-import { EmbeddingsService } from './embeddings/embeddings.service';
 import { RunGraphDto } from './langgraph/dto/run-graph.dto';
-import { RagIndexService } from './rag-index.service';
-import { RetrieveDto } from './retrieval/dto/retrieve.dto';
-import { RetrievalService } from './retrieval/retrieval.service';
 import { ReportAttachmentService } from './report-attachment.service';
 
 class ChatRequestDto {
@@ -66,9 +59,6 @@ export class AiController {
   constructor(
     private readonly tenant: TenantService,
     private readonly chatbot: ChatbotService,
-    private readonly embeddings: EmbeddingsService,
-    private readonly retrieval: RetrievalService,
-    private readonly indexer: RagIndexService,
     private readonly reports: ReportAttachmentService,
   ) {}
 
@@ -138,91 +128,4 @@ export class AiController {
     return new StreamableFile(report.buffer);
   }
 
-  @Post('embeddings/ingest')
-  async ingest(
-    @Headers('x-tenant-id') orgId: string,
-    @CurrentUser() user: JwtUser,
-    @Body() dto: IngestSourceDto,
-  ) {
-    const ctx = await this.tenant.fromOrganizationId(orgId, user.sub, [
-      'owner',
-      'accountant',
-    ]);
-    return this.embeddings.ingestSource(ctx, dto);
-  }
-
-  @Post('embeddings/upsert')
-  async upsert(
-    @Headers('x-tenant-id') orgId: string,
-    @CurrentUser() user: JwtUser,
-    @Body() dto: UpsertEmbeddingsDto,
-  ) {
-    const ctx = await this.tenant.fromOrganizationId(orgId, user.sub, [
-      'owner',
-      'accountant',
-    ]);
-    return this.embeddings.embedAndStore(ctx, dto);
-  }
-
-  @Delete('embeddings/:sourceType/:sourceId')
-  async softDelete(
-    @Headers('x-tenant-id') orgId: string,
-    @CurrentUser() user: JwtUser,
-    @Param('sourceType') sourceType: string,
-    @Param('sourceId') sourceId: string,
-  ) {
-    const ctx = await this.tenant.fromOrganizationId(orgId, user.sub, [
-      'owner',
-      'accountant',
-    ]);
-    return this.embeddings.softDeleteSource(
-      ctx,
-      sourceType,
-      sourceId,
-    );
-  }
-
-  @Post('retrieval')
-  async retrieve(
-    @Headers('x-tenant-id') orgId: string,
-    @CurrentUser() user: JwtUser,
-    @Body() dto: RetrieveDto,
-  ) {
-    const ctx = await this.tenant.fromOrganizationId(
-      orgId,
-      user.sub,
-      undefined,
-      'assistant',
-      'chatbot',
-    );
-    return this.retrieval.retrieve(
-      ctx,
-      dto.query,
-      dto.k,
-      dto.similarityThreshold,
-    );
-  }
-
-  @Get('rag/status')
-  async status(
-    @Headers('x-tenant-id') orgId: string,
-    @CurrentUser() user: JwtUser,
-  ) {
-    return this.indexer.status(
-      await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'assistant', 'chatbot'),
-    );
-  }
-
-  @Post('rag/reindex')
-  async reindex(
-    @Headers('x-tenant-id') orgId: string,
-    @CurrentUser() user: JwtUser,
-  ) {
-    return this.indexer.reindexTenant(
-      await this.tenant.fromOrganizationId(orgId, user.sub, [
-        'owner',
-        'accountant',
-      ]),
-    );
-  }
 }

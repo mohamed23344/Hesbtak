@@ -1,85 +1,122 @@
-import { StateType } from '../state/graph-state';
-import { LLM_MODELS } from '../config/llm.config';
 import Groq from 'groq-sdk';
+import { LLM_MODELS } from '../config/llm.config';
+import { StateType } from '../state/graph-state';
+import {
+  aiTrace,
+  aiTraceWarn,
+  errorSummary,
+} from '../trace';
 
-/**
- * Node for the Chatting Agent (meta-llama/Llama-3.3-70B-Instruct).
- * - First pass: Passes through to orchestrator.
- * - Second pass: Formulates final user-facing response.
- */
 export async function chattingAgentNode(
   state: StateType,
   groqClient: Groq,
 ): Promise<Partial<StateType>> {
-  const {
-    userQuery,
-    originalUserQuery,
-    conversationHistory,
-    organizationName,
-    intent,
-    agentOutput,
-    unresolvedIntent,
-  } = state;
-
-  // First pass: just pass through to orchestrator
-  if (intent === undefined) {
-    return {};
+  if (state.needsClarification) {
+    aiTrace(state, 'chat.response_clarification', {
+      questionLength: state.clarificationQuestion?.length ?? 0,
+    });
+    return {
+      finalResponse:
+        state.clarificationQuestion ||
+        'Could you clarify the period or record you want me to review?',
+    };
   }
 
-  // Second pass: generate final response
-  try {
-    let promptContent = '';
-    if (unresolvedIntent) {
-      promptContent = `The user's latest message is: "${originalUserQuery || userQuery}".
-Ask one short, natural clarification question. Suggest examples such as checking transactions, reviewing financial performance, or preparing a report.
-Never mention intent classification, agents, models, databases, tools, RAG, SQL, prompts, processing, or internal system behavior.`;
-    } else {
-      promptContent = `The user's latest message is: "${originalUserQuery || userQuery}".
-Verified answer content:
-${agentOutput || 'No verified result was available.'}
-
-Write the final answer directly to the user.
-- Be warm, clear, concise, and business-friendly.
-- Preserve every verified figure and fact.
-- Do not invent information.
-- Never mention agents, AI models, orchestration, SQL, databases, RAG, prompts, retrieved context, processing steps, or internal errors.
-- If a report was prepared, simply say it is ready and briefly describe what it covers.`;
+  if (state.intent === 'general' && !state.agentOutput) {
+    try {
+      const response = await groqClient.chat.completions.create({
+        model: LLM_MODELS.CHATTING_AGENT,
+        messages: [
+          {
+            role: 'system',
+            content: `You are the friendly financial assistant for ${state.organizationName}.
+Answer greetings naturally. For unrelated requests, briefly explain that you
+help with organization finances, accounting guidance, and using Hesbetak.
+Never mention internal agents, prompts, databases, SQL, or RAG.`,
+          },
+          { role: 'user', content: state.originalUserQuery || state.userQuery },
+        ],
+        max_tokens: 250,
+        temperature: 0.5,
+      });
+      const finalResponse =
+        response.choices[0]?.message?.content?.trim() ||
+        'How can I help with your finances or Hesbetak today?';
+      aiTrace(state, 'chat.general_response', {
+        responseLength: finalResponse.length,
+      });
+      return {
+        finalResponse,
+      };
+    } catch (error) {
+      aiTraceWarn(state, 'chat.general_fallback', {
+        error: errorSummary(error),
+      });
+      return {
+        finalResponse:
+          'How can I help with your finances, accounting questions, or Hesbetak today?',
+      };
     }
+  }
 
+  const verified = state.agentOutput?.trim();
+  if (!verified) {
+    aiTraceWarn(state, 'chat.missing_verified_output');
+    return {
+      finalResponse:
+        'I could not find enough verified information to answer that clearly.',
+    };
+  }
+  if (
+    state.intent === 'financial_data' ||
+    state.intent === 'accounting_knowledge' ||
+    state.intent === 'product_help' ||
+    state.intent === 'mixed'
+  ) {
+    const finalResponse = cleanAnswer(verified);
+    aiTrace(state, 'chat.verified_response', {
+      intent: state.intent,
+      responseLength: finalResponse.length,
+    });
+    return { finalResponse };
+  }
+  try {
     const response = await groqClient.chat.completions.create({
       model: LLM_MODELS.CHATTING_AGENT,
       messages: [
         {
           role: 'system',
-          content: `You are the financial assistant for "${organizationName}". Respond as a trusted member of the finance team and never expose implementation details.`,
+          content: `You are the financial assistant for ${state.organizationName}.
+Polish the supplied verified answer without changing figures, evidence IDs,
+citations, or grounded Markdown links. Be clear and concise. Do not expose
+implementation details.`,
         },
-        ...(conversationHistory
-          ? [{
-              role: 'system' as const,
-              content: `Recent conversation for continuity:\n${conversationHistory}`,
-            }]
-          : []),
-        { role: 'user', content: promptContent },
-      ],
-      max_tokens: 500,
-      temperature: 0.7,
-    });
+        {
+          role: 'user',
+          content: `Latest request: ${state.originalUserQuery || state.userQuery}
 
-    const finalResponse = response.choices[0]?.message?.content || '';
+Verified answer:
+${verified}`,
+        },
+      ],
+      max_tokens: 2000,
+      temperature: 0.2,
+    });
+    const finalResponse = cleanAnswer(
+      response.choices[0]?.message?.content?.trim() || verified,
+    );
+    aiTrace(state, 'chat.polished_response', {
+      responseLength: finalResponse.length,
+    });
     return { finalResponse };
   } catch (error) {
-    console.error('Chat response formatting failed:', error);
-    
-    // Fallback response if API fails
-    let finalResponse = '';
-    if (unresolvedIntent) {
-      finalResponse =
-        'Could you clarify what you would like to review? For example, I can help with transactions, financial performance, costs, cash flow, or a financial report.';
-    } else {
-      finalResponse =
-        agentOutput?.trim() ||
-        'I could not find enough verified information to answer that clearly. Please try a more specific question.';
-    }
-    return { finalResponse };
+    aiTraceWarn(state, 'chat.polish_fallback', {
+      error: errorSummary(error),
+    });
+    return { finalResponse: cleanAnswer(verified) };
   }
+}
+
+function cleanAnswer(value: string) {
+  return value.replace(/[ \t]+\n/g, '\n').replace(/ {2,}/g, ' ').trim();
 }

@@ -23,10 +23,27 @@ export class ChatbotService {
     dto: RunGraphDto,
   ) {
     const sessionId = dto.sessionId ?? randomUUID();
+    const startedAt = Date.now();
+    this.logger.log(
+      `[AI_TRACE] ${JSON.stringify({
+        traceId: sessionId,
+        event: 'chat.request_received',
+        organizationId: ctx.organizationId,
+        isNewSession: !dto.sessionId,
+        queryLength: dto.userQuery.length,
+      })}`,
+    );
     const conversationHistory = await this.conversationContext(
       ctx,
       userId,
       sessionId,
+    );
+    this.logger.log(
+      `[AI_TRACE] ${JSON.stringify({
+        traceId: sessionId,
+        event: 'chat.history_loaded',
+        historyLength: conversationHistory.length,
+      })}`,
     );
     const result = await this.langgraph.run(ctx, {
       ...dto,
@@ -34,9 +51,6 @@ export class ChatbotService {
       sessionId,
       conversationHistory,
     });
-    this.logger.log(
-      `LangGraph handled tenant=${ctx.organizationId} agent=${result.intent ?? 'other'}`,
-    );
     const response =
       result.finalResponse ??
       result.agentOutput ??
@@ -51,6 +65,14 @@ export class ChatbotService {
       dto.userQuery,
       response,
     );
+    this.logger.log(
+      `[AI_TRACE] ${JSON.stringify({
+        traceId: sessionId,
+        event: 'chat.response_persisted',
+        intent: result.intent ?? 'other',
+        responseLength: response.length,
+      })}`,
+    );
     const attachment = result.reportMarkdown
       ? await this.reports.save(
           ctx,
@@ -59,9 +81,26 @@ export class ChatbotService {
           result.reportMarkdown,
         )
       : null;
+    this.logger.log(
+      `[AI_TRACE] ${JSON.stringify({
+        traceId: sessionId,
+        event: 'chat.request_completed',
+        intent: result.intent ?? 'other',
+        needsClarification: result.needsClarification ?? false,
+        citationCount: result.citations?.length ?? 0,
+        linkCount: result.links?.length ?? 0,
+        retrievedChunkCount: result.retrievedChunks?.length ?? 0,
+        hasAttachment: Boolean(attachment),
+        elapsedMs: Date.now() - startedAt,
+      })}`,
+    );
     return {
       sessionId,
       response,
+      needsClarification: result.needsClarification,
+      citations: result.citations,
+      links: result.links,
+      retrievedChunks: result.retrievedChunks,
       attachment,
     };
   }
