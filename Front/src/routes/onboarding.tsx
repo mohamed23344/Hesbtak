@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, type ElementType, type ReactNode } from "react";
 import {
   Building2, Briefcase, Coins, Wallet, ArrowRight, ArrowLeft,
   Check, Info, ChevronRight, Folder, FileText, Plus, Trash2
@@ -20,19 +20,179 @@ import { api, getSession, updateSession } from "@/lib/api";
 
 export const Route = createFileRoute("/onboarding")({ component: Onboarding });
 
-const INDUSTRIES = [
-  "Retail", "Restaurant", "Consulting", "E-commerce", "Manufacturing",
-  "Healthcare", "Real Estate", "Tech / SaaS",
-];
+type IndustryCategory = "Commercial" | "Industrial" | "Services" | "Others";
+type COAOption = COANode & { depth: number };
+type COAAddition = COANode & { parentId: string };
+
+const INDUSTRY_GROUPS: Record<IndustryCategory, string[]> = {
+  Commercial: ["Retail", "E-commerce", "Wholesale", "Distribution", "Restaurant / Food & Beverage", "Import / Export"],
+  Industrial: ["Manufacturing", "Construction / Contracting", "Agriculture", "Energy", "Workshop / Fabrication", "Mining"],
+  Services: ["Professional Services", "Tech / SaaS", "Healthcare", "Education / Training", "Logistics / Transportation", "Real Estate", "Hospitality"],
+  Others: [],
+};
+
 const CURRENCIES = [
   { code: "USD", name: "US Dollar", symbol: "$" },
-  { code: "EUR", name: "Euro", symbol: "€" },
-  { code: "EGP", name: "Egyptian Pound", symbol: "ج.م" },
-  { code: "SAR", name: "Saudi Riyal", symbol: "ر.س" },
-  { code: "AED", name: "UAE Dirham", symbol: "د.إ" },
+  { code: "EUR", name: "Euro", symbol: "EUR" },
+  { code: "EGP", name: "Egyptian Pound", symbol: "EGP" },
+  { code: "SAR", name: "Saudi Riyal", symbol: "SAR" },
+  { code: "AED", name: "UAE Dirham", symbol: "AED" },
+  { code: "GBP", name: "British Pound", symbol: "GBP" },
+  { code: "KWD", name: "Kuwaiti Dinar", symbol: "KWD" },
 ];
 
-type COAOption = COANode & { depth: number };
+const TEAM_SIZES = ["1-5", "6-20", "21-50", "51-200", "200+"];
+
+const COA_QUESTIONS: Array<{
+  key: string;
+  label: string;
+  hint: string;
+  defaultOn?: boolean;
+  additions: COAAddition[];
+}> = [
+  {
+    key: "physical_products",
+    label: "Do you buy, stock, or sell physical products?",
+    hint: "Adds inventory, stock adjustments, freight, and cost of goods sold accounts.",
+    additions: [
+      { parentId: "1", id: "15", code: "1500", name: "Inventory", type: "Asset", children: [
+        { id: "151", code: "1510", name: "Merchandise Inventory", type: "Asset" },
+        { id: "152", code: "1520", name: "Inventory in Transit", type: "Asset" },
+      ] },
+      { parentId: "51", id: "515", code: "5150", name: "Cost of Goods Sold", type: "Expense" },
+      { parentId: "51", id: "516", code: "5160", name: "Freight and Customs", type: "Expense" },
+      { parentId: "51", id: "517", code: "5170", name: "Inventory Shrinkage", type: "Expense" },
+    ],
+  },
+  {
+    key: "manufacturing",
+    label: "Do you manufacture or assemble products?",
+    hint: "Adds raw materials, work in progress, finished goods, and factory overhead.",
+    additions: [
+      { parentId: "1", id: "15", code: "1500", name: "Inventory", type: "Asset", children: [
+        { id: "151", code: "1510", name: "Merchandise Inventory", type: "Asset" },
+        { id: "152", code: "1520", name: "Inventory in Transit", type: "Asset" },
+      ] },
+      { parentId: "15", id: "153", code: "1530", name: "Raw Materials", type: "Asset" },
+      { parentId: "15", id: "154", code: "1540", name: "Work in Progress", type: "Asset" },
+      { parentId: "15", id: "155", code: "1550", name: "Finished Goods", type: "Asset" },
+      { parentId: "51", id: "518", code: "5180", name: "Factory Overhead", type: "Expense" },
+      { parentId: "51", id: "519", code: "5190", name: "Production Supplies", type: "Expense" },
+    ],
+  },
+  {
+    key: "projects",
+    label: "Do you run jobs, contracts, or long projects?",
+    hint: "Adds project revenue, project costs, customer advances, and work in progress tracking.",
+    additions: [
+      { parentId: "41", id: "414", code: "4140", name: "Contract Revenue", type: "Income" },
+      { parentId: "13", id: "135", code: "1350", name: "Contract Assets / WIP", type: "Asset" },
+      { parentId: "21", id: "217", code: "2170", name: "Customer Retentions", type: "Liability" },
+      { parentId: "51", id: "5105", code: "5105", name: "Project Direct Costs", type: "Expense" },
+    ],
+  },
+  {
+    key: "services",
+    label: "Do you sell services, subscriptions, or professional work?",
+    hint: "Adds service revenue, subscriptions, subcontractors, and professional delivery costs.",
+    defaultOn: true,
+    additions: [
+      { parentId: "41", id: "415", code: "4150", name: "Subscription Revenue", type: "Income" },
+      { parentId: "41", id: "416", code: "4160", name: "Professional Service Revenue", type: "Income" },
+      { parentId: "51", id: "5106", code: "5106", name: "Subcontractor Costs", type: "Expense" },
+      { parentId: "52", id: "5206", code: "5206", name: "Professional Tools and Licenses", type: "Expense" },
+    ],
+  },
+  {
+    key: "employees",
+    label: "Do you have employees or regular payroll?",
+    hint: "Adds payroll clearing, benefits, insurance, recruiting, and training accounts.",
+    additions: [
+      { parentId: "21", id: "218", code: "2180", name: "Payroll Payable", type: "Liability" },
+      { parentId: "52", id: "5207", code: "5207", name: "Employee Benefits", type: "Expense" },
+      { parentId: "52", id: "5208", code: "5208", name: "Recruiting and Training", type: "Expense" },
+    ],
+  },
+  {
+    key: "loans",
+    label: "Do you use loans, leases, or financing?",
+    hint: "Adds loan principal, current portion, lease liability, and interest expense.",
+    additions: [
+      { parentId: "21", id: "219", code: "2190", name: "Current Portion of Loans", type: "Liability" },
+      { parentId: "22", id: "223", code: "2230", name: "Finance Lease Liability", type: "Liability" },
+      { parentId: "53", id: "534", code: "5340", name: "Interest Expense", type: "Expense" },
+    ],
+  },
+  {
+    key: "fixed_assets",
+    label: "Do you own equipment, computers, furniture, or buildings?",
+    hint: "Uses the workbook fixed asset categories and matching depreciation accounts.",
+    defaultOn: true,
+    additions: [
+      { parentId: "14", id: "147", code: "1470", name: "Buildings and Improvements", type: "Asset" },
+      { parentId: "14", id: "148", code: "1480", name: "Tools and Small Equipment", type: "Asset" },
+      { parentId: "54", id: "546", code: "5460", name: "Tools and Small Equipment Depreciation", type: "Expense" },
+    ],
+  },
+  {
+    key: "vehicles",
+    label: "Do you operate vehicles or transport assets?",
+    hint: "Adds vehicle running costs, fuel, maintenance, and registration accounts.",
+    additions: [
+      { parentId: "52", id: "5209", code: "5209", name: "Fuel and Transportation", type: "Expense" },
+      { parentId: "52", id: "5215", code: "5215", name: "Vehicle Maintenance", type: "Expense" },
+      { parentId: "55", id: "554", code: "5540", name: "Licenses and Registration", type: "Expense" },
+    ],
+  },
+  {
+    key: "taxes",
+    label: "Do you collect VAT/sales tax or withhold tax?",
+    hint: "Adds tax receivable/payable accounts and government tax expense branches.",
+    defaultOn: true,
+    additions: [
+      { parentId: "13", id: "136", code: "1360", name: "Sales Tax Receivable", type: "Asset" },
+      { parentId: "21", id: "2108", code: "2108", name: "Withholding Tax Payable", type: "Liability" },
+      { parentId: "55", id: "555", code: "5550", name: "Tax Advisory and Filing Fees", type: "Expense" },
+    ],
+  },
+  {
+    key: "multi_currency",
+    label: "Do you receive or pay in more than one currency?",
+    hint: "Adds foreign currency bank, receivable/payable revaluation, and exchange difference accounts.",
+    additions: [
+      { parentId: "12", id: "124", code: "1240", name: "Foreign Currency Bank Accounts", type: "Asset" },
+      { parentId: "11", id: "113", code: "1130", name: "Foreign Currency Receivables", type: "Asset" },
+      { parentId: "21", id: "2109", code: "2109", name: "Foreign Currency Payables", type: "Liability" },
+    ],
+  },
+  {
+    key: "online_payments",
+    label: "Do customers pay through cards, wallets, or online gateways?",
+    hint: "Adds payment processor clearing and gateway fee accounts.",
+    additions: [
+      { parentId: "12", id: "125", code: "1250", name: "Card and Wallet Clearing", type: "Asset" },
+      { parentId: "52", id: "5216", code: "5216", name: "Payment Gateway Fees", type: "Expense" },
+    ],
+  },
+  {
+    key: "rent_utilities",
+    label: "Do you rent premises or pay utilities?",
+    hint: "Adds rent, utilities, maintenance, and office running costs.",
+    additions: [
+      { parentId: "52", id: "5217", code: "5217", name: "Rent Expense", type: "Expense" },
+      { parentId: "52", id: "5218", code: "5218", name: "Utilities", type: "Expense" },
+      { parentId: "52", id: "5219", code: "5219", name: "Repairs and Maintenance", type: "Expense" },
+      { parentId: "52", id: "5221", code: "5221", name: "Office Supplies", type: "Expense" },
+    ],
+  },
+];
+
+const INDUSTRY_DEFAULT_QUESTIONS: Record<IndustryCategory, string[]> = {
+  Commercial: ["physical_products", "online_payments", "taxes", "rent_utilities"],
+  Industrial: ["physical_products", "manufacturing", "fixed_assets", "employees", "taxes"],
+  Services: ["services", "projects", "employees", "online_payments", "taxes"],
+  Others: ["services", "taxes"],
+};
 
 const cloneCOA = (nodes: COANode[]): COANode[] => JSON.parse(JSON.stringify(nodes));
 
@@ -51,9 +211,13 @@ const findCOANode = (nodes: COANode[], id: string): COANode | undefined => {
   return undefined;
 };
 
+const hasCode = (nodes: COANode[], code: string): boolean =>
+  nodes.some((node) => node.code === code || hasCode(node.children ?? [], code));
+
 const addCOANode = (nodes: COANode[], parentId: string, nodeToAdd: COANode): COANode[] =>
   nodes.map((node) => {
     if (node.id === parentId) {
+      if ((node.children ?? []).some((child) => child.code === nodeToAdd.code)) return node;
       return { ...node, children: [...(node.children ?? []), nodeToAdd] };
     }
     return { ...node, children: node.children ? addCOANode(node.children, parentId, nodeToAdd) : node.children };
@@ -64,60 +228,75 @@ const removeCOANode = (nodes: COANode[], id: string): COANode[] =>
     .filter((node) => node.id !== id)
     .map((node) => ({ ...node, children: node.children ? removeCOANode(node.children, id) : node.children }));
 
+const buildCOA = (enabledQuestionKeys: Set<string>) => {
+  let next = cloneCOA(DEFAULT_COA);
+
+  for (const question of COA_QUESTIONS) {
+    if (!enabledQuestionKeys.has(question.key)) continue;
+    for (const addition of question.additions) {
+      const { parentId, ...node } = addition;
+      if (!hasCode(next, node.code)) {
+        next = addCOANode(next, parentId, node);
+      }
+    }
+  }
+
+  return next;
+};
+
 function Onboarding() {
   const { dir, t } = useI18n();
   const nav = useNavigate();
   const { saveCOA } = useCOA();
   const [step, setStep] = useState(0);
   const [company, setCompany] = useState("");
-  const [industry, setIndustry] = useState("");
-  const [currency, setCurrency] = useState("USD");
-  
-  // COA specific state
-  const [qProducts, setQProducts] = useState(false);
-  const [qEmployees, setQEmployees] = useState(false);
-  const [qLoans, setQLoans] = useState(false);
-  const [qServices, setQServices] = useState(false);
+  const [teamSize, setTeamSize] = useState(TEAM_SIZES[0]);
+  const [industryCategory, setIndustryCategory] = useState<IndustryCategory>("Commercial");
+  const [businessType, setBusinessType] = useState(INDUSTRY_GROUPS.Commercial[0]);
+  const [otherBusiness, setOtherBusiness] = useState("");
+  const [primaryCurrency, setPrimaryCurrency] = useState("USD");
+  const [selectedCurrencies, setSelectedCurrencies] = useState<string[]>(["USD"]);
+  const [questionState, setQuestionState] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(COA_QUESTIONS.map((question) => [question.key, !!question.defaultOn])),
+  );
   const [customCOA, setCustomCOA] = useState<COANode[]>(DEFAULT_COA);
 
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [newAccName, setNewAccName] = useState("");
   const [newAccCode, setNewAccCode] = useState("");
-  const [newAccParent, setNewAccParent] = useState("5"); // default to Expenses
+  const [newAccParent, setNewAccParent] = useState("5");
   const [saving, setSaving] = useState(false);
 
   const STEPS = [t("stepCompany"), t("stepIndustry"), t("stepCurrency"), t("stepAccounts")];
 
-  const generateCOA = () => {
-    // Deep clone default COA to avoid mutating standard
-    let newCoa: COANode[] = cloneCOA(DEFAULT_COA);
-    
-    const addNode = (parentId: string, node: COANode) => {
-      newCoa = addCOANode(newCoa, parentId, node);
-    };
+  const industry = industryCategory === "Others"
+    ? otherBusiness.trim()
+    : `${industryCategory} - ${businessType}`;
 
-    if (qProducts) {
-      addNode("1", { id: "14", code: "1400", name: "Inventory", type: "Asset" });
-      addNode("5", { id: "54", code: "5400", name: "Cost of Goods Sold", type: "Expense" });
-    }
-    if (qEmployees) {
-      addNode("5", { id: "55", code: "5500", name: "Payroll", type: "Expense" });
-      addNode("5", { id: "56", code: "5600", name: "Payroll Taxes", type: "Expense" });
-    }
-    if (qLoans) {
-      addNode("2", { id: "23", code: "2300", name: "Loans Payable", type: "Liability" });
-      addNode("5", { id: "57", code: "5700", name: "Interest Expense", type: "Expense" });
-    }
-    if (qServices) {
-      addNode("4", { id: "43", code: "4300", name: "Service Revenue", type: "Income" });
-    }
-
-    setCustomCOA(newCoa);
-  };
+  const enabledQuestionKeys = useMemo(() => {
+    const defaults = INDUSTRY_DEFAULT_QUESTIONS[industryCategory] ?? [];
+    return new Set([
+      ...defaults,
+      ...Object.entries(questionState).filter(([, enabled]) => enabled).map(([key]) => key),
+      ...(selectedCurrencies.length > 1 ? ["multi_currency"] : []),
+    ]);
+  }, [industryCategory, questionState, selectedCurrencies]);
 
   useEffect(() => {
-    generateCOA();
-  }, [qProducts, qEmployees, qLoans, qServices]);
+    setCustomCOA(buildCOA(enabledQuestionKeys));
+  }, [enabledQuestionKeys]);
+
+  const toggleCurrency = (code: string) => {
+    setSelectedCurrencies((prev) => {
+      if (prev.includes(code)) {
+        const next = prev.filter((item) => item !== code);
+        if (!next.length) return prev;
+        if (primaryCurrency === code) setPrimaryCurrency(next[0]);
+        return next;
+      }
+      return [...prev, code];
+    });
+  };
 
   const finishOnboarding = async (coaToSave: COANode[]) => {
     const session = getSession();
@@ -142,16 +321,16 @@ function Onboarding() {
       method: "POST",
       body: JSON.stringify({
         organizationName: company,
-        industry,
-        currency,
+        industry: industry || "Other",
+        currency: primaryCurrency,
         answers: [
           { questionKey: "company_name", answer: company || session.tenants[0]?.organizationName || "Company" },
-          { questionKey: "industry", answer: industry || "Retail" },
-          { questionKey: "currency", answer: currency },
-          {
-            questionKey: "chart_preferences",
-            answer: JSON.stringify({ qProducts, qEmployees, qLoans, qServices }),
-          },
+          { questionKey: "team_size", answer: teamSize },
+          { questionKey: "industry_category", answer: industryCategory },
+          { questionKey: "business_type", answer: industry || "Other" },
+          { questionKey: "primary_currency", answer: primaryCurrency },
+          { questionKey: "currencies", answer: JSON.stringify(selectedCurrencies) },
+          { questionKey: "chart_preferences", answer: JSON.stringify(questionState) },
         ],
       }),
     });
@@ -199,23 +378,29 @@ function Onboarding() {
   };
 
   const handleNext = async () => {
-    if (step === 2) {
-      generateCOA(); // generate before entering step 3
+    if (step === 0 && !company.trim()) {
+      toast.error("Organization name is required");
+      return;
+    }
+    if (step === 1 && !industry.trim()) {
+      toast.error("Business type is required");
+      return;
+    }
+    if (step < STEPS.length - 1) {
       setStep(step + 1);
-    } else if (step < STEPS.length - 1) {
-      setStep(step + 1);
-    } else {
-      setSaving(true);
-      try {
-        await finishOnboarding(customCOA);
-        saveCOA(customCOA);
-        toast.success("Workspace created!");
-        nav({ to: "/dashboard" });
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Could not complete onboarding");
-      } finally {
-        setSaving(false);
-      }
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await finishOnboarding(customCOA);
+      saveCOA(customCOA);
+      toast.success("Workspace created!");
+      nav({ to: "/dashboard" });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not complete onboarding");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -236,17 +421,25 @@ function Onboarding() {
   const back = () => setStep(Math.max(0, step - 1));
 
   const handleAddCustomAccount = () => {
+    if (!newAccName.trim() || !newAccCode.trim()) {
+      toast.error("Account code and name are required");
+      return;
+    }
+    if (hasCode(customCOA, newAccCode.trim())) {
+      toast.error("Account code already exists");
+      return;
+    }
+
     const parent = findCOANode(customCOA, newAccParent);
     const parentType = parent ? parent.type : "Asset";
     const newNode: COANode = {
-      id: Math.random().toString(36).substring(7),
-      code: newAccCode,
-      name: newAccName,
+      id: `custom-${Date.now()}`,
+      code: newAccCode.trim(),
+      name: newAccName.trim(),
       type: parentType,
     };
-    
+
     setCustomCOA((prev) => addCOANode(prev, newAccParent, newNode));
-    
     setAddDialogOpen(false);
     setNewAccName("");
     setNewAccCode("");
@@ -268,8 +461,7 @@ function Onboarding() {
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 py-10">
-        {/* Steps indicator */}
+      <main className="max-w-4xl mx-auto px-4 py-10">
         <ol className="flex items-center gap-2 mb-8">
           {STEPS.map((s, i) => (
             <li key={s} className="flex-1 flex items-center gap-2">
@@ -298,111 +490,159 @@ function Onboarding() {
 
         <div className="bg-card border border-border-default rounded-2xl shadow-card p-8">
           {step === 0 && (
-            <StepWrap icon={Building2} title={t("createCompanyTitle")} desc={t("createCompanyDesc")}>
+            <StepWrap icon={Building2} title="Organization basics" desc="Only the essentials for now.">
               <div className="space-y-1.5">
                 <Label htmlFor="company">{t("companyNameLabel")}</Label>
                 <Input id="company" value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Acme LLC" />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="size">{t("teamSizeLabel")}</Label>
-                <select id="size" className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
-                  <option>1–5</option><option>6–20</option><option>21–50</option><option>50+</option>
+                <select
+                  id="size"
+                  value={teamSize}
+                  onChange={(event) => setTeamSize(event.target.value)}
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  {TEAM_SIZES.map((size) => <option key={size}>{size}</option>)}
                 </select>
               </div>
             </StepWrap>
           )}
 
           {step === 1 && (
-            <StepWrap icon={Briefcase} title={t("selectIndustryTitle")} desc={t("selectIndustryDesc")}>
+            <StepWrap icon={Briefcase} title={t("selectIndustryTitle")} desc="Choose a main category, then the closest business type.">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {INDUSTRIES.map((i) => (
+                {(Object.keys(INDUSTRY_GROUPS) as IndustryCategory[]).map((category) => (
                   <button
                     type="button"
-                    key={i}
-                    onClick={() => setIndustry(i)}
+                    key={category}
+                    onClick={() => {
+                      setIndustryCategory(category);
+                      setBusinessType(INDUSTRY_GROUPS[category][0] ?? "");
+                    }}
                     className={`p-3 rounded-lg border text-sm transition ${
-                      industry === i
+                      industryCategory === category
                         ? "border-primary bg-primary/5 text-primary font-medium"
                         : "border-border-default hover:border-primary/40"
                     }`}
                   >
-                    {i}
+                    {category}
                   </button>
                 ))}
               </div>
+
+              {industryCategory !== "Others" ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {INDUSTRY_GROUPS[industryCategory].map((item) => (
+                    <button
+                      type="button"
+                      key={item}
+                      onClick={() => setBusinessType(item)}
+                      className={`p-3 rounded-lg border text-sm text-start transition ${
+                        businessType === item
+                          ? "border-primary bg-primary/5 text-primary font-medium"
+                          : "border-border-default hover:border-primary/40"
+                      }`}
+                    >
+                      {item}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label htmlFor="otherBusiness">Your business</Label>
+                  <Input id="otherBusiness" value={otherBusiness} onChange={(e) => setOtherBusiness(e.target.value)} placeholder="Describe your business" />
+                </div>
+              )}
             </StepWrap>
           )}
 
           {step === 2 && (
-            <StepWrap icon={Coins} title={t("chooseCurrencyTitle")} desc={t("chooseCurrencyDesc")}>
-              <div className="space-y-2">
-                {CURRENCIES.map((c) => (
-                  <button
-                    type="button"
-                    key={c.code}
-                    onClick={() => setCurrency(c.code)}
-                    className={`w-full flex items-center justify-between p-3 rounded-lg border text-sm transition ${
-                      currency === c.code
-                        ? "border-primary bg-primary/5"
-                        : "border-border-default hover:border-primary/40"
-                    }`}
-                  >
-                    <span className="flex items-center gap-3">
-                      <span className="h-8 w-8 rounded-md bg-surface-container grid place-items-center font-semibold text-primary">
-                        {c.symbol}
+            <StepWrap icon={Coins} title="Choose currencies" desc="Select every currency you use, then choose the main reporting currency.">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {CURRENCIES.map((c) => {
+                  const selected = selectedCurrencies.includes(c.code);
+                  return (
+                    <button
+                      type="button"
+                      key={c.code}
+                      onClick={() => toggleCurrency(c.code)}
+                      className={`flex items-center justify-between p-3 rounded-lg border text-sm transition ${
+                        selected
+                          ? "border-primary bg-primary/5"
+                          : "border-border-default hover:border-primary/40"
+                      }`}
+                    >
+                      <span className="flex items-center gap-3">
+                        <span className="h-8 w-12 rounded-md bg-surface-container grid place-items-center font-semibold text-primary text-xs">
+                          {c.symbol}
+                        </span>
+                        <span><strong>{c.code}</strong> - {c.name}</span>
                       </span>
-                      <span><strong>{c.code}</strong> · {c.name}</span>
-                    </span>
-                    {currency === c.code && <Check className="h-4 w-4 text-primary" />}
-                  </button>
-                ))}
+                      {selected && <Check className="h-4 w-4 text-primary" />}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="primaryCurrency">Main reporting currency</Label>
+                <select
+                  id="primaryCurrency"
+                  value={primaryCurrency}
+                  onChange={(event) => setPrimaryCurrency(event.target.value)}
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  {selectedCurrencies.map((code) => <option key={code}>{code}</option>)}
+                </select>
               </div>
             </StepWrap>
           )}
 
           {step === 3 && (
-            <StepWrap icon={Wallet} title={t("setupAccountsTitle")} desc={t("setupAccountsDesc")}>
+            <StepWrap icon={Wallet} title={t("setupAccountsTitle")} desc="Toggle the accounts your business needs. You can still add and remove accounts manually.">
               <div className="space-y-4">
                 <TooltipProvider>
-                  {[
-                    { state: qProducts, set: setQProducts, label: t("qPhysicalProducts"), hint: t("qPhysicalProductsHint") },
-                    { state: qEmployees, set: setQEmployees, label: t("qEmployees"), hint: t("qEmployeesHint") },
-                    { state: qLoans, set: setQLoans, label: t("qLoans"), hint: t("qLoansHint") },
-                    { state: qServices, set: setQServices, label: t("qServices"), hint: t("qServicesHint") },
-                  ].map((q, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 border border-border-default rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <Label className="text-base cursor-pointer" onClick={() => {
-                          q.set(!q.state);
-                          generateCOA();
-                        }}>
-                          {q.label}
-                        </Label>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Info className="h-4 w-4 text-on-surface-variant hover:text-primary cursor-help" />
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-xs text-sm">
-                            <p>{q.hint}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                      <Switch checked={q.state} onCheckedChange={(v) => {
-                        q.set(v);
-                        setTimeout(generateCOA, 0); // Allow state to update
-                      }} />
-                    </div>
-                  ))}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {COA_QUESTIONS.map((q) => {
+                      const checked = enabledQuestionKeys.has(q.key);
+                      const lockedByContext = (INDUSTRY_DEFAULT_QUESTIONS[industryCategory] ?? []).includes(q.key)
+                        || (q.key === "multi_currency" && selectedCurrencies.length > 1);
+                      return (
+                        <div key={q.key} className="flex items-center justify-between gap-3 p-3 border border-border-default rounded-lg">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Label htmlFor={`coa-${q.key}`} className="text-sm cursor-pointer leading-snug">
+                              {q.label}
+                            </Label>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-4 w-4 shrink-0 text-on-surface-variant hover:text-primary cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs text-sm">
+                                <p>{q.hint}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                          <Switch
+                            id={`coa-${q.key}`}
+                            checked={checked}
+                            disabled={lockedByContext}
+                            onCheckedChange={(value) => setQuestionState((prev) => ({ ...prev, [q.key]: value }))}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
                 </TooltipProvider>
 
                 <div className="mt-8 border-t border-border-default pt-6">
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center justify-between gap-3 mb-4">
                     <h3 className="font-semibold">{t("customAccountsPreview")}</h3>
                     <Button variant="outline" size="sm" onClick={() => setAddDialogOpen(true)} className="gap-1">
                       <Plus className="h-4 w-4" /> {t("addCustomAccount")}
                     </Button>
                   </div>
-                  <div className="bg-surface-container rounded-xl p-3 max-h-60 overflow-y-auto space-y-1">
+                  <div className="bg-surface-container rounded-xl p-3 max-h-72 overflow-y-auto space-y-1">
                     {customCOA.map((n) => (
                       <TreeRow
                         key={n.id}
@@ -423,11 +663,11 @@ function Onboarding() {
 
           <div className="mt-8 flex items-center justify-between">
             {step === 3 ? (
-              <Button variant="ghost" onClick={handleSkipCOA} className="text-on-surface-variant">
+              <Button variant="ghost" onClick={handleSkipCOA} className="text-on-surface-variant" disabled={saving}>
                 {t("skipCOA")}
               </Button>
             ) : (
-              <Button variant="ghost" onClick={back} disabled={step === 0} className="gap-1.5">
+              <Button variant="ghost" onClick={back} disabled={step === 0 || saving} className="gap-1.5">
                 <ArrowLeft className="h-4 w-4 rtl:rotate-180" /> {t("back")}
               </Button>
             )}
@@ -448,8 +688,8 @@ function Onboarding() {
           <div className="space-y-4 py-4">
             <div className="space-y-1.5">
               <Label>Parent account</Label>
-              <select 
-                value={newAccParent} 
+              <select
+                value={newAccParent}
                 onChange={(e) => setNewAccParent(e.target.value)}
                 className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
               >
@@ -459,7 +699,7 @@ function Onboarding() {
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-on-surface-variant">Choose a level 2 or level 3 parent to create level 3 or level 4 accounts.</p>
+              <p className="text-xs text-on-surface-variant">Choose a level 1, 2, or 3 parent to create a child account.</p>
             </div>
             <div className="space-y-1.5">
               <Label>{t("accountCode")}</Label>
@@ -482,7 +722,7 @@ function Onboarding() {
 
 function StepWrap({
   icon: Icon, title, desc, children,
-}: { icon: React.ElementType; title: string; desc: string; children: React.ReactNode }) {
+}: { icon: ElementType; title: string; desc: string; children: ReactNode }) {
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
@@ -510,7 +750,7 @@ function TreeRow({
   onAdd: (id: string) => void;
   onRemove: (id: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(depth < 2);
   const hasChildren = !!node.children?.length;
   return (
     <>
@@ -522,14 +762,15 @@ function TreeRow({
           type="button"
           className="h-5 w-5 grid place-items-center rounded hover:bg-surface-container"
           onClick={() => hasChildren && setOpen(!open)}
+          aria-label={hasChildren ? "Toggle account branch" : "Account leaf"}
         >
           {hasChildren ? (
             <ChevronRight className={`h-4 w-4 text-on-surface-variant transition-transform ${open ? "rotate-90" : ""}`} />
           ) : <span className="w-4" />}
         </button>
         {hasChildren ? <Folder className="h-4 w-4 text-primary" /> : <FileText className="h-4 w-4 text-on-surface-variant" />}
-        <span className="text-xs text-on-surface-variant font-mono w-10">{node.code}</span>
-        <span className={`text-sm min-w-0 flex-1 ${hasChildren ? "font-semibold" : ""}`}>{node.name}</span>
+        <span className="text-xs text-on-surface-variant font-mono w-12 shrink-0">{node.code}</span>
+        <span className={`text-sm min-w-0 flex-1 truncate ${hasChildren ? "font-semibold" : ""}`}>{node.name}</span>
         {depth < 3 && (
           <button
             type="button"

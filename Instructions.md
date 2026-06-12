@@ -6,10 +6,10 @@
 * [ ] If the user was removed from the organization " must be notified in the notifications and by email " ***3ab2wy***
 * [X] when he logs in if no user-organization relation found he must go through the onboarding process before accessing the dashboard
 * [X] decorators on all routers --> auth + at least one user-organization relationship
-* [ ] Onboarding --> categories : التصنيع و التجارة و الخدمات و اخري then under every one of those headers we will provide the industry if other then user enters it manually ***mario***
-* [ ] Onboarding --> on currency add one option multi curency --> he will select in any operation the currency ***mario***
-* [ ] Onboarding --> refactor accounts' charts, excel sheet to look at the expenses and the rest ***mario***
-* [ ] Add more Questions "fix answer question bug inverse" ***mario***
+* [X] Onboarding --> categories : التصنيع و التجارة و الخدمات و اخري then under every one of those headers we will provide the industry if other then user enters it manually ***mario***
+* [X] Onboarding --> on currency add one option multi curency --> he will select in any operation the currency ***mario***
+* [X] Onboarding --> refactor accounts' charts, excel sheet to look at the expenses and the rest ***mario***
+* [X] Add more Questions "fix answer question bug inverse" ***mario***
 * [ ] Ticket system form user --> admin ***khaled***
 * [ ] at forecasting move the graph to the upper page ***mario***
 
