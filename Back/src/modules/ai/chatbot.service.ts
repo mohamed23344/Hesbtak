@@ -62,6 +62,10 @@ export class ChatbotService {
     return {
       sessionId,
       response,
+      needsClarification: result.needsClarification,
+      citations: result.citations,
+      links: result.links,
+      retrievedChunks: result.retrievedChunks,
       attachment,
     };
   }

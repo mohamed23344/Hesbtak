@@ -24,11 +24,41 @@ type Msg = {
   who: "you" | "ai";
   text: string;
   attachment?: Attachment | null;
+  citations?: Citation[];
+  links?: AssistantLink[];
+  retrievedChunks?: RetrievedChunk[];
+};
+
+type Citation = {
+  type: "workbook" | "product_page" | "database_query";
+  label: string;
+  page?: number;
+  route?: string;
+  evidenceRequestId?: string;
+};
+
+type AssistantLink = {
+  label: string;
+  route: string;
+};
+
+type RetrievedChunk = {
+  id: string;
+  corpus: "accounting_workbook" | "product_guide";
+  documentId: string;
+  chunkId: string;
+  content: string;
+  metadata: Record<string, unknown>;
+  score: number;
 };
 
 type ChatResponse = {
   sessionId: string;
   response: string;
+  needsClarification?: boolean;
+  citations?: Citation[];
+  links?: AssistantLink[];
+  retrievedChunks?: RetrievedChunk[];
   attachment?: Attachment | null;
 };
 
@@ -112,6 +142,9 @@ function Page() {
           who: "ai",
           text: result.response,
           attachment: result.attachment,
+          citations: result.citations,
+          links: result.links,
+          retrievedChunks: result.retrievedChunks,
         },
       ]);
     } catch (error) {
@@ -163,6 +196,59 @@ function Page() {
                       {m.attachment.title}
                     </Button>
                   )}
+                  {m.links?.length ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {m.links.map((link) => (
+                        <Link
+                          key={link.route}
+                          to={link.route as never}
+                          className="rounded-full border border-primary/30 bg-background/60 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/10"
+                        >
+                          {link.label}
+                        </Link>
+                      ))}
+                    </div>
+                  ) : null}
+                  {m.citations?.length ? (
+                    <details className="mt-3 text-xs text-on-surface-variant">
+                      <summary className="cursor-pointer font-medium">Sources</summary>
+                      <ul className="mt-1 space-y-1">
+                        {m.citations.map((citation, index) => (
+                          <li key={`${citation.type}-${citation.label}-${index}`}>
+                            {citation.label}
+                            {citation.page ? `, page ${citation.page}` : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  ) : null}
+                  {m.retrievedChunks?.length ? (
+                    <details className="mt-3 text-xs text-on-surface-variant">
+                      <summary className="cursor-pointer font-medium">
+                        Retrieved chunks ({m.retrievedChunks.length})
+                      </summary>
+                      <div className="mt-2 max-h-72 space-y-2 overflow-y-auto">
+                        {m.retrievedChunks.map((chunk, index) => (
+                          <div
+                            key={chunk.id}
+                            className="rounded-lg border border-border-default bg-background/60 p-3"
+                          >
+                            <div className="mb-1 flex flex-wrap items-center gap-2 font-medium">
+                              <span>K{index + 1}</span>
+                              <span>{chunk.corpus.replace("_", " ")}</span>
+                              {typeof chunk.metadata.pageStart === "number" ? (
+                                <span>Page {chunk.metadata.pageStart}</span>
+                              ) : null}
+                              <span>Score {chunk.score.toFixed(4)}</span>
+                            </div>
+                            <pre className="whitespace-pre-wrap font-sans leading-5 text-on-surface">
+                              {chunk.content}
+                            </pre>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  ) : null}
                 </div>
               </div>
             ))}
@@ -262,16 +348,21 @@ function MarkdownMessage({ text }: { text: string }) {
         td: ({ children }) => (
           <td className="border border-border-default px-2 py-1.5 align-top">{children}</td>
         ),
-        a: ({ href, children }) => (
-          <a
-            href={href}
-            target="_blank"
-            rel="noreferrer"
-            className="text-primary underline underline-offset-2"
-          >
-            {children}
-          </a>
-        ),
+        a: ({ href, children }) =>
+          href?.startsWith("/") ? (
+            <Link to={href as never} className="text-primary underline underline-offset-2">
+              {children}
+            </Link>
+          ) : (
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary underline underline-offset-2"
+            >
+              {children}
+            </a>
+          ),
         hr: () => <hr className="my-3 border-border-default" />,
       }}
     >

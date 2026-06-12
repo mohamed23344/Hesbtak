@@ -1,23 +1,16 @@
 import { Module } from '@nestjs/common';
-import { EmbeddingsModule } from '../embeddings/embeddings.module';
-import { RetrievalModule } from '../retrieval/retrieval.module';
-import { TenantModule } from '../../tenant/tenant.module';
 import { LanggraphService } from './langgraph.service';
 import { DatabaseSearchAgentGraph } from './agents/database-search-agent';
 import { PrismaModule } from '../prisma/prisma.module';
-import { FinancialContextService } from '../financial-context.service';
+import { KnowledgeModule } from '../knowledge/knowledge.module';
+import { DatabaseCatalogService } from '../database-catalog/database-catalog.service';
 
 @Module({
-  imports: [
-    RetrievalModule,
-    TenantModule,
-    EmbeddingsModule,
-    PrismaModule,
-  ],
+  imports: [KnowledgeModule, PrismaModule],
   providers: [
     LanggraphService,
     DatabaseSearchAgentGraph,
-    FinancialContextService,
+    DatabaseCatalogService,
   ],
   exports: [LanggraphService],
 })

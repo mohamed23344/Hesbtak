@@ -4,26 +4,25 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { StateGraph, START, END } from '@langchain/langgraph';
+import { END, START, StateGraph } from '@langchain/langgraph';
+import Groq from 'groq-sdk';
 import { TenantContext } from '../../tenant/tenant.service';
-import { RetrievalService } from '../retrieval/retrieval.service';
-import { EmbeddingsService } from '../embeddings/embeddings.service';
-import { RunGraphDto } from './dto/run-graph.dto';
+import { KnowledgeService } from '../knowledge/knowledge.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { chattingAgentNode } from './agents/chatting-agent';
+import { DatabaseSearchAgentGraph } from './agents/database-search-agent';
+import { financialReasoningAgentNode } from './agents/financial-reasoning-agent';
+import { knowledgeGuideAgentNode } from './agents/knowledge-guide-agent';
+import { reportGenerationAgentNode } from './agents/report-generation-agent';
+import { requestPlannerAgentNode } from './agents/request-planner-agent';
+import { responseSynthesisAgentNode } from './agents/response-synthesis-agent';
 import {
   getGroqClient,
   hasGroqApiKey,
   LLM_MODELS,
 } from './config/llm.config';
+import { RunGraphDto } from './dto/run-graph.dto';
 import { MultiAgentState, StateType } from './state/graph-state';
-import { chattingAgentNode } from './agents/chatting-agent';
-import { orchestratorAgentNode } from './agents/orchestrator-agent';
-import { DatabaseSearchAgentGraph } from './agents/database-search-agent';
-import { financialReasoningAgentNode } from './agents/financial-reasoning-agent';
-import { reportGenerationAgentNode } from './agents/report-generation-agent';
-import { ragSearchAgentNode } from './agents/rag-search-agent';
-import Groq from 'groq-sdk';
-import { FinancialContextService } from '../financial-context.service';
-import { inferReportProfile } from './report-profile';
 
 type GraphRunInput = RunGraphDto & { conversationHistory?: string };
 
@@ -34,73 +33,55 @@ export class LanggraphService {
 
   constructor(
     private readonly config: ConfigService,
-    private readonly databaseSearchAgentGraph: DatabaseSearchAgentGraph,
-    private readonly retrievalService: RetrievalService,
-    private readonly embeddingsService: EmbeddingsService,
-    private readonly financialContext: FinancialContextService,
+    private readonly databaseAgent: DatabaseSearchAgentGraph,
+    private readonly knowledge: KnowledgeService,
+    private readonly prisma: PrismaService,
   ) {
     this.groqClient = getGroqClient(this.config);
-
-    /**
-     * Graph topology:
-     *
-     *   START
-     *     → chattingAgent
-     *     → [orchestrator]
-     *          → databaseSearchAgent → chattingAgent → END
-     *          → ragSearchAgent      → chattingAgent → END
-     *          → financialReasoningAgent
-     *               → reportGenerationAgent → chattingAgent → END
-     *          → chattingAgent (other / unresolved) → END
-     */
     const workflow = new StateGraph(MultiAgentState)
-      // ── Nodes ──────────────────────────────────────────────────────────────
-      .addNode('chattingAgent', (state) =>
-        chattingAgentNode(state, this.groqClient),
+      .addNode('requestPlanner', (state) =>
+        requestPlannerAgentNode(state, this.groqClient),
       )
-      .addNode('orchestrator', (state) =>
-        orchestratorAgentNode(state, this.groqClient),
-      )
-      .addNode('databaseSearchAgent', (state) =>
-        this.databaseSearchAgentGraph.invoke(state, this.groqClient),
-      )
-      .addNode('ragSearchAgent', (state) =>
-        ragSearchAgentNode(state, this.groqClient, this.retrievalService),
-      )
-      .addNode('financialReasoningAgent', (state) =>
+      .addNode('financialReasoning', (state) =>
         financialReasoningAgentNode(
           state,
           this.groqClient,
-          this.retrievalService,
-          this.embeddingsService,
-          this.financialContext,
+          this.databaseAgent,
         ),
       )
-      .addNode('reportGenerationAgent', (state) =>
+      .addNode('knowledgeGuide', (state) =>
+        knowledgeGuideAgentNode(state, this.groqClient, this.knowledge),
+      )
+      .addNode('synthesize', (state) =>
+        responseSynthesisAgentNode(state, this.groqClient),
+      )
+      .addNode('reportGeneration', (state) =>
         reportGenerationAgentNode(state, this.groqClient),
       )
-
-      // ── Edges ──────────────────────────────────────────────────────────────
-      .addEdge(START, 'chattingAgent')
-
-      // First pass: no intent yet → orchestrate; Second pass: has response → end
-      .addConditionalEdges('chattingAgent', this.routeFromChattingAgent.bind(this))
-
-      // Orchestrator routes to one specialist agent
-      .addConditionalEdges('orchestrator', this.routeFromOrchestrator.bind(this))
-
-      // Simple agents return directly to chatting agent for final formatting
-      .addEdge('databaseSearchAgent', 'chattingAgent')
-      .addEdge('ragSearchAgent', 'chattingAgent')
-
-      // Financial reasoning always goes through report generation before chatting
-      .addEdge('financialReasoningAgent', 'reportGenerationAgent')
-      .addEdge('reportGenerationAgent', 'chattingAgent');
-
+      .addNode('chattingAgent', (state) =>
+        chattingAgentNode(state, this.groqClient),
+      )
+      .addEdge(START, 'requestPlanner')
+      .addConditionalEdges(
+        'requestPlanner',
+        this.routeFromPlanner.bind(this),
+      )
+      .addConditionalEdges(
+        'financialReasoning',
+        this.routeAfterFinancial.bind(this),
+      )
+      .addConditionalEdges(
+        'knowledgeGuide',
+        this.routeAfterKnowledge.bind(this),
+      )
+      .addConditionalEdges(
+        'synthesize',
+        this.routeAfterSynthesis.bind(this),
+      )
+      .addEdge('reportGeneration', 'chattingAgent')
+      .addEdge('chattingAgent', END);
     this.compiledGraph = workflow.compile();
   }
-
-  // ─── Public API ─────────────────────────────────────────────────────────────
 
   async run(ctx: TenantContext, dto: GraphRunInput) {
     if (!hasGroqApiKey(this.config)) {
@@ -108,51 +89,41 @@ export class LanggraphService {
         'AI assistant is not configured. Set GROQ_API_KEY in the backend environment.',
       );
     }
-
     try {
-      const financialContext = await this.financialContext.build(ctx);
+      const organization = await this.prisma.organization.findUnique({
+        where: { id: ctx.organizationId },
+        select: { name: true },
+      });
       const conversationHistory = dto.conversationHistory?.trim() ?? '';
       const contextualQuery = await this.contextualizeQuery(
         dto.userQuery,
         conversationHistory,
       );
-      const reportProfile = inferReportProfile(contextualQuery);
       const initialState: Partial<StateType> = {
         userQuery: contextualQuery,
         originalUserQuery: dto.userQuery,
         conversationHistory,
         orgSlug: ctx.schemaName,
         tenantContext: ctx,
-        organizationName: financialContext.organization.name,
-        financialDatabaseContext: JSON.stringify(
-          financialContext,
-          (_key, value) =>
-            typeof value === 'bigint' ? Number(value) : value,
-        ),
-        intent: undefined,
-        agentOutput: undefined,
-        finalResponse: undefined,
-        unresolvedIntent: undefined,
-        ragContext: undefined,
-        reasoningOutput: undefined,
-        reportMarkdown: undefined,
-        reportType: reportProfile.title,
+        organizationName: organization?.name ?? 'your organization',
       };
-
       const result = await this.compiledGraph.invoke(initialState);
-
       return {
         intent: result.intent,
         agentOutput: result.agentOutput,
         finalResponse: result.finalResponse,
         unresolvedIntent: result.unresolvedIntent ?? false,
+        needsClarification: result.needsClarification ?? false,
+        citations: result.citations ?? [],
+        links: result.links ?? [],
+        retrievedChunks: result.retrievedChunks ?? [],
         reportMarkdown: result.reportMarkdown ?? null,
       };
     } catch (error) {
-      if (error instanceof ServiceUnavailableException) {
-        throw error;
-      }
-      throw new InternalServerErrorException(`LangGraph execution failed: ${error}`);
+      if (error instanceof ServiceUnavailableException) throw error;
+      throw new InternalServerErrorException(
+        `LangGraph execution failed: ${String(error)}`,
+      );
     }
   }
 
@@ -168,15 +139,15 @@ export class LanggraphService {
           {
             role: 'system',
             content:
-              'Rewrite the latest user message as a standalone financial request using the conversation history. Preserve intent, names, dates, and requested report type. Return only the rewritten request. Do not answer it.',
+              'Rewrite the latest message as a standalone request using the conversation history. Preserve intent, names, dates, language, and requested output format. Return only the rewritten request.',
           },
           {
             role: 'user',
-            content: `Conversation history:\n${conversationHistory}\n\nLatest user message:\n${userQuery}`,
+            content: `History:\n${conversationHistory}\n\nLatest:\n${userQuery}`,
           },
         ],
         temperature: 0,
-        max_tokens: 300,
+        max_tokens: 350,
       });
       return response.choices[0]?.message?.content?.trim() || userQuery;
     } catch {
@@ -184,33 +155,38 @@ export class LanggraphService {
     }
   }
 
-  // ─── Routing functions ───────────────────────────────────────────────────────
-
-  /**
-   * After chattingAgent:
-   *  - No intent yet (first pass) → go to orchestrator
-   *  - Intent is set (second pass, after specialist ran) → END
-   */
-  private routeFromChattingAgent(state: StateType): string {
-    if (state.intent === undefined) {
-      return 'orchestrator';
+  private routeFromPlanner(state: StateType) {
+    if (state.needsClarification) return 'chattingAgent';
+    if (state.intent === 'financial_data' || state.intent === 'mixed') {
+      return 'financialReasoning';
     }
-    return END;
+    if (
+      state.intent === 'accounting_knowledge' ||
+      state.intent === 'product_help'
+    ) {
+      return 'knowledgeGuide';
+    }
+    return 'chattingAgent';
   }
 
-  /**
-   * After orchestrator:
-   *  - Classified intent → route to matching specialist agent
-   *  - 'other' or unresolved → loop back to chattingAgent for friendly response
-   */
-  private routeFromOrchestrator(state: StateType): string {
-    const intent = state.intent;
+  private routeAfterFinancial(state: StateType) {
+    if (state.needsClarification) return 'chattingAgent';
+    if (state.intent === 'mixed') return 'knowledgeGuide';
+    return state.requestPlan?.outputMode === 'pdf_report'
+      ? 'reportGeneration'
+      : 'chattingAgent';
+  }
 
-    if (intent === 'databaseSearchAgent') return 'databaseSearchAgent';
-    if (intent === 'ragSearchAgent') return 'ragSearchAgent';
-    if (intent === 'financialReasoningAgent') return 'financialReasoningAgent';
+  private routeAfterKnowledge(state: StateType) {
+    if (state.requestPlan?.outputMode === 'pdf_report') {
+      return state.intent === 'mixed' ? 'synthesize' : 'reportGeneration';
+    }
+    return state.intent === 'mixed' ? 'synthesize' : 'chattingAgent';
+  }
 
-    // 'other' or undefined → chattingAgent handles it with an unresolved response
-    return 'chattingAgent';
+  private routeAfterSynthesis(state: StateType) {
+    return state.requestPlan?.outputMode === 'pdf_report'
+      ? 'reportGeneration'
+      : 'chattingAgent';
   }
 }

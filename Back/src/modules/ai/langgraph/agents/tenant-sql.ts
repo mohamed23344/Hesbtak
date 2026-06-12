@@ -6,11 +6,23 @@ export const TENANT_SQL_TABLES = [
   'journal_entries',
   'journal_lines',
   'invoices',
+  'invoice_lines',
   'customer_payments',
   'vendor_bills',
+  'vendor_bill_lines',
   'vendor_payments',
+  'expenses',
+  'sales_returns',
+  'sales_return_lines',
+  'purchase_returns',
+  'purchase_return_lines',
+  'recurring_entries',
+  'recurring_entry_logs',
+  'ocr_uploads',
   'forecasts',
   'alerts',
+  'alert_rules',
+  'suggestions',
 ] as const;
 
 export function qualifyTenantTables(sql: string, schemaName: string): string {
