@@ -15,6 +15,7 @@ import { AiModule } from './modules/ai/ai.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { AiInvoiceExtractionModule } from './modules/ai-invoice-extraction/ai-invoice-extraction.module';
+import { SupportModule } from './modules/support/support.module';
 
 @Module({
   imports: [
@@ -80,6 +81,7 @@ import { AiInvoiceExtractionModule } from './modules/ai-invoice-extraction/ai-in
     ReportsModule,
     BillingModule,
     AiInvoiceExtractionModule,
+    SupportModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -22,6 +22,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as DashboardTransactionsRouteImport } from './routes/dashboard.transactions'
+import { Route as DashboardSupportRouteImport } from './routes/dashboard.support'
 import { Route as DashboardSettingsRouteImport } from './routes/dashboard.settings'
 import { Route as DashboardSalesRouteImport } from './routes/dashboard.sales'
 import { Route as DashboardReportsRouteImport } from './routes/dashboard.reports'
@@ -113,6 +114,11 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
 const DashboardTransactionsRoute = DashboardTransactionsRouteImport.update({
   id: '/transactions',
   path: '/transactions',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardSupportRoute = DashboardSupportRouteImport.update({
+  id: '/support',
+  path: '/support',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardSettingsRoute = DashboardSettingsRouteImport.update({
@@ -282,6 +288,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/reports': typeof DashboardReportsRoute
   '/dashboard/sales': typeof DashboardSalesRouteWithChildren
   '/dashboard/settings': typeof DashboardSettingsRoute
+  '/dashboard/support': typeof DashboardSupportRoute
   '/dashboard/transactions': typeof DashboardTransactionsRoute
   '/admin/': typeof AdminIndexRoute
   '/dashboard/': typeof DashboardIndexRoute
@@ -322,6 +329,7 @@ export interface FileRoutesByTo {
   '/dashboard/reports': typeof DashboardReportsRoute
   '/dashboard/sales': typeof DashboardSalesRouteWithChildren
   '/dashboard/settings': typeof DashboardSettingsRoute
+  '/dashboard/support': typeof DashboardSupportRoute
   '/dashboard/transactions': typeof DashboardTransactionsRoute
   '/admin': typeof AdminIndexRoute
   '/dashboard': typeof DashboardIndexRoute
@@ -365,6 +373,7 @@ export interface FileRoutesById {
   '/dashboard/reports': typeof DashboardReportsRoute
   '/dashboard/sales': typeof DashboardSalesRouteWithChildren
   '/dashboard/settings': typeof DashboardSettingsRoute
+  '/dashboard/support': typeof DashboardSupportRoute
   '/dashboard/transactions': typeof DashboardTransactionsRoute
   '/admin/': typeof AdminIndexRoute
   '/dashboard/': typeof DashboardIndexRoute
@@ -409,6 +418,7 @@ export interface FileRouteTypes {
     | '/dashboard/reports'
     | '/dashboard/sales'
     | '/dashboard/settings'
+    | '/dashboard/support'
     | '/dashboard/transactions'
     | '/admin/'
     | '/dashboard/'
@@ -449,6 +459,7 @@ export interface FileRouteTypes {
     | '/dashboard/reports'
     | '/dashboard/sales'
     | '/dashboard/settings'
+    | '/dashboard/support'
     | '/dashboard/transactions'
     | '/admin'
     | '/dashboard'
@@ -491,6 +502,7 @@ export interface FileRouteTypes {
     | '/dashboard/reports'
     | '/dashboard/sales'
     | '/dashboard/settings'
+    | '/dashboard/support'
     | '/dashboard/transactions'
     | '/admin/'
     | '/dashboard/'
@@ -615,6 +627,13 @@ declare module '@tanstack/react-router' {
       path: '/transactions'
       fullPath: '/dashboard/transactions'
       preLoaderRoute: typeof DashboardTransactionsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/support': {
+      id: '/dashboard/support'
+      path: '/support'
+      fullPath: '/dashboard/support'
+      preLoaderRoute: typeof DashboardSupportRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/dashboard/settings': {
@@ -890,6 +909,7 @@ interface DashboardRouteChildren {
   DashboardReportsRoute: typeof DashboardReportsRoute
   DashboardSalesRoute: typeof DashboardSalesRouteWithChildren
   DashboardSettingsRoute: typeof DashboardSettingsRoute
+  DashboardSupportRoute: typeof DashboardSupportRoute
   DashboardTransactionsRoute: typeof DashboardTransactionsRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
 }
@@ -907,6 +927,7 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardReportsRoute: DashboardReportsRoute,
   DashboardSalesRoute: DashboardSalesRouteWithChildren,
   DashboardSettingsRoute: DashboardSettingsRoute,
+  DashboardSupportRoute: DashboardSupportRoute,
   DashboardTransactionsRoute: DashboardTransactionsRoute,
   DashboardIndexRoute: DashboardIndexRoute,
 }

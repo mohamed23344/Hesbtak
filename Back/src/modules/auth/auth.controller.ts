@@ -8,6 +8,7 @@ import {
   CompleteInvitationDto,
   CreateOrganizationDto,
   ForgotPasswordDto,
+  GoogleAuthDto,
   InviteMemberDto,
   LoginDto,
   OnboardingAnswerDto,
@@ -15,6 +16,7 @@ import {
   ResendOtpDto,
   ResetPasswordDto,
   UpdateOrganizationDto,
+  UpdateMemberDto,
   VerifyOtpDto,
 } from './dto';
 
@@ -30,6 +32,11 @@ export class AuthController {
   @Post('auth/login')
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto);
+  }
+
+  @Post('auth/google')
+  google(@Body() dto: GoogleAuthDto) {
+    return this.auth.googleAuth(dto);
   }
 
   @Post('auth/forgot-password')
@@ -117,6 +124,12 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get('auth/notifications')
+  notifications(@CurrentUser() user: JwtUser) {
+    return this.auth.userNotifications(user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Post('organizations')
   createOrganization(@CurrentUser() user: JwtUser, @Body() dto: CreateOrganizationDto) {
     return this.auth.createOrganization(user.sub, dto);
@@ -142,6 +155,17 @@ export class AuthController {
     @CurrentUser() user: JwtUser,
   ) {
     return this.auth.removeMember(organizationId, memberId, user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('org/:organizationId/members/:memberId')
+  updateMember(
+    @Param('organizationId') organizationId: string,
+    @Param('memberId') memberId: string,
+    @CurrentUser() user: JwtUser,
+    @Body() dto: UpdateMemberDto,
+  ) {
+    return this.auth.updateMember(organizationId, memberId, user.sub, dto);
   }
 
   @UseGuards(JwtAuthGuard)

@@ -4,7 +4,7 @@ import { BrandMark, LangToggle, ThemeToggle } from "@/components/Brand";
 import {
   LayoutDashboard, ArrowLeftRight, Receipt, ShoppingCart, Wallet,
   Network, BookOpenText, Bot, TrendingUp, Bell, Settings, Search, LogOut, Menu, X,
-  ChartNoAxesCombined, ChevronDown, ChevronRight,
+  ChartNoAxesCombined, ChevronDown, ChevronRight, LifeBuoy,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
@@ -105,10 +105,11 @@ export default function DashboardLayout() {
     { to: "/dashboard/forecasting", label: t("forecasting"), icon: TrendingUp, permission: "forecasting" },
     { to: "/dashboard/reports", label: t("reports"), icon: ChartNoAxesCombined, permission: "reports" },
     { to: "/dashboard/notifications", label: t("notifications"), icon: Bell, permission: "notifications" },
+    { to: "/dashboard/support", label: t("support"), icon: LifeBuoy },
     { to: "/dashboard/settings", label: t("settings"), icon: Settings, permission: "settings" },
   ].filter((item) => {
     if (item.permission === "assistant" && !features.chatbot) return false;
-    return activeTenant?.role !== "viewer" || activeTenant.permissions?.includes(item.permission);
+    return !item.permission || activeTenant?.role !== "viewer" || activeTenant.permissions?.includes(item.permission);
   });
 
   const navLinkClass = (active: boolean) =>

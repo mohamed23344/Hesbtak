@@ -34,7 +34,6 @@ const dict = {
     fullName: "Full name",
     forgot: "Forgot password?",
     continueGoogle: "Continue with Google",
-    continueFacebook: "Continue with Facebook",
     orContinueWith: "or continue with",
     
     // Auth - Register/Forgot
@@ -106,6 +105,7 @@ const dict = {
     reports: "Reports",
     ocr: "OCR Upload",
     notifications: "Notifications",
+    support: "Support",
     settings: "Settings",
 
     // Sales / Purchases / Expenses shared
@@ -339,7 +339,6 @@ const dict = {
     fullName: "الاسم الكامل",
     forgot: "نسيت كلمة المرور؟",
     continueGoogle: "المتابعة عبر Google",
-    continueFacebook: "المتابعة عبر Facebook",
     orContinueWith: "أو تابع عبر",
     
     // Auth - Register/Forgot
@@ -411,6 +410,7 @@ const dict = {
     reports: "التقارير",
     ocr: "رفع المستندات",
     notifications: "التنبيهات",
+    support: "الدعم",
     settings: "الإعدادات",
 
     // Sales / Purchases / Expenses shared
