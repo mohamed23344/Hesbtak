@@ -23,7 +23,7 @@ type Payment = {
 };
 
 type Customer = { id: string; name: string; email?: string };
-type Invoice = { id: string; invoice_number: string; total: string; customer_name?: string; status: string };
+type Invoice = { id: string; invoice_number: string; customer_id: string; total: string; customer_name?: string; status: string };
 
 function today() {
   return new Date().toISOString().slice(0, 10);

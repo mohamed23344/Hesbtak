@@ -18,7 +18,7 @@ type Kpis = {
 };
 
 function DashboardHome() {
-  const { t, lang } = useI18n();
+  const { t, lang, dir } = useI18n();
   const session = getSession();
   const firstName = session?.user.fullName?.split(" ")[0] ?? "";
   const greeting =

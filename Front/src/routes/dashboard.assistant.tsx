@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Header } from "./dashboard.transactions";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
@@ -88,7 +88,7 @@ function Page() {
         <div className="rounded-2xl border border-border-default bg-card p-8 text-center">
           <h3 className="font-semibold">AI Pro subscription required</h3>
           <p className="mt-2 text-sm text-on-surface-variant">The AI financial chatbot is available on the AI Pro plan.</p>
-          <Button asChild className="mt-4"><a href="/dashboard/settings">View plans</a></Button>
+          <Button asChild className="mt-4"><Link to="/dashboard/settings" search={{}}>View plans</Link></Button>
         </div>
       </div>
     );

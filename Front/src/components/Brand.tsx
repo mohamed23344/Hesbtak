@@ -26,13 +26,13 @@ export function BrandMark({
         <img
           src={isDark ? "/logo-light.png" : "/logo-dark.png"}
           alt="Hesbetak.AI Logo"
-          className="h-8 md:h-9 w-auto object-contain transition-transform duration-300 group-hover:scale-102"
+          className="h-10 md:h-11 w-auto object-contain transition-transform duration-300 group-hover:scale-102"
         />
       ) : (
         <img
           src="/brand-icon.png"
           alt="Hesbetak.AI Icon"
-          className="h-8 w-8 rounded-lg object-contain transition-transform duration-300 group-hover:scale-105"
+          className="h-10 w-10 rounded-xl object-contain transition-transform duration-300 group-hover:scale-105"
         />
       )}
     </Link>

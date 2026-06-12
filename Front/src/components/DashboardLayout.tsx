@@ -14,12 +14,13 @@ import { clearSession, getSession, updateSession } from "@/lib/api";
 type NavItem = {
   to: string;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon?: React.ComponentType<{ className?: string }>;
   permission?: string;
 };
 
 type NavSection = {
   key: string;
+  to: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   permission?: string;
@@ -53,6 +54,7 @@ export default function DashboardLayout() {
   const sections: NavSection[] = [
     {
       key: "sales",
+      to: "/dashboard/sales/manage",
       label: t("sales"),
       icon: Receipt,
       permission: "invoices",
@@ -65,6 +67,7 @@ export default function DashboardLayout() {
     },
     {
       key: "purchases",
+      to: "/dashboard/purchases/manage",
       label: t("purchases"),
       icon: ShoppingCart,
       permission: "invoices",
@@ -77,6 +80,7 @@ export default function DashboardLayout() {
     },
     {
       key: "expenses",
+      to: "/dashboard/expenses/manage",
       label: t("expenses"),
       icon: Wallet,
       permission: "invoices",
@@ -107,7 +111,7 @@ export default function DashboardLayout() {
   });
 
   const navLinkClass = (active: boolean) =>
-    `flex items-center gap-3 px-3 py-2 text-sm transition-all duration-250 ${
+    `flex items-center gap-3.5 px-4 py-2.5 text-base transition-all duration-250 ${
       active
         ? "bg-primary/8 text-primary font-semibold border-s-2 border-primary rounded-s-none rounded-e-lg"
         : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface rounded-lg"
@@ -117,17 +121,17 @@ export default function DashboardLayout() {
     <div dir={dir} className="min-h-screen flex bg-surface">
       {/* Sidebar */}
       <aside
-        className={`fixed lg:sticky top-0 z-40 h-screen w-64 bg-card border-e border-border-default flex flex-col transition-transform ${
+        className={`fixed lg:sticky top-0 z-40 h-screen w-72 bg-card border-e border-border-default flex flex-col transition-transform ${
           open ? "translate-x-0" : "-translate-x-full lg:translate-x-0 rtl:translate-x-full rtl:lg:translate-x-0"
         }`}
       >
-        <div className="h-16 flex items-center justify-between px-5 border-b border-border-default">
+        <div className="h-20 flex items-center justify-between px-5 border-b border-border-default">
           <BrandMark to="/dashboard" />
           <button onClick={() => setOpen(false)} className="lg:hidden text-on-surface-variant focus:outline-none">
             <X className="h-5 w-5" />
           </button>
         </div>
-        <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+        <nav className="flex-1 overflow-y-auto p-3.5 space-y-1">
           {topNav.map((item) => {
             const active = path === item.to;
             return (
@@ -137,7 +141,7 @@ export default function DashboardLayout() {
                 onClick={() => setOpen(false)}
                 className={navLinkClass(active)}
               >
-                <item.icon className="h-4 w-4 shrink-0 transition-transform group-hover:scale-105" />
+                {item.icon && <item.icon className="h-5 w-5 shrink-0 transition-transform group-hover:scale-105" />}
                 <span className="truncate">{item.label}</span>
               </Link>
             );
@@ -151,22 +155,34 @@ export default function DashboardLayout() {
             const Icon = section.icon;
             return (
               <div key={section.key} className="space-y-0.5">
-                <button
-                  onClick={() => toggleSection(section.key)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 text-sm transition-all duration-200 ${
+                <div
+                  className={`w-full flex items-center gap-3.5 px-4 py-2.5 text-base transition-all duration-200 ${
                     isChildActive(section.items)
                       ? "text-primary font-semibold"
                       : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface rounded-lg"
                   }`}
                 >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  <span className="truncate flex-1 text-start">{section.label}</span>
-                  {expanded ? (
-                    <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-                  ) : (
-                    <ChevronRight className="h-3.5 w-3.5 shrink-0 rtl:rotate-180" />
-                  )}
-                </button>
+                  <Icon className="h-5 w-5 shrink-0" />
+                  <Link
+                    to={section.to}
+                    onClick={() => setOpen(false)}
+                    className="min-w-0 flex-1 truncate text-start"
+                  >
+                    {section.label}
+                  </Link>
+                  <button
+                    type="button"
+                    aria-label={`${expanded ? "Collapse" : "Expand"} ${section.label}`}
+                    onClick={() => toggleSection(section.key)}
+                    className="rounded-md p-1 hover:bg-primary/10"
+                  >
+                    {expanded ? (
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0 rtl:rotate-180" />
+                    )}
+                  </button>
+                </div>
                 {expanded && (
                   <div className="ms-3 border-s border-border-default/80 ps-2 mt-0.5 space-y-0.5">
                     {section.items.map((item) => {
@@ -176,7 +192,7 @@ export default function DashboardLayout() {
                           key={item.to}
                           to={item.to}
                           onClick={() => setOpen(false)}
-                          className={`flex items-center gap-3 px-3 py-1.5 text-sm transition-all duration-200 ${
+                          className={`flex items-center gap-3 px-4 py-2 text-[0.94rem] transition-all duration-200 ${
                             active
                               ? "bg-primary/8 text-primary font-semibold border-s border-primary rounded-s-none rounded-e-lg"
                               : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface rounded-lg"
@@ -204,7 +220,7 @@ export default function DashboardLayout() {
                 onClick={() => setOpen(false)}
                 className={navLinkClass(active)}
               >
-                <item.icon className="h-4 w-4 shrink-0" />
+                {item.icon && <item.icon className="h-5 w-5 shrink-0" />}
                 <span className="truncate">{item.label}</span>
               </Link>
             );
@@ -214,9 +230,9 @@ export default function DashboardLayout() {
           <Link
             to="/login"
             onClick={() => clearSession()}
-            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-on-surface-variant hover:bg-destructive/10 hover:text-destructive transition-colors duration-200"
+            className="flex items-center gap-3.5 rounded-lg px-4 py-2.5 text-base text-on-surface-variant hover:bg-destructive/10 hover:text-destructive transition-colors duration-200"
           >
-            <LogOut className="h-4 w-4" /> {t("logout")}
+            <LogOut className="h-5 w-5" /> {t("logout")}
           </Link>
         </div>
       </aside>
@@ -228,11 +244,11 @@ export default function DashboardLayout() {
 
       {/* Main */}
       <div className="flex-1 min-w-0 flex flex-col">
-        <header className="h-16 sticky top-0 z-20 bg-surface/80 backdrop-blur border-b border-border-default px-4 md:px-6 flex items-center gap-3">
+        <header className="h-20 sticky top-0 z-20 bg-surface/80 backdrop-blur border-b border-border-default px-4 md:px-7 flex items-center gap-4">
           <button onClick={() => setOpen(true)} className="lg:hidden text-on-surface-variant">
             <Menu className="h-5 w-5" />
           </button>
-          <div className="relative flex-1 max-w-md">
+          <div className="relative flex-1 max-w-xl">
             <Search className="h-4 w-4 absolute start-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
             <Input placeholder={t("search")} className="ps-9 bg-card" />
           </div>
@@ -252,19 +268,21 @@ export default function DashboardLayout() {
             )}
             <LangToggle />
             <ThemeToggle />
-            <Button variant="ghost" size="icon">
-              <Bell className="h-4 w-4" />
+            <Button asChild variant="ghost" size="icon">
+              <Link to="/dashboard/notifications" aria-label={t("notifications")}>
+                <Bell className="h-4 w-4" />
+              </Link>
             </Button>
             <div className="hidden sm:block text-end">
               <p className="text-sm font-medium leading-tight">{session?.user.fullName ?? "Account"}</p>
               <p className="text-xs text-on-surface-variant leading-tight">{activeTenant?.organizationName ?? "Onboarding"}</p>
             </div>
-            <div className="h-9 w-9 rounded-full bg-gradient-primary text-primary-foreground grid place-items-center text-sm font-semibold">
+            <div className="h-11 w-11 rounded-full bg-gradient-primary text-primary-foreground grid place-items-center text-base font-semibold">
               {session?.user.fullName?.[0] ?? "A"}
             </div>
           </div>
         </header>
-        <main className="flex-1 p-4 md:p-6 max-w-[1600px] w-full mx-auto">
+        <main className="flex-1 p-5 md:p-8 max-w-[1840px] w-full mx-auto">
           <Outlet />
         </main>
       </div>

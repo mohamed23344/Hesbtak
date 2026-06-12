@@ -40,7 +40,7 @@ function VerifyOTP() {
         });
         saveSession(result);
         toast.success("Email verified");
-        nav({ to: "/onboarding" });
+        nav({ to: "/onboarding", search: {} });
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Verification failed");

@@ -18,7 +18,12 @@ import { toast } from "sonner";
 import { useCOA, DEFAULT_COA, COANode } from "@/lib/useCOA";
 import { api, getSession, updateSession } from "@/lib/api";
 
-export const Route = createFileRoute("/onboarding")({ component: Onboarding });
+export const Route = createFileRoute("/onboarding")({
+  validateSearch: (search: Record<string, unknown>): { newOrganization?: boolean } => ({
+    newOrganization: search.new === "1" ? true : undefined,
+  }),
+  component: Onboarding,
+});
 
 type IndustryCategory = "Commercial" | "Industrial" | "Services" | "Others";
 type COAOption = COANode & { depth: number };
@@ -245,6 +250,7 @@ const buildCOA = (enabledQuestionKeys: Set<string>) => {
 };
 
 function Onboarding() {
+  const { newOrganization: createNew } = Route.useSearch();
   const { dir, t } = useI18n();
   const nav = useNavigate();
   const { saveCOA } = useCOA();
@@ -303,7 +309,6 @@ function Onboarding() {
     if (!session) {
       throw new Error("Please login before onboarding");
     }
-    const createNew = new URLSearchParams(window.location.search).get("new") === "1";
     const endpoint = session.activeTenantId && !createNew
       ? `/onboarding/${session.activeTenantId}/complete`
       : "/onboarding/complete";

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Header } from "./dashboard.transactions";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { api, getSession, updateSession } from "@/lib/api";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/dashboard/settings")({ component: Page });
+export const Route = createFileRoute("/dashboard/settings")({
+  validateSearch: (search: Record<string, unknown>): { reference?: string; payment?: string } => ({
+    reference: typeof search.reference === "string" ? search.reference : undefined,
+    payment: typeof search.payment === "string" ? search.payment : undefined,
+  }),
+  component: Page,
+});
 
 type Member = {
   id: string;
@@ -52,6 +58,8 @@ const VIEW_PERMISSIONS = [
 ] as const;
 
 function Page() {
+  const nav = useNavigate();
+  const { reference, payment } = Route.useSearch();
   const session = getSession();
   const tenant = session?.tenants.find((item) => item.organizationId === session.activeTenantId);
   const canEdit = tenant?.role === "owner" || tenant?.role === "accountant";
@@ -117,9 +125,6 @@ function Page() {
   }, [tenant?.organizationId]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const reference = params.get("reference");
-    const payment = params.get("payment");
     if (!reference || !tenant?.organizationId) return;
     api<CurrentSubscription>("/subscriptions/verify", {
       method: "POST",
@@ -150,7 +155,7 @@ function Page() {
       else if (payment === "failed") toast.error("Payment was not completed");
       else toast.info("Payment is still being confirmed. Refresh in a few seconds.");
     }).catch((error) => toast.error(error instanceof Error ? error.message : "Could not verify payment"));
-  }, [tenant?.organizationId]);
+  }, [tenant?.organizationId, reference, payment]);
 
   const saveOrganization = async () => {
     try {
@@ -233,7 +238,7 @@ function Page() {
       await api(`/org/${tenant?.organizationId}`, { method: "DELETE" });
       const tenants = session?.tenants.filter((item) => item.organizationId !== tenant?.organizationId) ?? [];
       updateSession({ tenants, activeTenantId: tenants.length === 1 ? tenants[0].organizationId : undefined });
-      window.location.assign(tenants.length ? "/select-organization" : "/onboarding");
+      nav({ to: tenants.length ? "/select-organization" : "/onboarding" });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not delete organization");
     }
@@ -313,7 +318,7 @@ function Page() {
     </Section>}
 
     {isOwner && <Section title="Owner actions">
-      <div className="flex flex-wrap gap-2"><Button asChild variant="outline"><a href="/onboarding?new=1">Create another organization</a></Button><Button variant="destructive" onClick={deleteOrganization}>Delete organization</Button></div>
+      <div className="flex flex-wrap gap-2"><Button asChild variant="outline"><Link to="/onboarding" search={{ newOrganization: true }}>Create another organization</Link></Button><Button variant="destructive" onClick={deleteOrganization}>Delete organization</Button></div>
     </Section>}
   </div>;
 }

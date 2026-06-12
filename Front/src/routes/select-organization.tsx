@@ -37,7 +37,7 @@ function Page() {
             </button>
           ))}
         </div>
-        <Button className="mt-4" variant="outline" onClick={() => window.location.assign("/onboarding?new=1")}><Plus /> Create organization</Button>
+        <Button className="mt-4" variant="outline" onClick={() => nav({ to: "/onboarding", search: { newOrganization: true } })}><Plus /> Create organization</Button>
       </div>
       {notifications.length > 0 && <div className="bg-card border border-border-default rounded-2xl p-6 mt-4">
         <h2 className="font-semibold flex items-center gap-2"><Bell className="h-4 w-4 text-primary" /> Account notifications</h2>

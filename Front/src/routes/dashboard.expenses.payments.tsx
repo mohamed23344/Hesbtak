@@ -23,7 +23,7 @@ type Payment = {
 };
 
 type Vendor = { id: string; name: string; email?: string };
-type Bill = { id: string; bill_number: string; total: string; vendor_name?: string; status: string };
+type Bill = { id: string; bill_number: string; vendor_id: string; total: string; vendor_name?: string; status: string };
 
 function today() {
   return new Date().toISOString().slice(0, 10);

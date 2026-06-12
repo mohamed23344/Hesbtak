@@ -45,11 +45,11 @@ function AdminLayout() {
     <div dir={dir} className="min-h-screen flex bg-surface">
       {/* Sidebar */}
       <aside
-        className={`fixed lg:sticky top-0 z-40 h-screen w-64 bg-card border-e border-border-default flex flex-col transition-transform ${
+        className={`fixed lg:sticky top-0 z-40 h-screen w-72 bg-card border-e border-border-default flex flex-col transition-transform ${
           open ? "translate-x-0" : "-translate-x-full lg:translate-x-0 rtl:translate-x-full rtl:lg:translate-x-0"
         }`}
       >
-        <div className="h-16 flex items-center justify-between px-5 border-b border-border-default">
+        <div className="h-20 flex items-center justify-between px-5 border-b border-border-default">
           <BrandMark />
           <button onClick={() => setOpen(false)} className="lg:hidden text-on-surface-variant">
             <X className="h-5 w-5" />
@@ -70,13 +70,13 @@ function AdminLayout() {
                   setSection(item.id);
                   setOpen(false);
                 }}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition ${
+                className={`flex items-center gap-3.5 rounded-lg px-4 py-2.5 text-base transition ${
                   active
                     ? "bg-primary/10 text-primary font-medium"
                     : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
                 }`}
               >
-                <item.icon className="h-4 w-4 shrink-0" />
+                <item.icon className="h-5 w-5 shrink-0" />
                 <span className="truncate">{item.label}</span>
               </a>
             );
@@ -100,7 +100,7 @@ function AdminLayout() {
 
       {/* Main */}
       <div className="flex-1 min-w-0 flex flex-col">
-        <header className="h-16 sticky top-0 z-20 bg-surface/80 backdrop-blur border-b border-border-default px-4 md:px-6 flex items-center justify-between">
+        <header className="h-20 sticky top-0 z-20 bg-surface/80 backdrop-blur border-b border-border-default px-4 md:px-7 flex items-center justify-between">
           <button onClick={() => setOpen(true)} className="lg:hidden text-on-surface-variant">
             <Menu className="h-5 w-5" />
           </button>
@@ -115,7 +115,7 @@ function AdminLayout() {
             </div>
           </div>
         </header>
-        <main className="flex-1 p-4 md:p-6 max-w-[1600px] w-full mx-auto">
+        <main className="flex-1 p-5 md:p-8 max-w-[1840px] w-full mx-auto">
           <Outlet />
         </main>
       </div>

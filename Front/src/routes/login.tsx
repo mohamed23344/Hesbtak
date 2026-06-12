@@ -27,7 +27,7 @@ function LoginPage() {
       });
       saveSession(data);
       if (data.user.globalRole === "admin") {
-        window.location.assign("/admin#users");
+        nav({ to: "/admin", hash: "users", replace: true });
         return;
       }
       nav({

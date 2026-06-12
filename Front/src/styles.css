@@ -156,12 +156,25 @@
   html {
     font-family: var(--font-sans);
     scroll-behavior: smooth;
+    font-size: clamp(16px, calc(15px + 0.18vw), 18px);
   }
 
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    line-height: 1.55;
+    min-width: 320px;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
   }
 
   [dir="rtl"] {

@@ -261,7 +261,7 @@ export function StatusBadge({ status }: { status: string }) {
     received: "bg-status-warning/10 text-status-warning",
   };
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${map[status] ?? "bg-surface-container"}`}>
+    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium ${map[status] ?? "bg-surface-container"}`}>
       {status}
     </span>
   );
@@ -269,10 +269,10 @@ export function StatusBadge({ status }: { status: string }) {
 
 export function Header({ title, desc, action }: { title: string; desc?: string; action?: React.ReactNode }) {
   return (
-    <div className="flex items-end justify-between gap-3 flex-wrap">
+    <div className="flex items-end justify-between gap-4 flex-wrap">
       <div>
-        <h1 className="text-2xl font-bold">{title}</h1>
-        {desc && <p className="text-sm text-on-surface-variant">{desc}</p>}
+        <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
+        {desc && <p className="mt-1 text-base text-on-surface-variant">{desc}</p>}
       </div>
       {action}
     </div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { BrandMark, LangToggle, ThemeToggle } from "@/components/Brand";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ declare global {
 }
 
 export function SocialButtons() {
+  const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(false);
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
@@ -38,13 +40,14 @@ export function SocialButtons() {
               body: JSON.stringify({ credential }),
             });
             saveSession(data);
-            window.location.assign(
-              data.user.globalRole === "admin"
-                ? "/admin#users"
-                : data.tenants?.length === 1
-                  ? "/dashboard"
-                  : "/select-organization",
-            );
+            if (data.user.globalRole === "admin") {
+              navigate({ to: "/admin", hash: "users", replace: true });
+            } else {
+              navigate({
+                to: data.tenants?.length === 1 ? "/dashboard" : "/select-organization",
+                replace: true,
+              });
+            }
           } catch (error) {
             toast.error(error instanceof Error ? error.message : "Google sign-in failed");
             setLoading(false);
@@ -78,7 +81,7 @@ export function SocialButtons() {
       script.onload = null;
       script.onerror = null;
     };
-  }, [clientId]);
+  }, [clientId, navigate]);
 
   return (
     <div className="min-h-11">
@@ -117,7 +120,7 @@ export default function AuthLayout({
   const { dir } = useI18n();
   return (
     <div dir={dir} className="min-h-screen bg-gradient-hero grid lg:grid-cols-2">
-      <div className="hidden lg:flex flex-col justify-between p-10 bg-gradient-primary text-primary-foreground relative overflow-hidden">
+      <div className="hidden lg:flex flex-col justify-between p-12 xl:p-16 bg-gradient-primary text-primary-foreground relative overflow-hidden">
         {/* Glow overlay */}
         <div className="absolute -top-32 -left-32 w-80 h-80 bg-accent/20 blur-3xl rounded-full" />
         <div className="absolute -bottom-32 -right-32 w-80 h-80 bg-indigo-400/20 blur-3xl rounded-full" />
@@ -127,10 +130,10 @@ export default function AuthLayout({
         </div>
         
         <div className="relative z-10 my-auto py-12">
-          <h2 className="text-4xl font-bold leading-tight tracking-tight">
+          <h2 className="max-w-2xl text-5xl xl:text-6xl font-bold leading-[1.08] tracking-tight">
             Your finances, simplified — in English and العربية.
           </h2>
-          <p className="mt-4 text-primary-foreground/80 max-w-md text-base leading-relaxed">
+          <p className="mt-6 text-primary-foreground/80 max-w-xl text-lg leading-relaxed">
             Join thousands of SMBs using Hesbetak.AI to automate their bookkeeping with bilingual artificial intelligence.
           </p>
         </div>
@@ -149,11 +152,11 @@ export default function AuthLayout({
           </div>
         </div>
         <div className="flex-1 flex items-center justify-center px-4 pb-10">
-          <div className="w-full max-w-md">
-            <div className="bg-card/80 glass-panel shadow-card p-8 hover-glow rounded-2xl">
-              <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-              {subtitle && <p className="mt-1 text-sm text-on-surface-variant">{subtitle}</p>}
-              <div className="mt-6">{children}</div>
+          <div className="w-full max-w-lg">
+            <div className="bg-card/80 glass-panel shadow-card p-8 lg:p-10 hover-glow rounded-3xl">
+              <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
+              {subtitle && <p className="mt-2 text-base text-on-surface-variant">{subtitle}</p>}
+              <div className="mt-7">{children}</div>
             </div>
           </div>
         </div>

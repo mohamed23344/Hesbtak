@@ -7,7 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/accept-invitation")({ component: Page });
+export const Route = createFileRoute("/accept-invitation")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    token: typeof search.token === "string" ? search.token : "",
+  }),
+  component: Page,
+});
 
 type Invitation = {
   email: string;
@@ -18,9 +23,7 @@ type Invitation = {
 
 function Page() {
   const nav = useNavigate();
-  const token = typeof window === "undefined"
-    ? ""
-    : new URLSearchParams(window.location.search).get("token") ?? "";
+  const { token } = Route.useSearch();
   const [invitation, setInvitation] = useState<Invitation | null>(null);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
