@@ -15,6 +15,7 @@ import {
   Edit3,
   Eye,
   Layers3,
+  LifeBuoy,
   Plus,
   Power,
   Search,
@@ -38,7 +39,7 @@ import {
 
 export const Route = createFileRoute("/admin/")({ component: AdminDashboard });
 
-type Tab = "users" | "organizations" | "insights" | "plans";
+type Tab = "users" | "organizations" | "insights" | "plans" | "tickets";
 
 type AdminStats = {
   organizations: number;
@@ -99,6 +100,17 @@ type PlanRow = {
   _count?: { subscriptions: number };
 };
 
+type SupportTicket = {
+  id: string;
+  subject: string;
+  category: string;
+  message: string;
+  status: string;
+  adminReply?: string | null;
+  createdAt: string;
+  user: { id: string; fullName: string; email: string };
+};
+
 const emptyStats: AdminStats = {
   organizations: 0,
   activeOrganizations: 0,
@@ -120,25 +132,29 @@ function AdminDashboard() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [organizations, setOrganizations] = useState<OrganizationRow[]>([]);
   const [plans, setPlans] = useState<PlanRow[]>([]);
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [query, setQuery] = useState("");
   const [selectedUser, setSelectedUser] = useState<UserDetail | null>(null);
   const [selectedOrganization, setSelectedOrganization] = useState<OrganizationDetail | null>(null);
   const [editingUser, setEditingUser] = useState<UserRow | null>(null);
   const [editingOrganization, setEditingOrganization] = useState<OrganizationRow | null>(null);
   const [editingPlan, setEditingPlan] = useState<PlanRow | "new" | null>(null);
+  const [replyingTicket, setReplyingTicket] = useState<SupportTicket | null>(null);
 
   const load = async () => {
     try {
-      const [nextStats, nextUsers, nextOrganizations, nextPlans] = await Promise.all([
+      const [nextStats, nextUsers, nextOrganizations, nextPlans, nextTickets] = await Promise.all([
         api<AdminStats>("/admin/dashboard"),
         api<UserRow[]>("/admin/users"),
         api<OrganizationRow[]>("/admin/organizations"),
         api<PlanRow[]>("/admin/plans"),
+        api<SupportTicket[]>("/admin/support/tickets"),
       ]);
       setStats(nextStats);
       setUsers(nextUsers);
       setOrganizations(nextOrganizations);
       setPlans(nextPlans);
+      setTickets(nextTickets);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not load admin data");
     }
@@ -358,9 +374,35 @@ function AdminDashboard() {
         </DataPanel>
       )}
 
+      {tab === "tickets" && (
+        <DataPanel title="Support tickets" icon={LifeBuoy}>
+          <div className="space-y-3">
+            {tickets.length ? tickets.map((ticket) => (
+              <article key={ticket.id} className="rounded-lg border border-border-default p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">{ticket.subject}</p>
+                    <p className="text-xs text-on-surface-variant mt-1">
+                      {ticket.user.fullName} · {ticket.user.email} · {String(ticket.createdAt).slice(0, 10)}
+                    </p>
+                  </div>
+                  <span className="rounded-md bg-surface-container px-2 py-1 text-xs capitalize">{ticket.status.replace("_", " ")}</span>
+                </div>
+                <p className="text-sm mt-3 whitespace-pre-wrap">{ticket.message}</p>
+                {ticket.adminReply && <div className="mt-3 rounded-lg bg-primary/5 border border-primary/20 p-3 text-sm whitespace-pre-wrap">{ticket.adminReply}</div>}
+                <div className="mt-3 flex justify-end">
+                  <Button size="sm" onClick={() => setReplyingTicket(ticket)}>{ticket.adminReply ? "Update reply" : "Reply"}</Button>
+                </div>
+              </article>
+            )) : <p className="py-8 text-center text-sm text-on-surface-variant">No support tickets.</p>}
+          </div>
+        </DataPanel>
+      )}
+
       <UserDialog user={editingUser} onClose={() => setEditingUser(null)} onSaved={load} />
       <OrganizationDialog organization={editingOrganization} onClose={() => setEditingOrganization(null)} onSaved={load} />
       <PlanDialog plan={editingPlan} onClose={() => setEditingPlan(null)} onSaved={load} />
+      <SupportReplyDialog ticket={replyingTicket} onClose={() => setReplyingTicket(null)} onSaved={load} />
     </div>
   );
 }
@@ -558,6 +600,48 @@ function PlanDialog({ plan, onClose, onSaved }: { plan: PlanRow | "new" | null; 
   );
 }
 
+function SupportReplyDialog({ ticket, onClose, onSaved }: { ticket: SupportTicket | null; onClose: () => void; onSaved: () => void }) {
+  const [reply, setReply] = useState("");
+  const [status, setStatus] = useState("resolved");
+  const [sending, setSending] = useState(false);
+  useEffect(() => {
+    if (ticket) {
+      setReply(ticket.adminReply ?? "");
+      setStatus(ticket.status === "open" ? "resolved" : ticket.status);
+    }
+  }, [ticket]);
+
+  const submit = async () => {
+    if (!ticket || !reply.trim()) return;
+    setSending(true);
+    try {
+      await api(`/admin/support/tickets/${ticket.id}/reply`, {
+        method: "PATCH",
+        body: JSON.stringify({ reply, status }),
+      });
+      toast.success("Reply emailed to the user");
+      onSaved();
+      onClose();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not reply to ticket");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return <Dialog open={Boolean(ticket)} onOpenChange={(open) => !open && onClose()}>
+    <DialogContent>
+      <DialogHeader><DialogTitle>Reply to support ticket</DialogTitle></DialogHeader>
+      <div className="space-y-3">
+        <div className="rounded-lg bg-surface-container p-3"><p className="font-medium">{ticket?.subject}</p><p className="text-sm text-on-surface-variant mt-1">{ticket?.message}</p></div>
+        <div className="space-y-1.5"><Label>Reply</Label><Textarea className="min-h-36" value={reply} onChange={(event) => setReply(event.target.value)} /></div>
+        <div className="space-y-1.5"><Label>Status</Label><select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={status} onChange={(event) => setStatus(event.target.value)}><option value="in_progress">In progress</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select></div>
+      </div>
+      <DialogFooter><Button variant="outline" onClick={onClose}>Cancel</Button><Button disabled={sending || !reply.trim()} onClick={() => void submit()}>{sending ? "Sending..." : "Send reply"}</Button></DialogFooter>
+    </DialogContent>
+  </Dialog>;
+}
+
 function Field({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
   return (
     <div className="space-y-1.5">
@@ -613,7 +697,7 @@ async function deleteItem(path: string, onSaved: () => void) {
 function sectionFromHash(): Tab {
   if (typeof window === "undefined") return "users";
   const section = window.location.hash.replace("#", "");
-  return ["users", "organizations", "insights", "plans"].includes(section)
+  return ["users", "organizations", "insights", "plans", "tickets"].includes(section)
     ? (section as Tab)
     : "users";
 }

@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import * as tls from 'node:tls';
 import { DataBaseService } from '../../database/database.service';
 import { JwtUser } from '../../common/auth/current-user.decorator';
 import {
@@ -177,6 +178,15 @@ export class OrganizationsService {
     if (id === user.sub && dto.globalRole === 'user') {
       throw new BadRequestException('You cannot remove your own admin role');
     }
+    const existing = await this.db.user.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('User not found');
+    if (existing.isActive && dto.isActive === false) {
+      await this.sendEmail(
+        existing.email,
+        'Your Hesbtk.AI account was deactivated',
+        'A platform administrator deactivated your Hesbtk.AI account. Contact support if you believe this was a mistake.',
+      );
+    }
     return this.db.user.update({
       where: { id },
       data: {
@@ -202,6 +212,13 @@ export class OrganizationsService {
     if (id === user.sub) {
       throw new BadRequestException('You cannot delete your own admin user');
     }
+    const existing = await this.db.user.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('User not found');
+    await this.sendEmail(
+      existing.email,
+      'Your Hesbtk.AI account was removed',
+      'A platform administrator removed your Hesbtk.AI account and organization access.',
+    );
     await this.db.$transaction([
       this.db.passwordResetOtp.deleteMany({ where: { userId: id } }),
       this.db.auditLog.deleteMany({ where: { userId: id } }),
@@ -256,6 +273,28 @@ export class OrganizationsService {
     dto: UpdateAdminOrganizationDto,
   ) {
     this.ensureAdmin(user);
+    const existing = await this.db.organization.findUnique({
+      where: { id },
+      include: { members: { include: { user: true } } },
+    });
+    if (!existing) throw new NotFoundException('Organization not found');
+    if (existing.isActive && dto.isActive === false) {
+      await Promise.all(existing.members.map((member) => this.sendEmail(
+        member.user.email,
+        `Access to ${existing.name} was deactivated`,
+        `A platform administrator deactivated ${existing.name}. You cannot access this organization until it is reactivated.`,
+      )));
+      await this.db.userNotification.createMany({
+        data: existing.members.map((member) => ({
+          userId: member.userId,
+          organizationId: id,
+          type: 'organization_access',
+          severity: 'warning',
+          title: 'Organization deactivated',
+          message: `${existing.name} was deactivated by a platform administrator.`,
+        })),
+      });
+    }
     return this.db.organization.update({
       where: { id },
       data: {
@@ -269,10 +308,28 @@ export class OrganizationsService {
 
   async deleteAdminOrganization(user: JwtUser, id: string) {
     this.ensureAdmin(user);
-    const organization = await this.db.organization.findUnique({ where: { id } });
+    const organization = await this.db.organization.findUnique({
+      where: { id },
+      include: { members: { include: { user: true } } },
+    });
     if (!organization) throw new NotFoundException('Organization not found');
 
+    await Promise.all(organization.members.map((member) => this.sendEmail(
+      member.user.email,
+      `You were removed from ${organization.name}`,
+      `A platform administrator deleted ${organization.name}. Your access to this organization has been removed.`,
+    )));
     await this.db.$transaction([
+      this.db.userNotification.createMany({
+        data: organization.members.map((member) => ({
+          userId: member.userId,
+          organizationId: id,
+          type: 'organization_access',
+          severity: 'warning',
+          title: 'Organization removed',
+          message: `${organization.name} was removed by a platform administrator.`,
+        })),
+      }),
       this.db.auditLog.deleteMany({ where: { organizationId: id } }),
       this.db.invitation.deleteMany({ where: { organizationId: id } }),
       this.db.organizationUser.deleteMany({ where: { organizationId: id } }),
@@ -345,4 +402,83 @@ export class OrganizationsService {
   private daysAgo(days: number) {
     return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   }
+
+  private async sendEmail(to: string, subject: string, body: string) {
+    const email = process.env.GOOGLE_EMAIL;
+    const password = process.env.GOOGLE_APP_PASSWORD;
+    if (!email || !password) {
+      throw new BadRequestException('Email is not configured');
+    }
+    const message = [
+      `From: Hesbtk.AI <${email}>`,
+      `To: ${to}`,
+      `Subject: ${subject}`,
+      'MIME-Version: 1.0',
+      'Content-Type: text/plain; charset=utf-8',
+      '',
+      body,
+    ].join('\r\n');
+    await smtpSend({
+      user: email,
+      pass: password,
+      to,
+      message,
+      rejectUnauthorized: process.env.GOOGLE_SMTP_REJECT_UNAUTHORIZED !== 'false',
+    });
+  }
+}
+
+function smtpSend(options: {
+  user: string; pass: string; to: string; message: string; rejectUnauthorized: boolean;
+}) {
+  return new Promise<void>((resolve, reject) => {
+    const socket = tls.connect(465, 'smtp.gmail.com', {
+      servername: 'smtp.gmail.com',
+      rejectUnauthorized: options.rejectUnauthorized,
+    });
+    let buffer = '';
+    const waitFor = (expected: number[]) => new Promise<void>((res, rej) => {
+      const onData = (chunk: Buffer) => {
+        buffer += chunk.toString('utf8');
+        const last = buffer.split(/\r?\n/).filter(Boolean).at(-1);
+        if (!last || /^\d{3}-/.test(last)) return;
+        const code = Number(last.slice(0, 3));
+        if (expected.includes(code)) {
+          socket.off('data', onData);
+          buffer = '';
+          res();
+        } else if (code >= 400) {
+          socket.off('data', onData);
+          rej(new Error(last));
+        }
+      };
+      socket.on('data', onData);
+      socket.once('error', rej);
+    });
+    const send = async (command: string, expected: number[]) => {
+      socket.write(`${command}\r\n`);
+      await waitFor(expected);
+    };
+    socket.once('error', reject);
+    socket.once('secureConnect', async () => {
+      try {
+        await waitFor([220]);
+        await send('EHLO hesbtk.ai', [250]);
+        await send('AUTH LOGIN', [334]);
+        await send(Buffer.from(options.user).toString('base64'), [334]);
+        await send(Buffer.from(options.pass).toString('base64'), [235]);
+        await send(`MAIL FROM:<${options.user}>`, [250]);
+        await send(`RCPT TO:<${options.to}>`, [250, 251]);
+        await send('DATA', [354]);
+        socket.write(`${options.message}\r\n.\r\n`);
+        await waitFor([250]);
+        await send('QUIT', [221]);
+        socket.end();
+        resolve();
+      } catch (error) {
+        socket.destroy();
+        reject(error);
+      }
+    });
+  });
 }

@@ -2,6 +2,7 @@ import {
   ArrayMinSize,
   IsEmail,
   IsArray,
+  IsBoolean,
   IsIn,
   IsNotEmpty,
   IsOptional,
@@ -46,6 +47,12 @@ export class LoginDto {
   password!: string;
 }
 
+export class GoogleAuthDto {
+  @IsString()
+  @IsNotEmpty()
+  credential!: string;
+}
+
 export class OnboardingAnswerDto {
   @IsString()
   @IsNotEmpty()
@@ -81,8 +88,9 @@ export class InviteMemberDto {
   email!: string;
 
   @IsString()
+  @IsOptional()
   @MinLength(8)
-  password!: string;
+  password?: string;
 
   @IsString()
   @IsOptional()
@@ -90,6 +98,25 @@ export class InviteMemberDto {
 
   @IsIn(['owner', 'accountant', 'viewer'])
   role!: string;
+
+  @IsOptional()
+  @IsDateString()
+  accessExpiresAt?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  permissions?: string[];
+}
+
+export class UpdateMemberDto {
+  @IsOptional()
+  @IsIn(['owner', 'accountant', 'viewer'])
+  role?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 
   @IsOptional()
   @IsDateString()

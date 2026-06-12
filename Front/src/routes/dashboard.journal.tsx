@@ -11,7 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Plus, Trash2, FileText, Search, AlertCircle, CheckCircle2, ChevronDown, X,
+  Plus, Trash2, FileText, Search, AlertCircle, CheckCircle2, ChevronDown, X, ArrowUpFromLine, ArrowDownToLine,
 } from "lucide-react";
 
 export const Route = createFileRoute("/dashboard/journal")({ component: Page });
@@ -19,11 +19,15 @@ export const Route = createFileRoute("/dashboard/journal")({ component: Page });
 /* ─── Types ─────────────────────────────────────────────────── */
 type Account = { id: string; code: string; name: string; type: string };
 type Customer = { id: string; name: string; email?: string };
+type Vendor = { id: string; name: string; email?: string };
 
 type JournalLine = { id: string; account_id: string; debit: string; credit: string; description?: string };
 type JournalEntry = { id: string; date: string; description: string; reference_type?: string; status?: string; lines: JournalLine[] };
 
 type NewLine = { accountId: string; accountName: string; debit: string; credit: string; description: string };
+
+type Invoice = { id: string; invoice_number: string; total: string; customer_name?: string; status: string };
+type VendorBill = { id: string; bill_number: string; total: string; vendor_name?: string; status: string };
 
 /* ─── Utility ───────────────────────────────────────────────── */
 function today() { return new Date().toISOString().slice(0, 10); }
@@ -116,76 +120,226 @@ function AccountCombobox({
   );
 }
 
-/* ─── Customer Combobox ─────────────────────────────────────── */
-function CustomerCombobox({
-  customers, value, onChange, onQuickAdd,
+/* ─── Voucher Modal (Expense / Receipt) ──────────────────────── */
+function VoucherModal({
+  open, onClose, type, onCreated,
 }: {
-  customers: Customer[];
-  value: string;
-  onChange: (id: string, name: string) => void;
-  onQuickAdd: (name: string) => void;
+  open: boolean;
+  onClose: () => void;
+  type: "expense" | "receipt";
+  onCreated: () => void;
 }) {
-  const [query, setQuery] = useState(value);
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const { t } = useI18n();
+  const [parties, setParties] = useState<(Customer | Vendor)[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[] | VendorBill[]>([]);
+  const [search, setSearch] = useState("");
+  const [partyId, setPartyId] = useState("");
+  const [invoiceId, setInvoiceId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("");
+  const [voucherDate, setVoucherDate] = useState(today());
+  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
+  const [showPartyDialog, setShowPartyDialog] = useState(false);
+  const [newPartyName, setNewPartyName] = useState("");
+  const [newPartyEmail, setNewPartyEmail] = useState("");
+  const [partyInfo, setPartyInfo] = useState<{ name: string; email?: string } | null>(null);
 
-  const filtered = useMemo(
-    () => customers.filter((c) => c.name.toLowerCase().includes(query.toLowerCase())).slice(0, 8),
-    [customers, query]
-  );
+  const isReceipt = type === "receipt";
+  const partyEndpoint = isReceipt ? "/tenant/customers" : "/tenant/vendors";
+  const invoiceEndpoint = isReceipt ? "/tenant/invoices/unpaid" : "/tenant/vendor-bills/unpaid";
+  const partyLabel = isReceipt ? t("customers") : t("vendors");
 
-  const select = (c: Customer) => {
-    setQuery(c.name);
-    onChange(c.id, c.name);
-    setOpen(false);
+  const loadDeps = async () => {
+    try {
+      const [ps, invs] = await Promise.all([
+        api<(Customer | Vendor)[]>(partyEndpoint),
+        api<Invoice[] | VendorBill[]>(invoiceEndpoint),
+      ]);
+      setParties(ps);
+      setInvoices(invs);
+    } catch {
+      // ignore
+    }
   };
 
+  useEffect(() => { if (open) { setSearch(""); setPartyId(""); setInvoiceId(""); setAmount(""); setDescription(""); setVoucherDate(today()); setPaymentMethod("cash"); setPartyInfo(null); void loadDeps(); } }, [open]);
+
+  const filteredParties = parties.filter(
+    (p) => p.name.toLowerCase().includes(search.toLowerCase()) || p.email?.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  const partyInvoices = partyId
+    ? invoices.filter((inv: any) => isReceipt ? inv.customer_id === partyId : inv.vendor_id === partyId)
+    : [];
+
+  const hasParty = !!partyId || !!partyInfo;
+
+  const createPartyAndSelect = () => {
+    if (!newPartyName.trim()) {
+      toast.error("Please enter a name");
+      return;
+    }
+    setPartyInfo({ name: newPartyName.trim(), email: newPartyEmail || undefined });
+    setShowPartyDialog(false);
+    setNewPartyName("");
+    setNewPartyEmail("");
+    setSearch("");
+  };
+
+  const submit = async () => {
+    if (!hasParty) { toast.error(`Select a ${isReceipt ? "customer" : "vendor"}`); return; }
+    if (!amount || Number(amount) <= 0) { toast.error("Enter a valid amount"); return; }
+    setSaving(true);
+    try {
+      const body: Record<string, unknown> = {
+        date: voucherDate,
+        type,
+        partyType: isReceipt ? "customer" : "vendor",
+        description: description || (isReceipt ? "Receipt voucher" : "Expense voucher"),
+        amount: Number(amount),
+        invoiceId: invoiceId || undefined,
+        paymentMethod,
+      };
+      if (partyInfo) {
+        body.partyInfo = partyInfo;
+      } else {
+        body.partyId = partyId;
+      }
+      await api("/tenant/vouchers", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      toast.success(isReceipt ? "Receipt voucher recorded" : "Expense voucher recorded");
+      onCreated();
+      onClose();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not create voucher");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const selectedParty = parties.find((p) => p.id === partyId);
+  const displayName = selectedParty?.name ?? partyInfo?.name;
+
   return (
-    <div ref={ref} className="relative w-full">
-      <div className="relative">
-        <Search className="h-3.5 w-3.5 absolute start-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant" />
-        <Input
-          value={query}
-          onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)}
-          placeholder="Search customers…"
-          className="ps-7 text-sm"
-        />
-      </div>
-      {open && (
-        <div className="absolute z-50 mt-1 w-full bg-card border border-border-default rounded-lg shadow-card overflow-hidden">
-          {filtered.length > 0 ? (
-            <ul className="max-h-40 overflow-y-auto divide-y divide-border-default">
-              {filtered.map((c) => (
-                <li key={c.id} onMouseDown={() => select(c)}
-                  className="px-3 py-2 text-sm hover:bg-surface-container cursor-pointer">
-                  {c.name}
-                  {c.email && <span className="text-xs text-on-surface-variant ms-2">{c.email}</span>}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="p-3 text-xs text-on-surface-variant flex flex-col gap-2">
-              <span>No customer found.</span>
-              {query && (
-                <button onMouseDown={() => { setOpen(false); onQuickAdd(query); }}
-                  className="text-primary font-medium hover:underline text-start">
-                  + Add "{query}" as new customer
-                </button>
-              )}
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{isReceipt ? t("receiptVoucher") : t("expenseVoucher")}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label>{partyLabel}</Label>
+            {hasParty ? (
+              <div className="flex items-center gap-2 p-2 bg-surface-container rounded-lg border border-border-default">
+                <span className="flex-1 text-sm font-medium">{displayName}</span>
+                <Button variant="ghost" size="sm" onClick={() => { setPartyId(""); setPartyInfo(null); }}>Change</Button>
+              </div>
+            ) : (
+              <>
+                <div className="relative">
+                  <Search className="h-4 w-4 absolute start-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
+                  <Input className="ps-9" placeholder={t("searchParty")} value={search} onChange={(e) => setSearch(e.target.value)} />
+                </div>
+                {search && (
+                  <div className="max-h-32 overflow-y-auto border border-border-default rounded-lg divide-y">
+                    {filteredParties.length === 0 ? (
+                      <div className="p-3 text-sm text-center text-on-surface-variant">
+                        Not found.{' '}
+                        <button onClick={() => setShowPartyDialog(true)} className="text-primary underline">
+                          Add new {isReceipt ? "customer" : "vendor"}
+                        </button>
+                      </div>
+                    ) : (
+                      filteredParties.map((p) => (
+                        <button
+                          key={p.id}
+                          className="w-full text-start p-2 text-sm hover:bg-surface-subtle"
+                          onClick={() => { setPartyId(p.id); setSearch(""); }}
+                        >
+                          {p.name}
+                          {p.email && <span className="text-xs text-on-surface-variant ms-2">{p.email}</span>}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {hasParty && (
+            <div className="space-y-1.5">
+              <Label>{t("selectInvoice")} ({isReceipt ? t("customers") : t("vendors")})</Label>
+              <select value={invoiceId} onChange={(e) => setInvoiceId(e.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                <option value="">{t("autoPayOldest")}</option>
+                {partyInvoices.map((inv: any) => (
+                  <option key={inv.id} value={inv.id}>
+                    {(inv.invoice_number || inv.bill_number)} - {money(inv.total)}
+                  </option>
+                ))}
+              </select>
             </div>
           )}
+
+          <div className="space-y-1.5">
+            <Label>{t("voucherAmount")}</Label>
+            <Input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" placeholder="0.00" />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>{t("voucherDescription")}</Label>
+            <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional description" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>{t("date")}</Label>
+              <Input value={voucherDate} onChange={(e) => setVoucherDate(e.target.value)} type="date" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t("paymentMethod")}</Label>
+              <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                <option value="cash">Cash</option>
+                <option value="bank">Bank</option>
+                <option value="card">Card</option>
+                <option value="transfer">Transfer</option>
+              </select>
+            </div>
+          </div>
         </div>
-      )}
-    </div>
+        <DialogFooter className="mt-4">
+          <Button variant="outline" onClick={onClose}>{t("cancel")}</Button>
+          <Button className="bg-gradient-primary" onClick={submit} disabled={saving || !hasParty || !amount}>
+            {saving ? "Saving…" : t("recordVoucher")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+
+      {/* Quick Add Party Dialog */}
+      <Dialog open={showPartyDialog} onOpenChange={setShowPartyDialog}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Add New {isReceipt ? "Customer" : "Vendor"}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>{t("fullName")}</Label>
+              <Input value={newPartyName} onChange={(e) => setNewPartyName(e.target.value)} placeholder="Name" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t("email")}</Label>
+              <Input value={newPartyEmail} onChange={(e) => setNewPartyEmail(e.target.value)} type="email" placeholder="email@example.com" />
+            </div>
+          </div>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setShowPartyDialog(false)}>{t("cancel")}</Button>
+            <Button className="bg-gradient-primary" onClick={createPartyAndSelect}>Add & Select</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Dialog>
   );
 }
 
@@ -468,208 +622,6 @@ function AddJournalEntryModal({
   );
 }
 
-/* ─── Manual Invoice Modal ───────────────────────────────────── */
-type InvLine = { _id: string; description: string; quantity: string; unitPrice: string; taxRate: string; revenueAccountId: string };
-
-function ManualInvoiceModal({
-  open, onClose, accounts, customers, onCreated, onCustomerCreated,
-}: {
-  open: boolean;
-  onClose: () => void;
-  accounts: Account[];
-  customers: Customer[];
-  onCreated: () => void;
-  onCustomerCreated: (c: Customer) => void;
-}) {
-  const { t } = useI18n();
-  const [customerId, setCustomerId] = useState("");
-  const [issueDate, setIssueDate] = useState(today());
-  const [dueDate, setDueDate] = useState(today());
-  const [lines, setLines] = useState<InvLine[]>([
-    { _id: uid(), description: "", quantity: "1", unitPrice: "", taxRate: "0", revenueAccountId: "" },
-  ]);
-  const [saving, setSaving] = useState(false);
-
-  const revenueAccounts = useMemo(() => accounts.filter((a) => a.type === "Revenue"), [accounts]);
-
-  const updateLine = (id: string, patch: Partial<InvLine>) =>
-    setLines((prev) => prev.map((l) => l._id === id ? { ...l, ...patch } : l));
-
-  const totals = useMemo(() => {
-    return lines.reduce(
-      (acc, l) => {
-        const sub = Number(l.quantity || 0) * Number(l.unitPrice || 0);
-        const tax = sub * (Number(l.taxRate || 0) / 100);
-        return { subtotal: acc.subtotal + sub, tax: acc.tax + tax };
-      },
-      { subtotal: 0, tax: 0 }
-    );
-  }, [lines]);
-
-  const handleQuickAddCustomer = async (name: string) => {
-    try {
-      const c = await api<Customer>("/tenant/customers", {
-        method: "POST",
-        body: JSON.stringify({ name }),
-      });
-      toast.success(`Customer "${name}" added`);
-      onCustomerCreated(c);
-      setCustomerId(c.id);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not add customer");
-    }
-  };
-
-  const submit = async () => {
-    if (!customerId) { toast.error("Select a customer"); return; }
-    setSaving(true);
-    try {
-      await api("/tenant/invoices", {
-        method: "POST",
-        body: JSON.stringify({
-          customerId,
-          issueDate,
-          dueDate,
-          lines: lines.map((l) => ({
-            description: l.description || "Service",
-            quantity: Number(l.quantity || 1),
-            unitPrice: Number(l.unitPrice || 0),
-            taxRate: Number(l.taxRate || 0),
-            revenueAccountId: l.revenueAccountId || undefined,
-          })),
-        }),
-      });
-      toast.success("Invoice created");
-      onCreated();
-      onClose();
-      setCustomerId(""); setIssueDate(today()); setDueDate(today());
-      setLines([{ _id: uid(), description: "", quantity: "1", unitPrice: "", taxRate: "0", revenueAccountId: "" }]);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not create invoice");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{t("newManualInvoice")}</DialogTitle>
-        </DialogHeader>
-
-        {/* Customer + dates */}
-        <div className="grid sm:grid-cols-3 gap-4 pt-2">
-          <div className="space-y-1.5 sm:col-span-1">
-            <Label>{t("client")}</Label>
-            <CustomerCombobox
-              customers={customers}
-              value=""
-              onChange={(id) => setCustomerId(id)}
-              onQuickAdd={handleQuickAddCustomer}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>{t("issueDate")}</Label>
-            <Input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>{t("dueDate")}</Label>
-            <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-          </div>
-        </div>
-
-        {/* Line items */}
-        <div className="mt-5 space-y-2">
-          <Label className="text-sm font-semibold">{t("lineItems")}</Label>
-          <div className="grid grid-cols-[2fr_60px_90px_60px_140px_32px] gap-2 text-xs font-medium text-on-surface-variant px-1">
-            <span>{t("description")}</span>
-            <span className="text-center">Qty</span>
-            <span className="text-end">Price</span>
-            <span className="text-center">{t("taxRate")}</span>
-            <span>Revenue Account</span>
-            <span />
-          </div>
-          {lines.map((line) => (
-            <div key={line._id} className="grid grid-cols-[2fr_60px_90px_60px_140px_32px] gap-2 items-center">
-              <Input
-                value={line.description}
-                onChange={(e) => updateLine(line._id, { description: e.target.value })}
-                placeholder="Service or product"
-                className="h-8 text-xs"
-              />
-              <Input
-                type="number" min="1"
-                value={line.quantity}
-                onChange={(e) => updateLine(line._id, { quantity: e.target.value })}
-                className="h-8 text-xs text-center"
-              />
-              <Input
-                type="number" min="0" step="0.01"
-                value={line.unitPrice}
-                onChange={(e) => updateLine(line._id, { unitPrice: e.target.value })}
-                placeholder="0.00"
-                className="h-8 text-xs text-end"
-              />
-              <Input
-                type="number" min="0" max="100"
-                value={line.taxRate}
-                onChange={(e) => updateLine(line._id, { taxRate: e.target.value })}
-                placeholder="0"
-                className="h-8 text-xs text-center"
-              />
-              <select
-                value={line.revenueAccountId}
-                onChange={(e) => updateLine(line._id, { revenueAccountId: e.target.value })}
-                className="h-8 rounded-md border border-input bg-background px-2 text-xs w-full"
-              >
-                <option value="">— account —</option>
-                {revenueAccounts.map((a) => (
-                  <option key={a.id} value={a.id}>{a.code} – {a.name}</option>
-                ))}
-              </select>
-              <button
-                onClick={() => lines.length > 1 && setLines((p) => p.filter((l) => l._id !== line._id))}
-                disabled={lines.length <= 1}
-                className="text-on-surface-variant hover:text-status-error disabled:opacity-30 transition"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </div>
-          ))}
-          <Button
-            variant="outline" size="sm"
-            onClick={() => setLines((p) => [...p, { _id: uid(), description: "", quantity: "1", unitPrice: "", taxRate: "0", revenueAccountId: "" }])}
-            className="gap-1.5 text-xs mt-1"
-          >
-            <Plus className="h-3.5 w-3.5" /> {t("addLine")}
-          </Button>
-        </div>
-
-        {/* Totals */}
-        <div className="mt-4 ms-auto w-56 space-y-2 text-sm">
-          <div className="flex justify-between text-on-surface-variant">
-            <span>{t("subtotal")}</span><span className="font-medium">{money(totals.subtotal)}</span>
-          </div>
-          <div className="flex justify-between text-on-surface-variant">
-            <span>Tax</span><span className="font-medium">{money(totals.tax)}</span>
-          </div>
-          <div className="flex justify-between font-bold text-base border-t border-border-default pt-2">
-            <span>Total</span><span>{money(totals.subtotal + totals.tax)}</span>
-          </div>
-        </div>
-
-        <DialogFooter className="mt-4">
-          <Button variant="outline" onClick={onClose}>{t("cancel")}</Button>
-          <Button className="bg-gradient-primary" onClick={submit} disabled={saving || !customerId}>
-            {saving ? "Saving…" : t("sendInvoice")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 /* ─── Delete Confirm Dialog ─────────────────────────────────── */
 function DeleteConfirmDialog({
   open, onClose, onConfirm,
@@ -705,22 +657,20 @@ function Page() {
   const { t } = useI18n();
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
   const [jeOpen, setJeOpen] = useState(false);
-  const [invOpen, setInvOpen] = useState(false);
+  const [expVoucherOpen, setExpVoucherOpen] = useState(false);
+  const [recVoucherOpen, setRecVoucherOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const load = async () => {
     try {
-      const [es, accs, custs] = await Promise.all([
+      const [es, accs] = await Promise.all([
         api<JournalEntry[]>("/tenant/journal-entries"),
         api<Account[]>("/tenant/accounts"),
-        api<Customer[]>("/tenant/customers").catch(() => [] as Customer[]),
       ]);
       setEntries(es);
       setAccounts(accs);
-      setCustomers(custs);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not load data");
     }
@@ -759,13 +709,20 @@ function Page() {
         title={t("jeTitle")}
         desc={t("jeDesc")}
         action={
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button
               variant="outline"
               className="gap-1.5"
-              onClick={() => setInvOpen(true)}
+              onClick={() => setExpVoucherOpen(true)}
             >
-              <FileText className="h-4 w-4" /> {t("newManualInvoice")}
+              <ArrowDownToLine className="h-4 w-4" /> {t("expenseVoucher")}
+            </Button>
+            <Button
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => setRecVoucherOpen(true)}
+            >
+              <ArrowUpFromLine className="h-4 w-4" /> {t("receiptVoucher")}
             </Button>
             <Button
               className="bg-gradient-primary gap-1.5"
@@ -885,13 +842,18 @@ function Page() {
         onCreated={load}
       />
 
-      <ManualInvoiceModal
-        open={invOpen}
-        onClose={() => setInvOpen(false)}
-        accounts={accounts}
-        customers={customers}
+      <VoucherModal
+        open={expVoucherOpen}
+        onClose={() => setExpVoucherOpen(false)}
+        type="expense"
         onCreated={load}
-        onCustomerCreated={(c) => setCustomers((prev) => [...prev, c])}
+      />
+
+      <VoucherModal
+        open={recVoucherOpen}
+        onClose={() => setRecVoucherOpen(false)}
+        type="receipt"
+        onCreated={load}
       />
 
       <DeleteConfirmDialog

@@ -31,6 +31,7 @@ JWT_SECRET=replace-with-a-long-random-secret
 JWT_EXPIRES_IN=1d
 GOOGLE_EMAIL=
 GOOGLE_APP_PASSWORD=
+GOOGLE_CLIENT_ID=
 ```
 
 ## Setup

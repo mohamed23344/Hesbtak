@@ -25,18 +25,21 @@ JWT_SECRET=replace-with-a-long-random-secret
 JWT_EXPIRES_IN=1d
 GOOGLE_EMAIL=
 GOOGLE_APP_PASSWORD=
+GOOGLE_CLIENT_ID=
 GOOGLE_SMTP_REJECT_UNAUTHORIZED=true
 GROQ_API_KEY=
 AI_EMBEDDING_PROVIDER=mock
-HF_TOKEN=
+HF_TOKEN=your_hugging_face_token
 HF_EMBEDDING_MODEL=BAAI/bge-m3
 ```
 
-`GOOGLE_EMAIL` and `GOOGLE_APP_PASSWORD` are used for signup and forgot-password OTP email. Use a Google app password and restart the backend after changing these values.
+`GOOGLE_EMAIL` and `GOOGLE_APP_PASSWORD` are used for OTP, invitation, and organization-access emails. Use a Google app password. `GOOGLE_CLIENT_ID` is the OAuth 2.0 Web client ID used to verify Google sign-in tokens.
 
 `GROQ_API_KEY` enables the tenant financial assistant. Local embeddings default to
 the deterministic `mock` provider. Set `AI_EMBEDDING_PROVIDER=huggingface` and
 provide `HF_TOKEN` to use hosted Hugging Face embeddings.
+The same token enables invoice image extraction with
+`Qwen/Qwen3-VL-235B-A22B-Instruct` through the Novita inference provider.
 
 If your local Windows machine shows `SELF_SIGNED_CERT_IN_CHAIN` while sending OTP, set:
 
@@ -62,9 +65,11 @@ Create `Front/.env` from `Front/.env.example`.
 
 ```bash
 VITE_API_URL=http://localhost:3000/api/v1
+VITE_GOOGLE_CLIENT_ID=
 ```
 
 If this is missing, the frontend defaults to `http://localhost:3000/api/v1`.
+Use the same Google OAuth client ID on both applications. Add the frontend origin, such as `http://localhost:5173`, to its authorized JavaScript origins in Google Cloud Console.
 
 ## Start With Docker For Database
 
@@ -116,7 +121,7 @@ npm run build
 
 ## Missing Production Integrations
 
-- Invitation emails are still queued/stubbed. Signup and forgot-password OTP can send through Gmail SMTP when `GOOGLE_EMAIL` and `GOOGLE_APP_PASSWORD` are set.
+- OTP, invitation, and organization membership emails use Gmail SMTP when `GOOGLE_EMAIL` and `GOOGLE_APP_PASSWORD` are set.
 - Real payment/subscription provider. The public `plans` and `subscriptions` models exist, but billing automation is not integrated.
 - Real OCR extraction pipeline. The frontend OCR page is still a UI stub.
 - Real ML/LLM services. Chatbot assistance can use configured LLM services; forecasting is deterministic formula logic from tenant ledger data only.
