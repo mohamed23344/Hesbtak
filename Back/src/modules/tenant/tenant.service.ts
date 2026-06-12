@@ -290,6 +290,60 @@ export class TenantService {
         created_by UUID NOT NULL REFERENCES public.users(id),
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
+      CREATE TABLE IF NOT EXISTS ${schema}.sales_returns (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        return_number VARCHAR NOT NULL UNIQUE,
+        invoice_id UUID REFERENCES ${schema}.invoices(id),
+        customer_id UUID NOT NULL REFERENCES ${schema}.customers(id),
+        return_date DATE NOT NULL,
+        reason TEXT NOT NULL,
+        subtotal DECIMAL(15,2) NOT NULL,
+        tax_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+        total DECIMAL(15,2) NOT NULL,
+        status VARCHAR NOT NULL DEFAULT 'processed',
+        journal_entry_id UUID REFERENCES ${schema}.journal_entries(id),
+        created_by UUID NOT NULL REFERENCES public.users(id),
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS ${schema}.sales_return_lines (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        sales_return_id UUID NOT NULL REFERENCES ${schema}.sales_returns(id) ON DELETE CASCADE,
+        line_number INT NOT NULL,
+        description TEXT NOT NULL,
+        quantity DECIMAL(15,4) NOT NULL DEFAULT 1,
+        unit_price DECIMAL(15,2) NOT NULL,
+        tax_rate DECIMAL(5,2) NOT NULL DEFAULT 0,
+        line_subtotal DECIMAL(15,2) NOT NULL,
+        tax_amount DECIMAL(15,2) NOT NULL,
+        line_total DECIMAL(15,2) NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS ${schema}.purchase_returns (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        return_number VARCHAR NOT NULL UNIQUE,
+        bill_id UUID REFERENCES ${schema}.vendor_bills(id),
+        vendor_id UUID NOT NULL REFERENCES ${schema}.vendors(id),
+        return_date DATE NOT NULL,
+        reason TEXT NOT NULL,
+        subtotal DECIMAL(15,2) NOT NULL,
+        tax_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+        total DECIMAL(15,2) NOT NULL,
+        status VARCHAR NOT NULL DEFAULT 'processed',
+        journal_entry_id UUID REFERENCES ${schema}.journal_entries(id),
+        created_by UUID NOT NULL REFERENCES public.users(id),
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS ${schema}.purchase_return_lines (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        purchase_return_id UUID NOT NULL REFERENCES ${schema}.purchase_returns(id) ON DELETE CASCADE,
+        line_number INT NOT NULL,
+        description TEXT NOT NULL,
+        quantity DECIMAL(15,4) NOT NULL DEFAULT 1,
+        unit_price DECIMAL(15,2) NOT NULL,
+        tax_rate DECIMAL(5,2) NOT NULL DEFAULT 0,
+        line_subtotal DECIMAL(15,2) NOT NULL,
+        tax_amount DECIMAL(15,2) NOT NULL,
+        line_total DECIMAL(15,2) NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS ${schema}.recurring_entries (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         name VARCHAR NOT NULL,
@@ -431,7 +485,9 @@ export class TenantService {
     const baseAccounts = [
       ['1000', 'Cash and Bank', 'Asset'],
       ['1100', 'Accounts Receivable', 'Asset'],
+      ['1200', 'Input Tax Receivable', 'Asset'],
       ['2000', 'Accounts Payable', 'Liability'],
+      ['2100', 'Output Tax Payable', 'Liability'],
       ['3000', 'Owner Equity', 'Equity'],
       ['4000', 'Sales Revenue', 'Revenue'],
       ['5000', 'Operating Expenses', 'Expense'],

@@ -16,6 +16,7 @@ import {
   CompleteInvitationDto,
   CreateOrganizationDto,
   ForgotPasswordDto,
+  GoogleAuthDto,
   InviteMemberDto,
   LoginDto,
   OnboardingAnswerDto,
@@ -23,6 +24,7 @@ import {
   ResendOtpDto,
   ResetPasswordDto,
   UpdateOrganizationDto,
+  UpdateMemberDto,
   VerifyOtpDto,
 } from './dto';
 
@@ -143,6 +145,62 @@ export class AuthService {
           permissions: tenant.permissions,
           subscription: this.publicSubscription(tenant.organization.subscriptions[0]),
         })),
+    };
+  }
+
+  async googleAuth(dto: GoogleAuthDto) {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      throw new BadRequestException('Google authentication is not configured');
+    }
+
+    const response = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(dto.credential)}`,
+    );
+    if (!response.ok) {
+      throw new UnauthorizedException('Invalid Google credential');
+    }
+    const profile = await response.json() as {
+      aud?: string;
+      sub?: string;
+      email?: string;
+      email_verified?: string | boolean;
+      name?: string;
+    };
+    if (
+      profile.aud !== clientId
+      || (profile.email_verified !== 'true' && profile.email_verified !== true)
+      || !profile.email
+      || !profile.sub
+    ) {
+      throw new UnauthorizedException('Google credential could not be verified');
+    }
+
+    const email = profile.email.toLowerCase();
+    let user = await this.db.user.findUnique({ where: { email } });
+    if (user && !user.isActive) {
+      throw new UnauthorizedException('This account is deactivated');
+    }
+    if (!user) {
+      user = await this.db.user.create({
+        data: {
+          email,
+          fullName: profile.name?.trim() || email.split('@')[0],
+          passwordHash: await bcrypt.hash(randomBytes(32).toString('hex'), 12),
+          emailVerifiedAt: new Date(),
+        },
+      });
+    } else if (!user.emailVerifiedAt || user.mustChangePassword) {
+      user = await this.db.user.update({
+        where: { id: user.id },
+        data: { emailVerifiedAt: user.emailVerifiedAt ?? new Date(), mustChangePassword: false },
+      });
+    }
+
+    return {
+      accessToken: this.sign(user),
+      user: this.publicUser(user),
+      tenants: await this.loginTenants(user.id),
     };
   }
 
@@ -362,9 +420,72 @@ export class AuthService {
       where: { email: dto.email.toLowerCase() },
     });
     if (existingUser) {
-      throw new BadRequestException(
-        'This email already has an account. Invite a new email for managed credentials.',
+      if (!existingUser.isActive) {
+        throw new BadRequestException('This user account is deactivated');
+      }
+      const existingMembership = await this.db.organizationUser.findUnique({
+        where: {
+          organizationId_userId: {
+            organizationId,
+            userId: existingUser.id,
+          },
+        },
+      });
+      if (existingMembership?.isActive) {
+        throw new BadRequestException('This user is already an active organization member');
+      }
+      const organization = await this.db.organization.findUnique({
+        where: { id: organizationId },
+        select: { name: true },
+      });
+      if (!organization) throw new NotFoundException('Organization not found');
+
+      await this.sendMembershipEmail(
+        existingUser.email,
+        'You were added to a Hesbtk.AI organization',
+        `You were added to ${organization.name} as ${dto.role}. Sign in with your existing account to access the workspace.`,
       );
+      const membership = await this.db.$transaction(async (tx) => {
+        const relation = await tx.organizationUser.upsert({
+          where: {
+            organizationId_userId: {
+              organizationId,
+              userId: existingUser.id,
+            },
+          },
+          create: {
+            organizationId,
+            userId: existingUser.id,
+            role: dto.role,
+            invitedBy: userId,
+            joinedAt: new Date(),
+            accessExpiresAt,
+            permissions,
+          },
+          update: {
+            role: dto.role,
+            isActive: true,
+            invitedBy: userId,
+            joinedAt: new Date(),
+            accessExpiresAt,
+            permissions,
+          },
+        });
+        await tx.userNotification.create({
+          data: {
+            userId: existingUser.id,
+            organizationId,
+            type: 'organization_access',
+            title: 'Organization access granted',
+            message: `You were added to ${organization.name} as ${dto.role}.`,
+          },
+        });
+        return relation;
+      });
+      return { membership, emailSent: true, joinedExistingUser: true };
+    }
+    if (!dto.password) {
+      throw new BadRequestException('A temporary password is required for a new user');
     }
     const temporaryPasswordHash = await bcrypt.hash(dto.password, 12);
     const invitedUser = await this.db.user.create({
@@ -535,14 +656,96 @@ export class AuthService {
     });
   }
 
+  async userNotifications(userId: string) {
+    return this.db.userNotification.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+  }
+
+  async updateMember(
+    organizationId: string,
+    memberId: string,
+    userId: string,
+    dto: UpdateMemberDto,
+  ) {
+    await this.tenant.fromOrganizationId(organizationId, userId, ['owner']);
+    const member = await this.db.organizationUser.findFirst({
+      where: { id: memberId, organizationId },
+      include: { user: true, organization: true },
+    });
+    if (!member) throw new NotFoundException('Member not found');
+    if (member.userId === userId && dto.isActive === false) {
+      throw new BadRequestException('Owner cannot deactivate their own membership');
+    }
+    if (dto.role !== 'viewer' && dto.accessExpiresAt) {
+      throw new BadRequestException('Temporary access dates are only supported for viewers');
+    }
+
+    const nextActive = dto.isActive ?? member.isActive;
+    if (member.isActive && !nextActive) {
+      await this.sendMembershipEmail(
+        member.user.email,
+        `Your access to ${member.organization.name} was deactivated`,
+        `Your membership in ${member.organization.name} was deactivated by an organization owner.`,
+      );
+    }
+    const updated = await this.db.$transaction(async (tx) => {
+      const relation = await tx.organizationUser.update({
+        where: { id: memberId },
+        data: {
+          role: dto.role,
+          isActive: dto.isActive,
+          accessExpiresAt: dto.accessExpiresAt === undefined
+            ? undefined
+            : dto.accessExpiresAt ? new Date(dto.accessExpiresAt) : null,
+          permissions: dto.permissions,
+        },
+      });
+      if (member.isActive && !nextActive) {
+        await tx.userNotification.create({
+          data: {
+            userId: member.userId,
+            organizationId,
+            type: 'organization_access',
+            severity: 'warning',
+            title: 'Organization access deactivated',
+            message: `Your access to ${member.organization.name} was deactivated.`,
+          },
+        });
+      }
+      return relation;
+    });
+    return updated;
+  }
+
   async removeMember(organizationId: string, memberId: string, userId: string) {
     await this.tenant.fromOrganizationId(organizationId, userId, ['owner']);
     const member = await this.db.organizationUser.findFirst({
       where: { id: memberId, organizationId },
+      include: { user: true, organization: true },
     });
     if (!member) throw new NotFoundException('Member not found');
     if (member.userId === userId) throw new BadRequestException('Owner cannot remove their own membership');
-    await this.db.organizationUser.delete({ where: { id: memberId } });
+    await this.sendMembershipEmail(
+      member.user.email,
+      `You were removed from ${member.organization.name}`,
+      `An organization owner removed your access to ${member.organization.name}.`,
+    );
+    await this.db.$transaction([
+      this.db.userNotification.create({
+        data: {
+          userId: member.userId,
+          organizationId,
+          type: 'organization_access',
+          severity: 'warning',
+          title: 'Removed from organization',
+          message: `Your access to ${member.organization.name} was removed.`,
+        },
+      }),
+      this.db.organizationUser.delete({ where: { id: memberId } }),
+    ]);
     return { removed: true };
   }
 
@@ -731,6 +934,29 @@ export class AuthService {
       'You must set a new password before you can access the system:',
       acceptUrl,
       `This invitation link expires on ${expiresAt.toISOString()}.`,
+    ].join('\r\n');
+    await this.smtpSend({
+      host: 'smtp.gmail.com',
+      port: 465,
+      user: googleEmail,
+      pass: process.env.GOOGLE_APP_PASSWORD!,
+      to: email,
+      message,
+      rejectUnauthorized: process.env.GOOGLE_SMTP_REJECT_UNAUTHORIZED !== 'false',
+    });
+  }
+
+  private async sendMembershipEmail(email: string, subject: string, body: string) {
+    this.assertEmailConfigured();
+    const googleEmail = process.env.GOOGLE_EMAIL!;
+    const message = [
+      `From: Hesbtk.AI <${googleEmail}>`,
+      `To: ${email}`,
+      `Subject: ${subject}`,
+      'MIME-Version: 1.0',
+      'Content-Type: text/plain; charset=utf-8',
+      '',
+      body,
     ].join('\r\n');
     await this.smtpSend({
       host: 'smtp.gmail.com',

@@ -22,10 +22,30 @@ function Page() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
 
   useEffect(() => {
-    api<Alert[]>("/tenant/alerts/evaluate", { method: "POST" })
-      .then(setAlerts)
-      .catch(() => api<Alert[]>("/tenant/alerts").then(setAlerts))
-      .catch((error) => toast.error(error instanceof Error ? error.message : "Could not load notifications"));
+    void Promise.allSettled([
+      api<Alert[]>("/tenant/alerts/evaluate", { method: "POST" })
+        .catch(() => api<Alert[]>("/tenant/alerts")),
+      api<Array<{
+        id: string; title: string; message: string; severity: Alert["severity"];
+        isRead: boolean; createdAt: string;
+      }>>("/auth/notifications"),
+    ]).then((results) => {
+      const tenantAlerts = results[0].status === "fulfilled" ? results[0].value : [];
+      const userAlerts = results[1].status === "fulfilled"
+        ? results[1].value.map((alert) => ({
+            id: alert.id,
+            title: alert.title,
+            message: alert.message,
+            severity: alert.severity,
+            is_read: alert.isRead,
+            created_at: alert.createdAt,
+          }))
+        : [];
+      setAlerts([...userAlerts, ...tenantAlerts]);
+      if (results.every((result) => result.status === "rejected")) {
+        toast.error("Could not load notifications");
+      }
+    });
   }, []);
 
   return (

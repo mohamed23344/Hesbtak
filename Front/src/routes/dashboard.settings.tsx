@@ -14,6 +14,7 @@ export const Route = createFileRoute("/dashboard/settings")({ component: Page })
 type Member = {
   id: string;
   role: string;
+  isActive: boolean;
   accessExpiresAt?: string | null;
   permissions?: string[];
   user: { id: string; fullName: string; email: string };
@@ -169,7 +170,7 @@ function Page() {
 
   const sendInvitation = async () => {
     try {
-      await api(`/org/${tenant?.organizationId}/invitations`, {
+      const result = await api<{ joinedExistingUser?: boolean }>(`/org/${tenant?.organizationId}/invitations`, {
         method: "POST",
         body: JSON.stringify({
           email: invite.email,
@@ -182,7 +183,7 @@ function Page() {
           permissions: invite.role === "viewer" ? invite.permissions : undefined,
         }),
       });
-      toast.success("Invitation email sent");
+      toast.success(result.joinedExistingUser ? "Existing user added to the organization" : "Invitation email sent");
       setInvite({ ...invite, fullName: "", email: "", password: "" });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not send invitation");
@@ -210,6 +211,19 @@ function Page() {
       toast.success("Access removed");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not remove member");
+    }
+  };
+
+  const setMemberActive = async (member: Member, isActive: boolean) => {
+    try {
+      await api(`/org/${tenant?.organizationId}/members/${member.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ isActive }),
+      });
+      await loadMembers();
+      toast.success(isActive ? "Member access reactivated" : "Member access deactivated and notification sent");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update member access");
     }
   };
 
@@ -278,7 +292,7 @@ function Page() {
       <div className="grid md:grid-cols-4 gap-3">
         <EditField label="Full name" value={invite.fullName} onChange={(fullName) => setInvite({ ...invite, fullName })} />
         <EditField label="Email" value={invite.email} onChange={(email) => setInvite({ ...invite, email })} type="email" />
-        <EditField label="Temporary password" value={invite.password} onChange={(password) => setInvite({ ...invite, password })} type="password" />
+        <EditField label="Temporary password (new users only)" value={invite.password} onChange={(password) => setInvite({ ...invite, password })} type="password" />
         <div className="space-y-1.5"><Label>Role</Label><select value={invite.role} onChange={(event) => setInvite({ ...invite, role: event.target.value })} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"><option value="accountant">Accountant / staff</option><option value="viewer">Viewer</option><option value="owner">Owner</option></select></div>
         {invite.role === "viewer" && <EditField label="Access end date (optional)" value={invite.accessExpiresAt} onChange={(accessExpiresAt) => setInvite({ ...invite, accessExpiresAt })} type="date" />}
       </div>
@@ -288,14 +302,14 @@ function Page() {
       <Button
         className="mt-4"
         onClick={sendInvitation}
-        disabled={!invite.email || !invite.password || invite.password.length < 8}
+        disabled={!invite.email || Boolean(invite.password && invite.password.length < 8)}
       >
-        Create account and send invitation
+        Add member or send invitation
       </Button>
     </Section>}
 
     {isOwner && <Section title="Organization members">
-      <div className="space-y-2">{members.map((member) => <div key={member.id} className="flex flex-wrap items-center justify-between gap-3 border border-border-default rounded-xl p-3"><div><p className="font-medium text-sm">{member.user.fullName}</p><p className="text-xs text-on-surface-variant">{member.user.email}</p></div><div className="flex items-center gap-2"><Badge className="capitalize">{member.role}</Badge>{member.accessExpiresAt && <span className="text-xs">Until {new Date(member.accessExpiresAt).toLocaleDateString()}</span>}{member.user.id !== session?.user.id && <Button size="sm" variant="destructive" onClick={() => removeMember(member.id)}>Remove</Button>}</div></div>)}</div>
+      <div className="space-y-2">{members.map((member) => <div key={member.id} className="flex flex-wrap items-center justify-between gap-3 border border-border-default rounded-xl p-3"><div><p className="font-medium text-sm">{member.user.fullName}</p><p className="text-xs text-on-surface-variant">{member.user.email}</p></div><div className="flex items-center gap-2"><Badge variant={member.isActive ? "default" : "secondary"} className="capitalize">{member.isActive ? member.role : "Deactivated"}</Badge>{member.accessExpiresAt && <span className="text-xs">Until {new Date(member.accessExpiresAt).toLocaleDateString()}</span>}{member.user.id !== session?.user.id && <><Button size="sm" variant="outline" onClick={() => void setMemberActive(member, !member.isActive)}>{member.isActive ? "Deactivate" : "Reactivate"}</Button><Button size="sm" variant="destructive" onClick={() => void removeMember(member.id)}>Remove</Button></>}</div></div>)}</div>
     </Section>}
 
     {isOwner && <Section title="Owner actions">

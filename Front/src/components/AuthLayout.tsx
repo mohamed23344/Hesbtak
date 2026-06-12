@@ -1,18 +1,94 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BrandMark, LangToggle, ThemeToggle } from "@/components/Brand";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
+import { api, saveSession } from "@/lib/api";
+import { toast } from "sonner";
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (options: { client_id: string; callback: (response: { credential: string }) => void }) => void;
+          renderButton: (element: HTMLElement, options: Record<string, unknown>) => void;
+        };
+      };
+    };
+  }
+}
 
 export function SocialButtons() {
-  const { t } = useI18n();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(false);
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+
+  useEffect(() => {
+    if (!clientId) return;
+    const render = () => {
+      if (!window.google || !containerRef.current) return;
+      containerRef.current.replaceChildren();
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: async ({ credential }) => {
+          setLoading(true);
+          try {
+            const data = await api<any>("/auth/google", {
+              method: "POST",
+              body: JSON.stringify({ credential }),
+            });
+            saveSession(data);
+            window.location.assign(
+              data.user.globalRole === "admin"
+                ? "/admin#users"
+                : data.tenants?.length === 1
+                  ? "/dashboard"
+                  : "/select-organization",
+            );
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Google sign-in failed");
+            setLoading(false);
+          }
+        },
+      });
+      window.google.accounts.id.renderButton(containerRef.current, {
+        type: "standard",
+        theme: "outline",
+        size: "large",
+        text: "continue_with",
+        shape: "rectangular",
+        width: Math.min(containerRef.current.clientWidth || 360, 400),
+      });
+    };
+
+    const existing = document.querySelector<HTMLScriptElement>('script[src="https://accounts.google.com/gsi/client"]');
+    if (existing) {
+      if (window.google) render();
+      else existing.addEventListener("load", render, { once: true });
+      return () => existing.removeEventListener("load", render);
+    }
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = render;
+    script.onerror = () => toast.error("Could not load Google sign-in");
+    document.head.appendChild(script);
+    return () => {
+      script.onload = null;
+      script.onerror = null;
+    };
+  }, [clientId]);
+
   return (
-    <div className="space-y-2">
-      <Button variant="outline" className="w-full justify-center gap-2 h-11" type="button">
-        <GoogleIcon /> {t("continueGoogle")}
-      </Button>
-      <Button variant="outline" className="w-full justify-center gap-2 h-11" type="button">
-        <FacebookIcon /> {t("continueFacebook")}
-      </Button>
+    <div className="min-h-11">
+      {clientId ? (
+        <div ref={containerRef} className={loading ? "pointer-events-none opacity-60" : ""} />
+      ) : (
+        <Button variant="outline" className="w-full justify-center gap-2 h-11" type="button" disabled>
+          <GoogleIcon /> Google sign-in is not configured
+        </Button>
+      )}
     </div>
   );
 }
@@ -82,13 +158,6 @@ function GoogleIcon() {
   return (
     <svg className="h-4 w-4" viewBox="0 0 24 24">
       <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.24 1.4-1.7 4.1-5.5 4.1-3.3 0-6-2.7-6-6.1s2.7-6.1 6-6.1c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.7 3.4 14.6 2.4 12 2.4 6.7 2.4 2.4 6.7 2.4 12s4.3 9.6 9.6 9.6c5.5 0 9.2-3.9 9.2-9.4 0-.6-.1-1.1-.2-1.7H12z" />
-    </svg>
-  );
-}
-function FacebookIcon() {
-  return (
-    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="#1877F2">
-      <path d="M22 12a10 10 0 1 0-11.6 9.9V14.9H7.9V12h2.5V9.8c0-2.5 1.5-3.9 3.7-3.9 1.1 0 2.2.2 2.2.2v2.4h-1.2c-1.2 0-1.6.8-1.6 1.6V12h2.7l-.4 2.9h-2.3v7A10 10 0 0 0 22 12z" />
     </svg>
   );
 }

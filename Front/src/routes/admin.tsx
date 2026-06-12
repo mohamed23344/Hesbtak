@@ -1,7 +1,7 @@
 import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { useI18n } from "@/lib/i18n";
 import { BrandMark, LangToggle, ThemeToggle } from "@/components/Brand";
-import { BadgeCheck, BarChart3, Building, LogOut, Menu, ShieldAlert, Users, X } from "lucide-react";
+import { BadgeCheck, BarChart3, Building, LifeBuoy, LogOut, Menu, ShieldAlert, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { clearSession, getSession } from "@/lib/api";
 
@@ -12,6 +12,7 @@ const ADMIN_SECTIONS = [
   { id: "organizations", label: "Organizations", icon: Building },
   { id: "insights", label: "Usage & Insights", icon: BarChart3 },
   { id: "plans", label: "Plans", icon: BadgeCheck },
+  { id: "tickets", label: "Support Tickets", icon: LifeBuoy },
 ] as const;
 
 function AdminLayout() {

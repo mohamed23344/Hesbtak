@@ -76,8 +76,48 @@ model User {
   invitations       Invitation[]       @relation("InvitationInviter")
   auditLogs         AuditLog[]
   passwordResetOtps PasswordResetOtp[]
+  notifications     UserNotification[]
+  supportTickets    SupportTicket[]
 
   @@map("users")
+}
+
+model SupportTicket {
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  organizationId String?   @map("organization_id") @db.Uuid
+  subject        String
+  category       String
+  message        String
+  status         String    @default("open")
+  adminReply     String?   @map("admin_reply")
+  repliedBy      String?   @map("replied_by") @db.Uuid
+  repliedAt      DateTime? @map("replied_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@map("support_tickets")
+}
+
+model UserNotification {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  organizationId String?  @map("organization_id") @db.Uuid
+  type           String
+  severity       String   @default("info")
+  title          String
+  message        String
+  isRead         Boolean  @default(false) @map("is_read")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("user_notifications")
 }
 
 model PasswordResetOtp {
