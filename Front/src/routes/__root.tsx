@@ -14,6 +14,7 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { I18nProvider } from "../lib/i18n";
 import { ThemeProvider } from "../lib/theme";
 import { Toaster } from "@/components/ui/sonner";
+import { AuthGuard } from "@/components/auth/auth-guard";
 
 function NotFoundComponent() {
   return (
@@ -123,6 +124,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="system" storageKey="hesbetak-theme">
         <I18nProvider>
+          <AuthGuard />
           <Outlet />
           <Toaster richColors position="top-right" />
         </I18nProvider>

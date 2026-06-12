@@ -1,86 +1,141 @@
-# Hesbtk.AI
+<!--
+	README.md — Hesbtak.ai
+	A clear, actionable readme for the full project. Replace the SVGs in `/assets/` with polished artwork.
+-->
 
-Multi-tenant SMB ERP/accounting application with a NestJS backend and TanStack/Vite frontend.
+# Hesbtak.ai
 
-## Architecture
+![Hesbtak.ai Logo](./assets/logo.svg)
 
-- Shared PostgreSQL database.
-- Public schema for platform data: users, organizations, memberships, invitations, plans, subscriptions, audit logs, password reset OTPs.
-- One PostgreSQL schema per tenant for accounting data: accounts, onboarding responses, parties, bank accounts, journal entries, invoices, bills, payments, recurring entries, OCR records, AI conversations, forecasts, alerts, alert rules, suggestions.
-- Frontend sends `Authorization: Bearer <token>` and `x-tenant-id: <organizationId>` for tenant endpoints.
+Graduation project — ITI Intensive Program for MERN Stack
 
-## What Is Implemented
+![Team Badge](./assets/team-logo.svg)
 
-- Registration provisions user, organization, owner membership, tenant schema, and starter chart of accounts.
-- Login stores JWT and tenant context in the frontend.
-- Batch onboarding follows the frontend flow and posts all answers together.
-- Forgot-password OTP, OTP verification, and password reset.
-- Chart of accounts, invoices, journal, transactions, dashboard, forecasting, assistant, notifications, and admin pages are linked to backend endpoints.
-- Backend sample endpoint tests are in [Back/README.md](./Back/README.md).
+Short description
+-----------------
 
-## Forecasting
+Hesbtak.ai is a multi-tenant SMB ERP and accounting platform built as a graduation project for the ITI Intensive Program (MERN Stack). The solution combines a React + Vite frontend, a NestJS backend, Prisma for database access, and PostgreSQL to provide tenant-isolated accounting features, forecasting, and an assistant module.
 
-Forecasting is deterministic, formula-driven, and calculated only from the current tenant's own financial history. It does not use machine learning, AI prediction models, neural networks, LLM-based forecasting, external prediction services, third-party forecasting APIs, industry benchmark datasets, or cross-tenant data.
+Status
+------
 
-The `/tenant/forecasts?months=12` endpoint generates revenue, expense, and cash flow forecasts from tenant-scoped accounting records. The backend resolves the tenant from `x-tenant-id`, validates the user's membership, and queries only that tenant's PostgreSQL schema.
+- Core backend endpoints: registration, authentication (JWT + tenant context), tenant provisioning, chart of accounts, invoices, journal entries, payments, and forecasting.
+- Frontend: Vite/TanStack-based UI with tenant onboarding flows and dashboards.
+- AI/assistant helpers and a lightweight deterministic forecasting engine (tenant-scoped, explainable formulas).
 
-Implemented forecasting methods:
+High-level architecture
+-----------------------
 
-- CAGR with seasonal adjustment when there is enough historical monthly data.
-- Weighted moving average with linear trend analysis when there is moderate history.
-- Historical average projection when there are fewer than three usable historical periods.
-- Cash flow projection as `predicted revenue - predicted expenses`.
+- Front/: React + Vite frontend (client)
+- Back/: NestJS backend (REST API under `/api/v1`)
+- AI/: Prompt assets and services used for assistant features
+- Prisma: schema and migrations under `prisma/` (DB client code used by both Back and AI where relevant)
+- Database: PostgreSQL with a shared public schema and one schema per tenant for accounting data
 
-Forecast source data includes:
+Project layout
+--------------
 
-- Customer invoices.
-- Vendor bills and ledger expense accounts.
-- Vendor bills.
-- Customer payments.
-- Vendor payments.
-- Journal entries and journal lines for audit visibility.
+- `Front/` — web app (Vite, React, route tree, components)
+- `Back/` — API server (NestJS, modules, middleware, guards)
+- `AI/` — utilities, prompts, and services used for assistant features inside the project
+- `prisma/` — shared Prisma schema and migrations (for the whole monorepo where applicable)
+- `uploads/` — file uploads used by the frontend/back
 
-Every forecast response includes explainability and audit details:
+Tech stack
+----------
 
-- `modelVersion`: deterministic formula engine version.
-- `forecastPrinciples`: confirms deterministic logic, no external data, no AI/ML, and tenant-only calculation.
-- `method`: selected revenue, expense, and cash flow methods.
-- `formulaUsed`: formulas used to generate the forecast.
-- `sourceData`: historical periods, source tables, and source financial records.
-- `calculationDetails`: forecast horizon, historical period count, growth rates, variance coefficients, seasonal factors, and monthly actuals.
-- `confidence`: confidence score and explanation.
-- `months`: monthly forecast values with predicted revenue, predicted expense, predicted cash flow, and confidence range.
+- Frontend: React, Vite, TypeScript
+- Backend: Node.js, NestJS, TypeScript
+- ORM: Prisma
+- Database: PostgreSQL
+- Dev tooling: ESLint, Jest (for e2e), Docker-compose ready configs
 
-Confidence is calculated only from:
+Key features
+------------
 
-- Historical data availability.
-- Historical variance.
-- Seasonal consistency.
-- Data completeness.
+- Multi-tenant provisioning with isolated tenant schemas
+- Authentication and role/membership checks
+- Onboarding and starter chart-of-accounts provisioning
+- Invoices, bills, payments, journal entries, and reports
+- Explainable deterministic forecasting engine (no cross-tenant ML)
+- Assistant/AI prompts for user-facing helper flows
 
-The forecasting page displays the chart plus an audit trail, confidence basis, formulas, and source records so users can inspect how the forecast was produced and reproduce it from the same tenant data.
+Getting started (local)
+-----------------------
 
-## Quick Start
+Prerequisites:
 
-Read [STARTUP_AND_ENV.md](./STARTUP_AND_ENV.md) for full setup and missing env values.
+- Node 18+ (recommended)
+- pnpm or npm
+- PostgreSQL
+- Docker (optional for local DB)
 
-Typical local run:
+Quickstart (development):
 
 ```bash
+# Backend
 cd Back
 npm install
 npx prisma generate
 npx prisma migrate deploy
 npm run start:dev
-```
 
-```bash
+# Frontend (in a separate terminal)
 cd Front
 npm install
 npm run dev
 ```
 
-Default URLs:
+See [STARTUP_AND_ENV.md](./STARTUP_AND_ENV.md) for environment variables, database connection strings, and detailed setup.
 
-- Backend: `http://localhost:3000/api/v1`
-- Frontend: `http://localhost:5173`
+Database and migrations
+-----------------------
+
+- Prisma schema and migration history live under `prisma/` in each service (Back/ and AI/ as applicable).
+- Use `npx prisma migrate dev` for iterative development or `npx prisma migrate deploy` for CI/prod flows.
+
+Running tests
+-------------
+
+- End-to-end tests are configured under `test/` (see `app.e2e-spec.ts` files). Use the projects' `jest-e2e.json` and `npm run test:e2e` if provided in the service `package.json`.
+
+Deployment notes
+----------------
+
+- Dockerfile and `docker-compose.yml` are present for local containerized runs.
+- Ensure production env disables dev flags, runs `prisma migrate deploy`, and sets secure secrets for JWT and DB.
+
+Contributing
+------------
+
+If you'd like to contribute or review code:
+
+1. Fork the repo and create a feature branch.
+2. Run linters and tests locally.
+3. Open a PR describing the change and the testing steps.
+
+Team
+----
+
+This project was implemented by the team: **5 People** — a graduating group from the ITI Intensive Program for MERN Stack.
+
+Acknowledgements
+----------------
+
+- This repository and the project are the graduation submission for the ITI Intensive Program (MERN Stack). Replace the SVGs in `/assets/` with your preferred logos and artwork.
+
+Contact
+-------
+
+For questions about running or extending the project, open an issue or contact the team lead listed in project management materials.
+
+License
+-------
+
+This repository does not include a specific license file. Add a `LICENSE` file if you want to publish under an open license.
+
+Assets
+------
+
+- Placeholder logos are in `assets/logo.svg` and `assets/team-logo.svg`. Replace them with high-resolution artwork for release.
+

@@ -35,7 +35,7 @@ function LoginPage() {
           ? "/select-organization"
           : data.tenants?.length
             ? "/dashboard"
-            : "/onboarding",
+            : "/select-organization",
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Login failed";
