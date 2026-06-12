@@ -1,167 +1,106 @@
-@import "tailwindcss" source(none);
-@source "../src";
-@import "tw-animate-css";
-
-@custom-variant dark (&:is(.dark *));
-
-@theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --radius-2xl: calc(var(--radius) + 8px);
-  --radius-3xl: calc(var(--radius) + 12px);
-
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary-container: var(--primary-container);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-
-  --color-surface: var(--surface);
-  --color-surface-container-lowest: var(--surface-container-lowest);
-  --color-surface-container: var(--surface-container);
-  --color-surface-subtle: var(--surface-subtle);
-  --color-surface-dim: var(--surface-dim);
-  --color-on-surface: var(--on-surface);
-  --color-on-surface-variant: var(--on-surface-variant);
-  --color-border-default: var(--border-default);
-  --color-status-success: var(--status-success);
-  --color-status-warning: var(--status-warning);
-  --color-status-error: var(--status-error);
-
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-
-  --font-sans: "Inter", "IBM Plex Sans Arabic", system-ui, sans-serif;
-}
-
-:root {
-  --radius: 0.875rem;
-
-  /* Brand - Premium Indigo/Cyan Gradient Palette */
-  --primary: oklch(0.55 0.18 250);            /* Vibrant Indigo/Blue */
-  --primary-foreground: oklch(0.99 0.005 240);
-  --primary-container: oklch(0.48 0.18 250);  /* Slightly richer indigo */
-  --secondary: oklch(0.6 0.18 200);           /* Teal/Sky Blue */
-  --secondary-foreground: oklch(0.99 0.005 240);
-  --accent: oklch(0.72 0.16 200);             /* Electric Cyan */
-  --accent-foreground: oklch(0.2 0.06 200);
-
-  /* Surfaces - Clean Slate */
-  --surface: oklch(0.985 0.006 240);          /* Slate 50 (#F8FAFC) */
-  --surface-container-lowest: oklch(1 0 0);
-  --surface-container: oklch(0.96 0.01 240);   /* Slate 100 (#F1F5F9) */
-  --surface-subtle: oklch(0.98 0.005 240);
-  --surface-dim: oklch(0.9 0.015 240);
-
-  /* Text */
-  --on-surface: oklch(0.12 0.03 240);         /* Slate 900 (#0F172A) */
-  --on-surface-variant: oklch(0.45 0.02 240); /* Slate 500 (#64748B) */
-
-  --background: var(--surface);
-  --foreground: var(--on-surface);
-  --card: var(--surface-container-lowest);
-  --card-foreground: var(--on-surface);
-  --popover: var(--surface-container-lowest);
-  --popover-foreground: var(--on-surface);
-  --muted: var(--surface-container);
-  --muted-foreground: var(--on-surface-variant);
-
-  --border-default: oklch(0.92 0.01 240);     /* Slate 200 (#E2E8F0) */
-  --border: var(--border-default);
-  --input: var(--border-default);
-  --ring: var(--primary);
-
-  --status-success: oklch(0.65 0.18 145);     /* Emerald Green */
-  --status-warning: oklch(0.78 0.16 75);      /* Amber Yellow */
-  --status-error: oklch(0.6 0.2 25);          /* Rose Red */
-  --destructive: var(--status-error);
-  --destructive-foreground: oklch(0.99 0 0);
-
-  --chart-1: oklch(0.55 0.18 250);
-  --chart-2: oklch(0.72 0.16 200);
-  --chart-3: oklch(0.65 0.18 145);
-  --chart-4: oklch(0.78 0.16 75);
-  --chart-5: oklch(0.6 0.2 25);
-
-  --sidebar: oklch(1 0 0);
-  --sidebar-foreground: var(--on-surface);
-  --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: var(--surface-container);
-  --sidebar-accent-foreground: var(--primary);
-  --sidebar-border: var(--border-default);
-  --sidebar-ring: var(--primary);
-}
-
-.dark {
-  --background: oklch(0.12 0.02 245);         /* Very rich dark blue-slate (#0B0F19) */
-  --foreground: oklch(0.95 0.01 240);         /* Slate 100 (#F1F5F9) */
-  --card: oklch(0.16 0.025 245);              /* Slate 900 (#111827) */
-  --card-foreground: oklch(0.95 0.01 240);
-  --popover: oklch(0.16 0.025 245);
-  --popover-foreground: oklch(0.95 0.01 240);
-  --primary: oklch(0.68 0.17 250);            /* Bright Indigo for Dark Mode */
-  --primary-foreground: oklch(0.12 0.02 245);
-  --muted: oklch(0.2 0.02 240);               /* Slate 800 (#1E293B) */
-  --muted-foreground: oklch(0.75 0.02 240);   /* Slate 400 (#94A3B8) */
-  --border-default: oklch(1 0 0 / 10%);
-  --border: var(--border-default);
-  --input: oklch(1 0 0 / 12%);
-  --surface: oklch(0.12 0.02 245);
-  --surface-container: oklch(0.16 0.025 245);
-  --surface-container-lowest: oklch(0.14 0.02 245);
-  --on-surface: oklch(0.95 0.01 240);
-  --on-surface-variant: oklch(0.75 0.02 240);
-  --sidebar: oklch(0.14 0.02 245);
-  --sidebar-foreground: oklch(0.95 0.01 240);
-  --sidebar-accent: oklch(0.2 0.02 240);
-  --sidebar-accent-foreground: oklch(0.95 0.01 240);
-  --sidebar-border: oklch(1 0 0 / 10%);
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 @layer base {
+  :root {
+    --radius: 0.875rem;
+
+    /* Brand - Premium Indigo/Cyan Gradient Palette */
+    --primary: oklch(0.55 0.18 250);
+    --primary-foreground: oklch(0.99 0.005 240);
+    --primary-container: oklch(0.48 0.18 250);
+    --secondary: oklch(0.6 0.18 200);
+    --secondary-foreground: oklch(0.99 0.005 240);
+    --accent: oklch(0.72 0.16 200);
+    --accent-foreground: oklch(0.2 0.06 200);
+
+    /* Surfaces - Clean Slate */
+    --surface: oklch(0.985 0.006 240);
+    --surface-container-lowest: oklch(1 0 0);
+    --surface-container: oklch(0.96 0.01 240);
+    --surface-subtle: oklch(0.98 0.005 240);
+    --surface-dim: oklch(0.9 0.015 240);
+
+    /* Text */
+    --on-surface: oklch(0.12 0.03 240);
+    --on-surface-variant: oklch(0.45 0.02 240);
+
+    --background: var(--surface);
+    --foreground: var(--on-surface);
+    --card: var(--surface-container-lowest);
+    --card-foreground: var(--on-surface);
+    --popover: var(--surface-container-lowest);
+    --popover-foreground: var(--on-surface);
+    --muted: var(--surface-container);
+    --muted-foreground: var(--on-surface-variant);
+
+    --border-default: oklch(0.92 0.01 240);
+    --border: var(--border-default);
+    --input: var(--border-default);
+    --ring: var(--primary);
+
+    --status-success: oklch(0.65 0.18 145);
+    --status-warning: oklch(0.78 0.16 75);
+    --status-error: oklch(0.6 0.2 25);
+    --destructive: var(--status-error);
+    --destructive-foreground: oklch(0.99 0 0);
+
+    --chart-1: oklch(0.55 0.18 250);
+    --chart-2: oklch(0.72 0.16 200);
+    --chart-3: oklch(0.65 0.18 145);
+    --chart-4: oklch(0.78 0.16 75);
+    --chart-5: oklch(0.6 0.2 25);
+
+    --sidebar: oklch(1 0 0);
+    --sidebar-foreground: var(--on-surface);
+    --sidebar-primary: var(--primary);
+    --sidebar-primary-foreground: oklch(0.99 0 0);
+    --sidebar-accent: var(--surface-container);
+    --sidebar-accent-foreground: var(--primary);
+    --sidebar-border: var(--border-default);
+    --sidebar-ring: var(--primary);
+  }
+
+  .dark {
+    --background: oklch(0.12 0.02 245);
+    --foreground: oklch(0.95 0.01 240);
+    --card: oklch(0.16 0.025 245);
+    --card-foreground: oklch(0.95 0.01 240);
+    --popover: oklch(0.16 0.025 245);
+    --popover-foreground: oklch(0.95 0.01 240);
+    --primary: oklch(0.68 0.17 250);
+    --primary-foreground: oklch(0.12 0.02 245);
+    --muted: oklch(0.2 0.02 240);
+    --muted-foreground: oklch(0.75 0.02 240);
+    --border-default: oklch(1 0 0 / 10%);
+    --border: var(--border-default);
+    --input: oklch(1 0 0 / 12%);
+    --surface: oklch(0.12 0.02 245);
+    --surface-container: oklch(0.16 0.025 245);
+    --surface-container-lowest: oklch(0.14 0.02 245);
+    --on-surface: oklch(0.95 0.01 240);
+    --on-surface-variant: oklch(0.75 0.02 240);
+    --sidebar: oklch(0.14 0.02 245);
+    --sidebar-foreground: oklch(0.95 0.01 240);
+    --sidebar-accent: oklch(0.2 0.02 240);
+    --sidebar-accent-foreground: oklch(0.95 0.01 240);
+    --sidebar-border: oklch(1 0 0 / 10%);
+  }
+
   * {
-    border-color: var(--color-border);
+    border-color: var(--border);
   }
 
   html {
-    font-family: var(--font-sans);
+    font-family: "Inter", "IBM Plex Sans Arabic", system-ui, sans-serif;
     scroll-behavior: smooth;
     font-size: clamp(16px, calc(15px + 0.18vw), 18px);
   }
 
   body {
-    background-color: var(--color-background);
-    color: var(--color-foreground);
+    background-color: var(--background);
+    color: var(--foreground);
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     line-height: 1.55;
     min-width: 320px;
