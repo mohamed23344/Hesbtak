@@ -16,10 +16,10 @@ export function BrandMark({
   large?: boolean;
 }) {
   const { theme } = useTheme();
-  
-  const isDark = 
+
+  const isDark =
     forceLight ||
-    theme === "dark" || 
+    theme === "dark" ||
     (theme === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches);
 
   return (
@@ -59,9 +59,9 @@ export function LangToggle() {
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
-  
-  const isDark = 
-    theme === "dark" || 
+
+  const isDark =
+    theme === "dark" ||
     (theme === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches);
 
   return (

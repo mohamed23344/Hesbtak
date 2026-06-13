@@ -3,11 +3,9 @@ import { useI18n } from "@/lib/i18n";
 import { BrandMark, LangToggle, ThemeToggle } from "@/components/Brand";
 import {
   LayoutDashboard, ArrowLeftRight, Receipt, ShoppingCart, Wallet,
-  Network, BookOpenText, Bot, TrendingUp, Bell, Settings, Search, LogOut, Menu, X,
-  ChartNoAxesCombined, ChevronDown, ChevronRight, LifeBuoy,
+  Bell, Settings, LogOut, Menu, X, ChevronDown, ChevronRight, Sparkles,
 } from "lucide-react";
-import { useState } from "react";
-import { Input } from "@/components/ui/input";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { clearSession, getSession, updateSession } from "@/lib/api";
 
@@ -32,9 +30,22 @@ export default function DashboardLayout() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const [open, setOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const session = getSession();
   const activeTenant = session?.tenants.find((tenant) => tenant.organizationId === session.activeTenantId);
   const features = activeTenant?.subscription?.plan.features ?? {};
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const toggleSection = (key: string) => {
     setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -45,10 +56,17 @@ export default function DashboardLayout() {
 
   const topNav: NavItem[] = [
     { to: "/dashboard", label: t("dashboard"), icon: LayoutDashboard, permission: "dashboard" },
-    { to: "/dashboard/transactions", label: t("transactions"), icon: ArrowLeftRight, permission: "accounting" },
+  ].filter((item) => {
+    return activeTenant?.role !== "viewer" || activeTenant.permissions?.includes(item.permission);
+  });
+
+  const aiItems: NavItem[] = [
+    { to: "/dashboard/assistant", label: t("assistant"), permission: "assistant" },
+    { to: "/dashboard/forecasting", label: t("forecasting"), permission: "forecasting" },
+    { to: "/dashboard/reports", label: t("reports"), permission: "reports" },
   ].filter((item) => {
     if (item.permission === "assistant" && !features.chatbot) return false;
-    return activeTenant?.role !== "viewer" || activeTenant.permissions?.includes(item.permission);
+    return !item.permission || activeTenant?.role !== "viewer" || activeTenant.permissions?.includes(item.permission);
   });
 
   const sections: NavSection[] = [
@@ -91,23 +109,30 @@ export default function DashboardLayout() {
         { to: "/dashboard/expenses/returns", label: t("returns") },
       ],
     },
+    {
+      key: "accounting",
+      to: "/dashboard/accounts",
+      label: t("accounting"),
+      icon: ArrowLeftRight,
+      permission: "accounting",
+      items: [
+        { to: "/dashboard/accounts", label: t("chartOfAccounts") },
+        { to: "/dashboard/journal", label: t("journalEntries") },
+        { to: "/dashboard/transactions", label: t("generalLedger") },
+      ],
+    },
+    ...(aiItems.length > 0
+      ? [{
+          key: "ai",
+          to: aiItems[0].to,
+          label: t("aiInsights"),
+          icon: Sparkles,
+          items: aiItems,
+        }]
+      : []),
   ].filter((section) => {
-    if (section.permission === "assistant" && !features.chatbot) return false;
+    if (section.key === "ai") return true;
     return activeTenant?.role !== "viewer" || activeTenant.permissions?.includes(section.permission);
-  });
-
-  const bottomNav: NavItem[] = [
-    { to: "/dashboard/accounts", label: t("accounts"), icon: Network, permission: "accounts" },
-    { to: "/dashboard/journal", label: t("journal"), icon: BookOpenText, permission: "journal" },
-    { to: "/dashboard/assistant", label: t("assistant"), icon: Bot, permission: "assistant" },
-    { to: "/dashboard/forecasting", label: t("forecasting"), icon: TrendingUp, permission: "forecasting" },
-    { to: "/dashboard/reports", label: t("reports"), icon: ChartNoAxesCombined, permission: "reports" },
-    { to: "/dashboard/notifications", label: t("notifications"), icon: Bell, permission: "notifications" },
-    { to: "/dashboard/support", label: t("support"), icon: LifeBuoy },
-    { to: "/dashboard/settings", label: t("settings"), icon: Settings, permission: "settings" },
-  ].filter((item) => {
-    if (item.permission === "assistant" && !features.chatbot) return false;
-    return !item.permission || activeTenant?.role !== "viewer" || activeTenant.permissions?.includes(item.permission);
   });
 
   const navLinkClass = (active: boolean) =>
@@ -116,6 +141,8 @@ export default function DashboardLayout() {
         ? "bg-primary/8 text-primary font-semibold border-s-2 border-primary rounded-s-none rounded-e-lg"
         : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface rounded-lg"
     }`;
+
+  const planName = activeTenant?.subscription?.plan?.name ?? "Free";
 
   return (
     <div dir={dir} className="min-h-screen flex bg-surface">
@@ -131,88 +158,10 @@ export default function DashboardLayout() {
             <X className="h-5 w-5" />
           </button>
         </div>
+
         <nav className="flex-1 overflow-y-auto p-3.5 space-y-1">
           {topNav.map((item) => {
             const active = path === item.to;
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                onClick={() => setOpen(false)}
-                className={navLinkClass(active)}
-              >
-                {item.icon && <item.icon className="h-5 w-5 shrink-0 transition-transform group-hover:scale-105" />}
-                <span className="truncate">{item.label}</span>
-              </Link>
-            );
-          })}
-
-          {/* Separator */}
-          <div className="my-2 border-t border-border-default" />
-
-          {sections.map((section) => {
-            const expanded = expandedSections[section.key] ?? isChildActive(section.items);
-            const Icon = section.icon;
-            return (
-              <div key={section.key} className="space-y-0.5">
-                <div
-                  className={`w-full flex items-center gap-3.5 px-4 py-2.5 text-base transition-all duration-200 ${
-                    isChildActive(section.items)
-                      ? "text-primary font-semibold"
-                      : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface rounded-lg"
-                  }`}
-                >
-                  <Icon className="h-5 w-5 shrink-0" />
-                  <Link
-                    to={section.to}
-                    onClick={() => setOpen(false)}
-                    className="min-w-0 flex-1 truncate text-start"
-                  >
-                    {section.label}
-                  </Link>
-                  <button
-                    type="button"
-                    aria-label={`${expanded ? "Collapse" : "Expand"} ${section.label}`}
-                    onClick={() => toggleSection(section.key)}
-                    className="rounded-md p-1 hover:bg-primary/10"
-                  >
-                    {expanded ? (
-                      <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-                    ) : (
-                      <ChevronRight className="h-3.5 w-3.5 shrink-0 rtl:rotate-180" />
-                    )}
-                  </button>
-                </div>
-                {expanded && (
-                  <div className="ms-3 border-s border-border-default/80 ps-2 mt-0.5 space-y-0.5">
-                    {section.items.map((item) => {
-                      const active = path === item.to;
-                      return (
-                        <Link
-                          key={item.to}
-                          to={item.to}
-                          onClick={() => setOpen(false)}
-                          className={`flex items-center gap-3 px-4 py-2 text-[0.94rem] transition-all duration-200 ${
-                            active
-                              ? "bg-primary/8 text-primary font-semibold border-s border-primary rounded-s-none rounded-e-lg"
-                              : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface rounded-lg"
-                          }`}
-                        >
-                          <span className="truncate">{item.label}</span>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          {/* Separator */}
-          <div className="my-2 border-t border-border-default" />
-
-          {bottomNav.map((item) => {
-            const active = path === item.to || (item.to !== "/dashboard" && path.startsWith(item.to));
             return (
               <Link
                 key={item.to}
@@ -225,12 +174,98 @@ export default function DashboardLayout() {
               </Link>
             );
           })}
+
+          <div className="my-2 border-t border-border-default" />
+
+          {sections.map((section, idx) => {
+            const expanded = expandedSections[section.key] ?? isChildActive(section.items);
+            const Icon = section.icon;
+            return (
+              <div key={section.key}>
+                <div className="space-y-0.5">
+                  <div
+                    className={`w-full flex items-center gap-3.5 px-4 py-2.5 text-base transition-all duration-200 ${
+                      isChildActive(section.items)
+                        ? "text-primary font-semibold"
+                        : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface rounded-lg"
+                    }`}
+                  >
+                    <Icon className="h-5 w-5 shrink-0" />
+                    <Link
+                      to={section.to}
+                      onClick={() => setOpen(false)}
+                      className="min-w-0 flex-1 truncate text-start"
+                    >
+                      {section.label}
+                    </Link>
+                    <button
+                      type="button"
+                      aria-label={`${expanded ? "Collapse" : "Expand"} ${section.label}`}
+                      onClick={() => toggleSection(section.key)}
+                      className="rounded-md p-1 hover:bg-primary/10"
+                    >
+                      {expanded ? (
+                        <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                      ) : (
+                        <ChevronRight className="h-3.5 w-3.5 shrink-0 rtl:rotate-180" />
+                      )}
+                    </button>
+                  </div>
+                  {expanded && (
+                    <div className="ms-3 border-s border-border-default/80 ps-2 mt-0.5 space-y-0.5">
+                      {section.items.map((item) => {
+                        const active = path === item.to;
+                        return (
+                          <Link
+                            key={item.to}
+                            to={item.to}
+                            onClick={() => setOpen(false)}
+                            className={`flex items-center gap-3 px-4 py-2 text-[0.94rem] transition-all duration-200 ${
+                              active
+                                ? "bg-primary/8 text-primary font-semibold border-s border-primary rounded-s-none rounded-e-lg"
+                                : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface rounded-lg"
+                            }`}
+                          >
+                            <span className="truncate">{item.label}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                {idx < sections.length - 1 && (
+                  <div className="my-2 border-t border-border-default" />
+                )}
+              </div>
+            );
+          })}
         </nav>
-        <div className="border-t border-border-default p-3">
-          <div className="mb-2 flex items-center justify-between gap-2 rounded-lg bg-surface-container/60 p-2 lg:hidden">
-            <LangToggle />
-            <ThemeToggle />
+
+        {/* NEW: Mobile organization selector - visible only on small screens */}
+        {(session?.tenants.length ?? 0) > 1 && (
+          <div className="border-t border-border-default p-3 lg:hidden">
+            <div className="flex flex-col gap-2">
+              <span className="text-sm font-medium text-on-surface-variant">Organization:</span>
+              <select
+                aria-label="Switch organization"
+                value={session?.activeTenantId ?? ""}
+                onChange={(event) => {
+                  updateSession({ activeTenantId: event.target.value });
+                  window.location.assign("/dashboard");
+                }}
+                className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+              >
+                {session?.tenants.map((tenant) => (
+                  <option key={tenant.organizationId} value={tenant.organizationId}>
+                    {tenant.organizationName}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
+        )}
+
+        <div className="border-t border-border-default p-3">
           <Link
             to="/login"
             onClick={() => clearSession()}
@@ -252,42 +287,97 @@ export default function DashboardLayout() {
           <button onClick={() => setOpen(true)} className="lg:hidden text-on-surface-variant">
             <Menu className="h-5 w-5" />
           </button>
-          <div className="relative min-w-0 flex-1 w-full lg:max-w-xl">
-            <Search className="h-4 w-4 absolute start-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
-            <Input placeholder={t("search")} className="ps-9 bg-card" />
-          </div>
-          <div className="ms-auto flex shrink-0 items-center gap-2">
+
+          <div className="flex items-center gap-4 w-full">
+            {/* Organization selector - hidden on small screens */}
             {(session?.tenants.length ?? 0) > 1 && (
-              <select
-                aria-label="Switch organization"
-                value={session?.activeTenantId ?? ""}
-                onChange={(event) => {
-                  updateSession({ activeTenantId: event.target.value });
-                  window.location.assign("/dashboard");
-                }}
-                className="hidden md:block h-9 max-w-52 rounded-md border border-input bg-background px-2 text-sm"
-              >
-                {session?.tenants.map((tenant) => <option key={tenant.organizationId} value={tenant.organizationId}>{tenant.organizationName}</option>)}
-              </select>
+              <div className="hidden md:flex items-center gap-2">
+                <span className="text-sm font-medium text-on-surface-variant">Organization:</span>
+                <select
+                  aria-label="Switch organization"
+                  value={session?.activeTenantId ?? ""}
+                  onChange={(event) => {
+                    updateSession({ activeTenantId: event.target.value });
+                    window.location.assign("/dashboard");
+                  }}
+                  className="h-9 w-64 rounded-md border border-input bg-background px-2 text-sm"
+                >
+                  {session?.tenants.map((tenant) => (
+                    <option key={tenant.organizationId} value={tenant.organizationId}>
+                      {tenant.organizationName}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
-            <div className="hidden lg:flex items-center gap-2">
-              <LangToggle />
-              <ThemeToggle />
-            </div>
-            <Button asChild variant="ghost" size="icon">
-              <Link to="/dashboard/notifications" aria-label={t("notifications")}>
-                <Bell className="h-4 w-4" />
-              </Link>
-            </Button>
-            <div className="hidden sm:block text-end">
-              <p className="text-sm font-medium leading-tight">{session?.user.fullName ?? "Account"}</p>
-              <p className="text-xs text-on-surface-variant leading-tight">{activeTenant?.organizationName ?? "Onboarding"}</p>
-            </div>
-            <div className="hidden sm:grid h-11 w-11 rounded-full bg-gradient-primary text-primary-foreground place-items-center text-base font-semibold">
-              {session?.user.fullName?.[0] ?? "A"}
+
+            {/* Right side group */}
+            <div className="flex items-center gap-4 ml-auto">
+              <div className="flex items-center gap-2">
+                <Button asChild variant="ghost" size="icon">
+                  <Link to="/dashboard/notifications" aria-label={t("notifications")}>
+                    <Bell className="h-4 w-4" />
+                  </Link>
+                </Button>
+                {/* Settings button is commented out; using dropdown entry instead */}
+              </div>
+
+              {/* Avatar dropdown */}
+              <div className="relative" ref={userMenuRef}>
+                <button
+                  onClick={() => setUserMenuOpen((prev) => !prev)}
+                  className="hidden sm:grid h-11 w-11 rounded-full bg-gradient-primary text-primary-foreground place-items-center text-base font-semibold focus:outline-none focus:ring-2 focus:ring-primary/50"
+                >
+                  {session?.user.fullName?.[0] ?? "A"}
+                </button>
+
+                {userMenuOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-64 rounded-lg border border-border-default bg-card shadow-lg p-2 z-50">
+                    <div className="px-3 py-2">
+                      <p className="text-sm font-medium">{session?.user.fullName ?? "Account"}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{planName} Plan</p>
+                    </div>
+                    <div className="my-1 border-t border-border-default" />
+                    <div className="px-2 py-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span>Appearances</span>
+                        <ThemeToggle />
+                      </div>
+                    </div>
+                    <div className="px-2 py-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span>Language</span>
+                        <LangToggle />
+                      </div>
+                    </div>
+
+                    <Link
+                      to="/dashboard/settings"
+                      onClick={() => setUserMenuOpen(false)}
+                      className="flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-surface-container transition-colors w-full mt-1"
+                    >
+                      <Settings className="h-4 w-4" />
+                      {t("settings")}
+                    </Link>
+
+                    <div className="my-1 border-t border-border-default" />
+                    <button
+                      onClick={() => {
+                        clearSession();
+                        window.location.href = "/login";
+                      }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 rounded-md transition-colors"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Logout
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </header>
+
         <main className="flex-1 p-5 md:p-8 max-w-[1840px] w-full mx-auto">
           <Outlet />
         </main>

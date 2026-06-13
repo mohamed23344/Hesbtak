@@ -10,9 +10,9 @@
     --primary: oklch(0.55 0.18 250);
     --primary-foreground: oklch(0.99 0.005 240);
     --primary-container: oklch(0.48 0.18 250);
-    --secondary: oklch(0.6 0.18 200);
+    --secondary: oklch(0.62 0.20 250);
     --secondary-foreground: oklch(0.99 0.005 240);
-    --accent: oklch(0.72 0.16 200);
+    --accent: oklch(0.62 0.20 250);
     --accent-foreground: oklch(0.2 0.06 200);
 
     /* Surfaces - Clean Slate */
@@ -123,38 +123,44 @@
 
 @layer utilities {
   .bg-gradient-hero {
-    background-image: radial-gradient(
-        ellipse at top left,
+    background-image: radial-gradient(ellipse at top left,
         color-mix(in oklab, var(--accent) 30%, transparent),
-        transparent 60%
-      ),
-      radial-gradient(
-        ellipse at bottom right,
+        transparent 60%),
+      radial-gradient(ellipse at bottom right,
         color-mix(in oklab, var(--primary) 20%, transparent),
-        transparent 65%
-      ),
+        transparent 65%),
       var(--surface);
   }
+
   .bg-gradient-primary {
     background-image: linear-gradient(135deg, var(--primary), var(--primary-container));
   }
+
   .shadow-soft {
     box-shadow: 0 1px 2px rgb(15 23 42 / 0.02), 0 4px 12px -4px rgb(15 23 42 / 0.04);
   }
+
   .shadow-card {
     box-shadow: 0 1px 0 rgb(15 23 42 / 0.02), 0 8px 20px -10px rgb(15 23 42 / 0.06);
   }
+
   .glass-panel {
     background-color: color-mix(in oklab, var(--card) 80%, transparent);
     backdrop-filter: blur(12px);
     border: 1px solid color-mix(in oklab, var(--border) 40%, transparent);
   }
+
   .hover-glow {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
+
   .hover-glow:hover {
     transform: translateY(-2px);
     box-shadow: 0 12px 30px -10px color-mix(in oklab, var(--primary) 15%, transparent);
     border-color: color-mix(in oklab, var(--primary) 30%, transparent);
-  }
+    -webkit-transform: translateY(-2px);
+    -moz-transform: translateY(-2px);
+    -ms-transform: translateY(-2px);
+    -o-transform: translateY(-2px);
+}
 }

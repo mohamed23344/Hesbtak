@@ -14,6 +14,9 @@ const dict = {
 
     // Landing
     tagline: "AI-powered accounting for SMBs",
+    navFeatures: "Features",
+    navAssistant: "AI Assistant",
+    navStart: "Get Started",
     heroTitle: "Smart accounting that runs itself.",
     heroSubtitle: "Hesbetak.AI is your bilingual finance copilot — automated bookkeeping, instant insights, and beginner-friendly tools built for small businesses.",
     getStarted: "Get started free",
@@ -107,7 +110,10 @@ const dict = {
     notifications: "Notifications",
     support: "Support",
     settings: "Settings",
-
+    accounting: "Accounting",
+chartOfAccounts: "Chart of accounts",
+journalEntries: "Journal entries",
+generalLedger: "General ledger",
     // Sales / Purchases / Expenses shared
     manageInvoices: "Manage Invoices",
     payments: "Payments",
@@ -273,6 +279,9 @@ const dict = {
     confidence: "confidence",
     edit: "Edit",
     reviewDocument: "Review document",
+    googleSignInNotConfigured: "Google sign-in is not configured",
+    signInWithGoogle: "Sign in with Google",
+
 
     // Notifications
     notifTitle: "Notifications",
@@ -319,6 +328,9 @@ const dict = {
 
     // Landing
     tagline: "محاسبة ذكية للشركات الصغيرة",
+    navFeatures: "المميزات",
+    navAssistant: "المساعد الذكي",
+    navStart: "ابدأ الآن",
     heroTitle: "محاسبة ذكية تعمل من تلقاء نفسها.",
     heroSubtitle: "حسبتك.AI هو مساعدك المالي ثنائي اللغة — قيود تلقائية، تحليلات فورية، وأدوات سهلة لأصحاب المشاريع.",
     getStarted: "ابدأ مجاناً",
@@ -612,6 +624,8 @@ const dict = {
     deleteOrgWarning: "لا يمكن التراجع عن هذا الإجراء. سيتم حذف جميع المستخدمين والبيانات والاشتراكات النشطة المرتبطة بهذه المؤسسة بشكل دائم.",
     deleteConfirm: "نعم، احذف المؤسسة",
     orgDeleted: "تم حذف المؤسسة بنجاح",
+  signInWithGoogle: "تسجيل الدخول عبر Google",
+  googleSignInNotConfigured: "تسجيل الدخول عبر Google غير مفعّل",
   },
 } as const;
 

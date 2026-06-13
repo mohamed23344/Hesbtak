@@ -47,15 +47,15 @@ function Landing() {
   return (
     <div dir={dir} className="min-h-screen bg-surface text-on-surface">
       {/* Nav */}
-      <header className="sticky top-0 z-40 backdrop-blur-md bg-surface/75 border-b border-border-default/60">
-        <div className="mx-auto max-w-[1200px] px-5 md:px-8 h-16 flex items-center justify-between">
-          <BrandMark />
-          <nav className="hidden md:flex items-center gap-6 text-sm text-on-surface-variant font-medium">
-            <a href="#features" className="hover:text-primary transition-colors">{t("featuresTitle")}</a>
-            <a href="#ai" className="hover:text-primary transition-colors">{t("astTitle")}</a>
-            <a href="#pricing" className="hover:text-primary transition-colors">{t("ctaTitle")}</a>
+      <header className="sticky top-0 z-40 border-b border-border-default/60 bg-surface/85 backdrop-blur-xl">
+        <div className="mx-auto flex h-20 w-full max-w-[1800px] items-center justify-between px-4 lg:px-12">
+          <BrandMark large />
+          <nav className="hidden items-center gap-1 rounded-full border border-border-default/70 bg-card/60 p-1 text-sm lg:text-lg font-medium text-on-surface-variant shadow-soft lg:flex">
+            <a href="#features" className="rounded-full px-4 py-2 transition-colors hover:bg-primary/10 hover:text-primary">{t("navFeatures")}</a>
+            <a href="#ai" className="rounded-full px-4 py-2 transition-colors hover:bg-primary/10 hover:text-primary">{t("navAssistant")}</a>
+            <a href="#pricing" className="rounded-full px-4 py-2 transition-colors hover:bg-primary/10 hover:text-primary">{t("navStart")}</a>
           </nav>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
             <LangToggle />
             <ThemeToggle />
             {loggedIn ? (
@@ -67,10 +67,10 @@ function Landing() {
             ) : (
               <>
                 <Link to="/login">
-                  <Button variant="ghost" size="sm" className="cursor-pointer">{t("signIn")}</Button>
+                  <Button variant="ghost" size="sm" className="hidden cursor-pointer sm:inline-flex">{t("signIn")}</Button>
                 </Link>
                 <Link to="/register">
-                  <Button size="sm" className="bg-gradient-primary cursor-pointer shadow-soft hover-glow">{t("getStarted")}</Button>
+                  <Button size="sm" className="bg-gradient-primary cursor-pointer px-3 shadow-soft hover-glow sm:px-4">{t("navStart")}</Button>
                 </Link>
               </>
             )}
@@ -84,7 +84,7 @@ function Landing() {
         <div className="absolute top-20 right-10 w-72 h-72 bg-accent/10 blur-3xl rounded-full" />
         <div className="absolute bottom-10 left-10 w-72 h-72 bg-primary/10 blur-3xl rounded-full" />
 
-        <div className="mx-auto max-w-[1200px] min-h-[calc(100vh-5rem)] px-5 md:px-8 py-12 grid lg:grid-cols-[1fr_1fr] gap-12 items-center relative z-10">
+        <div className="mx-auto max-w-[1400px] min-h-[calc(100vh-5rem)] px-5 md:px-8 py-12 grid lg:grid-cols-[1fr_1fr] gap-12 items-center relative z-10">
           <div>
             <span className="inline-flex items-center gap-2.5 rounded-full bg-primary/10 border border-primary/20 px-4 py-2 text-sm font-semibold text-primary">
               <Sparkles className="h-3.5 w-3.5 animate-pulse" /> New · GPT-powered insights
@@ -116,7 +116,7 @@ function Landing() {
       </section>
 
       {/* Features */}
-      <section id="features" className="mx-auto max-w-[1200px] px-5 md:px-8 py-20">
+      <section id="features" className="mx-auto max-w-[1400px] px-5 md:px-8 py-20">
         <div className="text-center max-w-3xl mx-auto">
           <h2 className="text-3xl md:text-4xl font-bold tracking-tight">
             {t("featuresTitle")}
@@ -177,7 +177,7 @@ function Landing() {
         {/* Soft decorative glow */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-primary/5 blur-3xl rounded-full" />
 
-        <div className="mx-auto max-w-[1200px] px-5 md:px-8 py-20 grid lg:grid-cols-2 gap-12 items-center relative z-10">
+        <div className="mx-auto max-w-[1400px] px-5 md:px-8 py-20 grid lg:grid-cols-2 gap-12 items-center relative z-10">
           <div>
             <span className="inline-flex items-center gap-2 rounded-full bg-card border border-border-default px-3 py-1 text-xs font-semibold text-primary shadow-soft">
               <Bot className="h-3.5 w-3.5" /> {t("astTitle")}
@@ -215,7 +215,7 @@ function Landing() {
       </section>
 
       {/* CTA */}
-      <section id="pricing" className="mx-auto max-w-4xl px-5 md:px-8 py-20 text-center relative">
+      <section id="pricing" className="mx-auto max-w-6xl px-5 md:px-8 py-20 text-center relative">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-accent/10 blur-3xl rounded-full -z-10" />
         <h2 className="text-3xl md:text-5xl font-extrabold tracking-tight">
           {t("ctaTitle")}
@@ -255,11 +255,10 @@ function ChatBubble({ who, children }: { who: "you" | "ai"; children: React.Reac
   return (
     <div className={`flex ${isYou ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[85%] rounded-2xl px-5 py-3.5 text-base ${
-          isYou
+        className={`max-w-[85%] rounded-2xl px-5 py-3.5 text-base ${isYou
             ? "bg-gradient-primary text-primary-foreground"
             : "bg-surface-container text-on-surface"
-        }`}
+          }`}
       >
         {children}
       </div>
