@@ -27,36 +27,42 @@ declare global {
 
 export function SocialButtons() {
   const navigate = useNavigate();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const hiddenRef = useRef<HTMLDivElement>(null);
-  const [loading, setLoading] = useState(false);
   const { t, dir } = useI18n();
 
-  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+  const [loading, setLoading] = useState(false);
+
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as
+    | string
+    | undefined;
 
   useEffect(() => {
     if (!clientId) return;
 
-    const render = () => {
-      if (!window.google || !hiddenRef.current) return;
-
-      hiddenRef.current.replaceChildren();
+    const initializeGoogle = () => {
+      if (!window.google) return;
 
       window.google.accounts.id.initialize({
         client_id: clientId,
+
         callback: async ({ credential }) => {
           setLoading(true);
 
           try {
             const data = await api<any>("/auth/google", {
               method: "POST",
-              body: JSON.stringify({ credential }),
+              body: JSON.stringify({
+                credential,
+              }),
             });
 
             saveSession(data);
 
-            if (data.user.globalRole === "admin") {
-              navigate({ to: "/admin", hash: "users", replace: true });
+            if (data.user?.globalRole === "admin") {
+              navigate({
+                to: "/admin",
+                hash: "users",
+                replace: true,
+              });
             } else {
               navigate({
                 to:
@@ -68,40 +74,50 @@ export function SocialButtons() {
             }
           } catch (error) {
             toast.error(
-              error instanceof Error ? error.message : "Google sign-in failed"
+              error instanceof Error
+                ? error.message
+                : "Google sign-in failed"
             );
+
             setLoading(false);
           }
         },
       });
-
-      // Hidden GSI button — triggered programmatically on custom button click
-      window.google.accounts.id.renderButton(hiddenRef.current, {
-        type: "standard",
-        theme: "outline",
-        size: "large",
-        text: "continue_with",
-        shape: "rectangular",
-        width: 1,
-      });
     };
+
+    if (window.google) {
+      initializeGoogle();
+      return;
+    }
 
     const existing = document.querySelector<HTMLScriptElement>(
       'script[src="https://accounts.google.com/gsi/client"]'
     );
 
     if (existing) {
-      if (window.google) render();
-      else existing.addEventListener("load", render, { once: true });
-      return () => existing.removeEventListener("load", render);
+      existing.addEventListener("load", initializeGoogle, {
+        once: true,
+      });
+
+      return () =>
+        existing.removeEventListener(
+          "load",
+          initializeGoogle
+        );
     }
 
     const script = document.createElement("script");
+
     script.src = "https://accounts.google.com/gsi/client";
     script.async = true;
     script.defer = true;
-    script.onload = render;
-    script.onerror = () => toast.error("Could not load Google sign-in");
+
+    script.onload = initializeGoogle;
+
+    script.onerror = () => {
+      toast.error("Failed to load Google Sign-In");
+    };
+
     document.head.appendChild(script);
 
     return () => {
@@ -110,12 +126,25 @@ export function SocialButtons() {
     };
   }, [clientId, navigate]);
 
+  const handleGoogleLogin = () => {
+    if (!window.google) {
+      toast.error("Google SDK not loaded");
+      return;
+    }
+
+    try {
+      window.google.accounts.id.prompt();
+    } catch (e) {
+      console.error(e);
+      toast.error("Could not open Google Sign-In");
+    }
+  };
+
   if (!clientId) {
     return (
       <Button
         variant="outline"
-        className="w-full h-11 justify-center gap-2.5 text-sm font-medium text-muted-foreground cursor-not-allowed"
-        type="button"
+        className="w-full h-11 justify-center gap-2.5"
         disabled
       >
         <GoogleIcon />
@@ -125,60 +154,48 @@ export function SocialButtons() {
   }
 
   return (
-    <div className="min-h-11">
-      {/* Hidden GSI button — real click target triggered below */}
-      <div
-        ref={hiddenRef}
-        className="absolute opacity-0 pointer-events-none overflow-hidden w-px h-px"
-        aria-hidden="true"
-      />
+    <button
+      type="button"
+      disabled={loading}
+      onClick={handleGoogleLogin}
+      className={[
+        "w-full h-11 flex items-center justify-center gap-3",
+        "rounded-lg border border-border bg-background",
+        "text-sm font-medium text-foreground",
+        "transition-colors hover:bg-muted/50 active:bg-muted",
+        "disabled:opacity-50 disabled:cursor-not-allowed",
+        dir === "rtl" ? "flex-row-reverse" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {loading ? (
+        <svg
+          className="h-4 w-4 animate-spin"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+        >
+          <circle
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            strokeWidth="4"
+            opacity="0.25"
+          />
+          <path
+            fill="currentColor"
+            opacity="0.75"
+            d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 100 16v-4l-3 3 3 3v-4a8 8 0 01-8-8z"
+          />
+        </svg>
+      ) : (
+        <GoogleIcon />
+      )}
 
-      {/* Custom styled button */}
-      <button
-        type="button"
-        disabled={loading}
-        onClick={() => {
-          const btn = hiddenRef.current?.querySelector<HTMLElement>("div[role=button]");
-          btn?.click();
-        }}
-        className={[
-          "w-full h-11 flex items-center justify-center gap-3",
-          "rounded-lg border border-border bg-background",
-          "text-sm font-medium text-foreground",
-          "transition-colors hover:bg-muted/50 active:bg-muted",
-          "disabled:opacity-50 disabled:cursor-not-allowed",
-          dir === "rtl" ? "flex-row-reverse" : "",
-        ]
-          .filter(Boolean)
-          .join(" ")}
-      >
-        {loading ? (
-          <svg
-            className="h-4 w-4 animate-spin text-muted-foreground"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 100 16v-4l-3 3 3 3v-4a8 8 0 01-8-8z"
-            />
-          </svg>
-        ) : (
-          <GoogleIcon />
-        )}
-        <span>{t("signInWithGoogle")}</span>
-      </button>
-    </div>
+      <span>{t("signInWithGoogle")}</span>
+    </button>
   );
 }
 
