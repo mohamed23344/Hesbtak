@@ -23,7 +23,6 @@ export const REPORT_TYPES = [
   'tax',
   'vendor_payments',
   'customer_invoices',
-  'budget_vs_actual',
   'custom',
 ] as const;
 

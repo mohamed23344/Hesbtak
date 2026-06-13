@@ -35,7 +35,7 @@ export const Route = createFileRoute("/dashboard/reports")({ component: Page });
 type ReportType =
   | "profit_loss" | "balance_sheet" | "cash_flow" | "revenue" | "expense"
   | "accounts_receivable" | "accounts_payable" | "sales" | "tax"
-  | "vendor_payments" | "customer_invoices" | "budget_vs_actual" | "custom";
+  | "vendor_payments" | "customer_invoices" | "custom";
 
 type Template = { type: ReportType; name: string; description: string };
 type Field = { key: string; label: string };
@@ -118,12 +118,11 @@ const SORT_FIELDS: Partial<Record<ReportType, Field[]>> = {
   profit_loss: [{ key: "code", label: "Code" }, { key: "account", label: "Account" }, { key: "type", label: "Type" }, { key: "amount", label: "Amount" }],
   balance_sheet: [{ key: "code", label: "Code" }, { key: "account", label: "Account" }, { key: "balance", label: "Balance" }],
   cash_flow: [{ key: "month", label: "Month" }, { key: "activity", label: "Activity" }, { key: "net_cash_flow", label: "Net Cash Flow" }],
-  expense: [{ key: "expense_number", label: "Expense Number" }, { key: "description", label: "Expense Name" }, { key: "category", label: "Category" }, { key: "vendor_name", label: "Vendor" }, { key: "total", label: "Total" }, { key: "expense_date", label: "Payment Date" }],
+  expense: [{ key: "bill_number", label: "Bill Number" }, { key: "bill_type", label: "Bill Type" }, { key: "description", label: "Description" }, { key: "vendor_name", label: "Vendor" }, { key: "account_name", label: "Expense Account" }, { key: "issue_date", label: "Issue Date" }, { key: "total", label: "Total" }, { key: "status", label: "Status" }],
   accounts_receivable: [{ key: "invoice_number", label: "Invoice Number" }, { key: "customer_name", label: "Customer" }, { key: "due_date", label: "Due Date" }, { key: "balance", label: "Balance" }, { key: "status", label: "Status" }],
   accounts_payable: [{ key: "bill_number", label: "Bill Number" }, { key: "vendor_name", label: "Vendor" }, { key: "due_date", label: "Due Date" }, { key: "balance", label: "Balance" }, { key: "status", label: "Status" }],
   vendor_payments: [{ key: "reference", label: "Reference" }, { key: "vendor_name", label: "Vendor" }, { key: "amount", label: "Amount" }, { key: "payment_date", label: "Payment Date" }, { key: "payment_method", label: "Payment Method" }],
   tax: [{ key: "tax_type", label: "Tax Type" }, { key: "reference", label: "Reference" }, { key: "party", label: "Party" }, { key: "date", label: "Date" }, { key: "tax_amount", label: "Tax Amount" }, { key: "total", label: "Total" }],
-  budget_vs_actual: [{ key: "month", label: "Month" }, { key: "predicted_revenue", label: "Predicted Revenue" }, { key: "predicted_expense", label: "Predicted Expense" }, { key: "actual_revenue", label: "Actual Revenue" }, { key: "actual_expense", label: "Actual Expense" }],
 };
 
 const INVOICE_SORT_FIELDS: Field[] = [
@@ -670,7 +669,7 @@ function NativeSelect({ value, onChange, children }: { value: string; onChange: 
 function updateConfig(setBuilder: (value: Builder) => void, builder: Builder, key: keyof Configuration, value: unknown) { setBuilder({ ...builder, configuration: { ...builder.configuration, [key]: value } }); }
 function display(value: unknown) { if (typeof value === "number") return value.toLocaleString(undefined, { maximumFractionDigits: 2 }); return String(value ?? ""); }
 function money(value: unknown) { return Number(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-function groupLabel(value: string) { return ({ customer_name: "Customer", vendor_name: "Vendor", category: "Category", month: "Month", quarter: "Quarter", year: "Year", department: "Department" } as Record<string, string>)[value] ?? label(value); }
+function groupLabel(value: string) { return ({ customer_name: "Customer", vendor_name: "Vendor", bill_type: "Bill Type", account_name: "Expense Account", month: "Month", quarter: "Quarter", year: "Year", department: "Department" } as Record<string, string>)[value] ?? label(value); }
 function label(value: string) { return value.replaceAll("_", " ").replace(/\b\w/g, (character) => character.toUpperCase()); }
 function formatDate(value?: string) { return value ? new Date(value).toLocaleString() : "Not run"; }
 function slug(value: string) { return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "report"; }

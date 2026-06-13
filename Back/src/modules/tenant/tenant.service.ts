@@ -196,6 +196,8 @@ export class TenantService {
         tax_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
         total DECIMAL(15,2) NOT NULL,
         status VARCHAR NOT NULL DEFAULT 'unpaid',
+        account_id UUID REFERENCES ${schema}.accounts(id),
+        related_account_id UUID REFERENCES ${schema}.accounts(id),
         journal_entry_id UUID REFERENCES ${schema}.journal_entries(id),
         created_by UUID NOT NULL REFERENCES public.users(id),
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -232,13 +234,16 @@ export class TenantService {
       CREATE TABLE IF NOT EXISTS ${schema}.vendor_bills (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         bill_number VARCHAR NOT NULL UNIQUE,
-        vendor_id UUID NOT NULL REFERENCES ${schema}.vendors(id),
+        vendor_id UUID REFERENCES ${schema}.vendors(id),
+        type VARCHAR NOT NULL DEFAULT 'purchase' CHECK (type IN ('purchase', 'expense')),
         issue_date DATE NOT NULL,
         due_date DATE NOT NULL,
         subtotal DECIMAL(15,2) NOT NULL,
         tax_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
         total DECIMAL(15,2) NOT NULL,
         status VARCHAR NOT NULL DEFAULT 'received',
+        account_id UUID REFERENCES ${schema}.accounts(id),
+        related_account_id UUID REFERENCES ${schema}.accounts(id),
         journal_entry_id UUID REFERENCES ${schema}.journal_entries(id),
         created_by UUID NOT NULL REFERENCES public.users(id),
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -474,6 +479,32 @@ export class TenantService {
         emailed_at TIMESTAMPTZ,
         error_message TEXT
       );
+      ALTER TABLE ${schema}.invoices
+        ADD COLUMN IF NOT EXISTS account_id UUID REFERENCES ${schema}.accounts(id),
+        ADD COLUMN IF NOT EXISTS related_account_id UUID REFERENCES ${schema}.accounts(id);
+      ALTER TABLE ${schema}.vendor_bills
+        ADD COLUMN IF NOT EXISTS type VARCHAR NOT NULL DEFAULT 'purchase',
+        ADD COLUMN IF NOT EXISTS account_id UUID REFERENCES ${schema}.accounts(id),
+        ADD COLUMN IF NOT EXISTS related_account_id UUID REFERENCES ${schema}.accounts(id);
+      ALTER TABLE ${schema}.vendor_bills ALTER COLUMN vendor_id DROP NOT NULL;
+      UPDATE ${schema}.invoices i
+         SET account_id = source.account_id
+        FROM (
+          SELECT invoice_id, MIN(revenue_account_id::text)::uuid AS account_id
+            FROM ${schema}.invoice_lines
+           WHERE revenue_account_id IS NOT NULL
+           GROUP BY invoice_id
+        ) source
+       WHERE i.id = source.invoice_id AND i.account_id IS NULL;
+      UPDATE ${schema}.vendor_bills b
+         SET account_id = source.account_id
+        FROM (
+          SELECT vendor_bill_id, MIN(expense_account_id::text)::uuid AS account_id
+            FROM ${schema}.vendor_bill_lines
+           WHERE expense_account_id IS NOT NULL
+           GROUP BY vendor_bill_id
+        ) source
+       WHERE b.id = source.vendor_bill_id AND b.account_id IS NULL;
     `);
   }
 
@@ -482,10 +513,32 @@ export class TenantService {
     industry: string,
   ): Promise<void> {
     const schema = this.quote(schemaName);
+    const hierarchy = [
+      ['100', 'Assets', 'Asset', null, 1, false],
+      ['110', 'Current Assets', 'Asset', '100', 2, false],
+      ['150', 'Fixed Assets', 'Asset', '100', 2, false],
+      ['1000', 'Cash and Bank', 'Asset', '110', 3, true],
+      ['1100', 'Accounts Receivable', 'Asset', '110', 3, true],
+      ['1200', 'Input Tax Receivable', 'Asset', '110', 3, true],
+      ['1300', 'Inventory', 'Asset', '110', 3, true],
+      ['1500', 'Property and Equipment', 'Asset', '150', 3, true],
+    ] as const;
+
+    for (const [code, name, type, parentCode, level, isLeaf] of hierarchy) {
+      await this.db.$executeRawUnsafe(
+        `INSERT INTO ${schema}.accounts (code, name, type, parent_id, level, is_leaf)
+         VALUES ($1, $2, $3, (SELECT id FROM ${schema}.accounts WHERE code = $4), $5, $6)
+         ON CONFLICT (code) DO UPDATE SET
+           name = EXCLUDED.name,
+           type = EXCLUDED.type,
+           parent_id = EXCLUDED.parent_id,
+           level = EXCLUDED.level,
+           is_leaf = EXCLUDED.is_leaf`,
+        code, name, type, parentCode, level, isLeaf,
+      );
+    }
+
     const baseAccounts = [
-      ['1000', 'Cash and Bank', 'Asset'],
-      ['1100', 'Accounts Receivable', 'Asset'],
-      ['1200', 'Input Tax Receivable', 'Asset'],
       ['2000', 'Accounts Payable', 'Liability'],
       ['2100', 'Output Tax Payable', 'Liability'],
       ['3000', 'Owner Equity', 'Equity'],

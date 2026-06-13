@@ -38,7 +38,7 @@ function PurchasesPage() {
 
   const load = async () => {
     try {
-      setBills(await api<Bill[]>("/tenant/vendor-bills"));
+      setBills(await api<Bill[]>("/tenant/vendor-bills?type=purchase"));
     } catch {
       setBills([]);
     }

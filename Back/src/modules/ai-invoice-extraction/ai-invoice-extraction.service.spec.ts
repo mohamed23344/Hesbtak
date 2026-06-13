@@ -57,6 +57,8 @@ describe('AiInvoiceExtractionService', () => {
       party: { name: 'New Customer' },
       issueDate: '2026-06-12',
       dueDate: '2026-06-30',
+      accountId: 'revenue-account-id',
+      relatedAccountId: 'receivable-account-id',
       status: 'open',
       lines: [
         {
@@ -64,7 +66,6 @@ describe('AiInvoiceExtractionService', () => {
           quantity: 1,
           unitPrice: 100,
           taxRate: 10,
-          accountId: 'revenue-account-id',
         },
       ],
     });
@@ -87,6 +88,7 @@ describe('AiInvoiceExtractionService', () => {
       billNumber: 'BILL-00001',
       total: '50',
       status: 'received',
+      type: 'expense',
     });
 
     await service.confirm(ctx, 'user-1', {
@@ -94,13 +96,14 @@ describe('AiInvoiceExtractionService', () => {
       party: { name: 'New Vendor' },
       issueDate: '2026-06-12',
       dueDate: '2026-06-12',
+      accountId: 'expense-account-id',
+      relatedAccountId: 'payable-account-id',
       status: 'open',
       lines: [
         {
           description: 'Office supplies',
           quantity: 1,
           unitPrice: 50,
-          accountId: 'expense-account-id',
         },
       ],
     });
@@ -111,7 +114,43 @@ describe('AiInvoiceExtractionService', () => {
       'user-1',
       expect.objectContaining({
         vendorId: 'vendor-1',
+        accountId: 'expense-account-id',
+        relatedAccountId: 'payable-account-id',
         status: 'received',
+        type: 'expense',
+      }),
+    );
+  });
+
+  it('allows an expense draft without a vendor', async () => {
+    accounting.createVendorBill.mockResolvedValue({
+      id: 'bill-2',
+      billNumber: 'BILL-00002',
+      total: '25',
+      status: 'paid',
+      type: 'expense',
+    });
+
+    await service.confirm(ctx, 'user-1', {
+      section: 'expenses',
+      issueDate: '2026-06-12',
+      dueDate: '2026-06-12',
+      accountId: 'expense-account-id',
+      relatedAccountId: 'cash-account-id',
+      status: 'paid',
+      paymentMethod: 'cash',
+      lines: [{ description: 'Transport', quantity: 1, unitPrice: 25 }],
+    });
+
+    expect(accounting.createVendor).not.toHaveBeenCalled();
+    expect(accounting.createVendorBill).toHaveBeenCalledWith(
+      ctx,
+      'user-1',
+      expect.objectContaining({
+        vendorId: undefined,
+        type: 'expense',
+        accountId: 'expense-account-id',
+        relatedAccountId: 'cash-account-id',
       }),
     );
   });

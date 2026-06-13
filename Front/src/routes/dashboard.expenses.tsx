@@ -38,7 +38,7 @@ function ExpensesPage() {
 
   const load = async () => {
     try {
-      setExpenses(await api<Expense[]>("/tenant/vendor-bills"));
+      setExpenses(await api<Expense[]>("/tenant/vendor-bills?type=expense"));
     } catch {
       setExpenses([]);
     }
@@ -99,7 +99,7 @@ function ExpensesPage() {
         desc={t("expensesDesc")}
         action={
           <Button className="bg-gradient-primary gap-1.5" onClick={() => navigate({ to: "/dashboard/expenses/manage" })}>
-            <Plus className="h-4 w-4" /> {t("createInvoice")}
+            <Plus className="h-4 w-4" /> {t("createExpense")}
           </Button>
         }
       />

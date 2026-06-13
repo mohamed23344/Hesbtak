@@ -31,6 +31,7 @@ function ManageSalesPage() {
   const [search, setSearch] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
+  const [customerFilter, setCustomerFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
@@ -48,16 +49,22 @@ function ManageSalesPage() {
     return invoices.filter((inv) => {
       if (search && !`${inv.invoice_number} ${inv.customer_name}`.toLowerCase().includes(search.toLowerCase())) return false;
       if (statusFilter && inv.status !== statusFilter) return false;
+      if (customerFilter && inv.customer_id !== customerFilter) return false;
       if (dateFrom && inv.issue_date.slice(0, 10) < dateFrom) return false;
       if (dateTo && inv.issue_date.slice(0, 10) > dateTo) return false;
       return true;
     });
-  }, [invoices, search, statusFilter, dateFrom, dateTo]);
+  }, [invoices, search, statusFilter, customerFilter, dateFrom, dateTo]);
 
-  const activeFilterCount = [statusFilter, dateFrom, dateTo].filter(Boolean).length;
+  const activeFilterCount = [statusFilter, customerFilter, dateFrom, dateTo].filter(Boolean).length;
+  const customers = Array.from(new Map(invoices.map((invoice) => [
+    invoice.customer_id,
+    { id: invoice.customer_id, name: invoice.customer_name },
+  ])).values()).sort((a, b) => a.name.localeCompare(b.name));
 
   const clearFilters = () => {
     setStatusFilter("");
+    setCustomerFilter("");
     setDateFrom("");
     setDateTo("");
   };
@@ -109,7 +116,7 @@ function ManageSalesPage() {
       </div>
 
       {filterOpen && (
-        <div className="bg-card border border-border-default rounded-2xl p-4 shadow-soft grid sm:grid-cols-3 gap-4 animate-in fade-in slide-in-from-top-2 duration-150">
+        <div className="bg-card border border-border-default rounded-2xl p-4 shadow-soft grid sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-in fade-in slide-in-from-top-2 duration-150">
           <div className="space-y-1.5">
             <Label className="text-xs">{t("status")}</Label>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm">
@@ -119,6 +126,13 @@ function ManageSalesPage() {
               <option value="paid">Paid</option>
               <option value="partial">Partial</option>
               <option value="overdue">Overdue</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Customer</Label>
+            <select value={customerFilter} onChange={(e) => setCustomerFilter(e.target.value)} className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm">
+              <option value="">All customers</option>
+              {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}
             </select>
           </div>
           <div className="space-y-1.5">

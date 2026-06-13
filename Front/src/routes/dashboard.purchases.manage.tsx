@@ -31,12 +31,13 @@ function ManagePurchases() {
   const [search, setSearch] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
+  const [vendorFilter, setVendorFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
   const load = async () => {
     try {
-      setBills(await api<Bill[]>("/tenant/vendor-bills"));
+      setBills(await api<Bill[]>("/tenant/vendor-bills?type=purchase"));
     } catch {
       toast.error("Could not load purchase bills");
     }
@@ -48,16 +49,22 @@ function ManagePurchases() {
     return bills.filter((b) => {
       if (search && !`${b.bill_number} ${b.vendor_name}`.toLowerCase().includes(search.toLowerCase())) return false;
       if (statusFilter && b.status !== statusFilter) return false;
+      if (vendorFilter && b.vendor_id !== vendorFilter) return false;
       if (dateFrom && b.issue_date.slice(0, 10) < dateFrom) return false;
       if (dateTo && b.issue_date.slice(0, 10) > dateTo) return false;
       return true;
     });
-  }, [bills, search, statusFilter, dateFrom, dateTo]);
+  }, [bills, search, statusFilter, vendorFilter, dateFrom, dateTo]);
 
-  const activeFilterCount = [statusFilter, dateFrom, dateTo].filter(Boolean).length;
+  const activeFilterCount = [statusFilter, vendorFilter, dateFrom, dateTo].filter(Boolean).length;
+  const vendors = Array.from(new Map(bills.map((bill) => [
+    bill.vendor_id,
+    { id: bill.vendor_id, name: bill.vendor_name },
+  ])).values()).sort((a, b) => a.name.localeCompare(b.name));
 
   const clearFilters = () => {
     setStatusFilter("");
+    setVendorFilter("");
     setDateFrom("");
     setDateTo("");
   };
@@ -109,7 +116,7 @@ function ManagePurchases() {
       </div>
 
       {filterOpen && (
-        <div className="bg-card border border-border-default rounded-2xl p-4 shadow-soft grid sm:grid-cols-3 gap-4 animate-in fade-in slide-in-from-top-2 duration-150">
+        <div className="bg-card border border-border-default rounded-2xl p-4 shadow-soft grid sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-in fade-in slide-in-from-top-2 duration-150">
           <div className="space-y-1.5">
             <Label className="text-xs">{t("status")}</Label>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm">
@@ -119,6 +126,13 @@ function ManagePurchases() {
               <option value="paid">Paid</option>
               <option value="partial">Partial</option>
               <option value="overdue">Overdue</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Vendor</Label>
+            <select value={vendorFilter} onChange={(e) => setVendorFilter(e.target.value)} className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm">
+              <option value="">All vendors</option>
+              {vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}
             </select>
           </div>
           <div className="space-y-1.5">

@@ -147,7 +147,8 @@ export class DocumentLineDto {
   taxRate?: number = 0;
 
   @IsString()
-  accountId!: string;
+  @IsOptional()
+  accountId?: string;
 }
 
 export class InvoiceDto {
@@ -165,6 +166,12 @@ export class InvoiceDto {
 
   @IsDateString()
   dueDate!: string;
+
+  @IsString()
+  accountId!: string;
+
+  @IsString()
+  relatedAccountId!: string;
 
   @IsArray()
   @ValidateNested({ each: true })
@@ -188,6 +195,11 @@ export class InvoiceDto {
 export class VendorBillDto {
   @IsString()
   @IsOptional()
+  @IsIn(['purchase', 'expense'])
+  type?: 'purchase' | 'expense' = 'purchase';
+
+  @IsString()
+  @IsOptional()
   vendorId?: string;
 
   @ValidateNested()
@@ -200,6 +212,12 @@ export class VendorBillDto {
 
   @IsDateString()
   dueDate!: string;
+
+  @IsString()
+  accountId!: string;
+
+  @IsString()
+  relatedAccountId!: string;
 
   @IsArray()
   @ValidateNested({ each: true })
@@ -245,6 +263,10 @@ export class PaymentDto {
   @IsString()
   @IsOptional()
   bankAccountId?: string;
+
+  @IsString()
+  @IsOptional()
+  accountId?: string;
 
   @IsString()
   @IsOptional()

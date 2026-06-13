@@ -34,17 +34,32 @@ export interface GeneratedReport {
 }
 
 const GROUP_FIELDS: Partial<Record<ReportType, string[]>> = {
+  profit_loss: ['type', 'account'],
   revenue: ['customer_name', 'month', 'quarter', 'year'],
   sales: ['customer_name', 'month', 'quarter', 'year'],
   customer_invoices: ['customer_name', 'month', 'quarter', 'year'],
   accounts_receivable: ['customer_name', 'month', 'quarter', 'year'],
-  expense: ['vendor_name', 'category', 'month', 'quarter', 'year'],
+  expense: ['vendor_name', 'bill_type', 'account_name', 'month', 'quarter', 'year'],
   accounts_payable: ['vendor_name', 'month', 'quarter', 'year'],
   vendor_payments: ['vendor_name', 'month', 'quarter', 'year'],
   tax: ['month', 'quarter', 'year'],
   cash_flow: ['month', 'quarter', 'year'],
-  budget_vs_actual: ['month', 'quarter', 'year'],
-  custom: ['customer_name', 'vendor_name', 'category', 'month', 'quarter', 'year'],
+  custom: ['customer_name', 'vendor_name', 'bill_type', 'account_name', 'month', 'quarter', 'year'],
+};
+
+const AGGREGATION_FIELDS: Partial<Record<ReportType, string[]>> = {
+  profit_loss: ['amount'],
+  balance_sheet: ['balance'],
+  cash_flow: ['net_cash_flow'],
+  revenue: ['total', 'subtotal', 'tax_amount'],
+  expense: ['total', 'subtotal', 'tax_amount', 'paid_amount'],
+  accounts_receivable: ['balance', 'total', 'paid'],
+  accounts_payable: ['balance', 'total', 'paid'],
+  sales: ['total', 'subtotal', 'tax_amount'],
+  tax: ['tax_amount', 'total'],
+  vendor_payments: ['amount'],
+  customer_invoices: ['total', 'subtotal', 'tax_amount'],
+  custom: ['total', 'amount', 'balance', 'subtotal', 'tax_amount', 'paid_amount'],
 };
 
 @Injectable()
@@ -553,16 +568,40 @@ export class ReportsService {
              FROM ${schema}.accounts a
              LEFT JOIN ${schema}.journal_lines jl ON jl.account_id = a.id
              GROUP BY a.id
+           ),
+           balance_rows AS (
+             SELECT a.parent_id::text AS parent_id, a.code, a.name AS account,
+               a.type, a.level, a.is_leaf,
+               COALESCE(SUM(b.balance), 0)::numeric AS balance
+             FROM ${schema}.accounts a
+             JOIN account_tree tree ON tree.root_id = a.id
+             JOIN account_balances b ON b.id = tree.descendant_id
+             WHERE a.type IN ('Asset','Liability','Equity')
+             GROUP BY a.id
+           ),
+           nominal_totals AS (
+             SELECT
+               COALESCE(SUM(CASE WHEN a.type = 'Revenue' THEN jl.credit - jl.debit ELSE 0 END), 0)::numeric AS revenue,
+               COALESCE(SUM(CASE WHEN a.type = 'Expense' THEN jl.debit - jl.credit ELSE 0 END), 0)::numeric AS expenses
+             FROM ${schema}.accounts a
+             LEFT JOIN ${schema}.journal_lines jl ON jl.account_id = a.id
+             WHERE a.type IN ('Revenue','Expense')
            )
-           SELECT a.parent_id, a.code, a.name AS account, a.type, a.level, a.is_leaf,
-             COALESCE(SUM(b.balance), 0)::numeric AS balance
-           FROM ${schema}.accounts a
-           JOIN account_tree tree ON tree.root_id = a.id
-           JOIN account_balances b ON b.id = tree.descendant_id
-           WHERE a.type IN ('Asset','Liability','Equity')
-           GROUP BY a.id
-           ORDER BY CASE a.type WHEN 'Asset' THEN 1 WHEN 'Liability' THEN 2 ELSE 3 END,
-             a.code`,
+           SELECT parent_id, code, account, type, level, is_leaf, balance
+           FROM (
+             SELECT * FROM balance_rows
+             UNION ALL
+             SELECT NULL::text, '3990', 'Current Earnings', 'Equity', 1, false,
+               revenue - expenses FROM nominal_totals
+             UNION ALL
+             SELECT '3990', '3991', 'Revenue', 'Equity', 2, true,
+               revenue FROM nominal_totals
+             UNION ALL
+             SELECT '3990', '3992', 'Expenses', 'Equity', 2, true,
+               -expenses FROM nominal_totals
+           ) report_rows
+           ORDER BY CASE type WHEN 'Asset' THEN 1 WHEN 'Liability' THEN 2 ELSE 3 END,
+             code`,
         );
         break;
       case 'cash_flow':
@@ -597,7 +636,7 @@ export class ReportsService {
            FROM ${schema}.vendor_bills b
            JOIN ${schema}.vendors v ON v.id = b.vendor_id
            LEFT JOIN ${schema}.vendor_payments p ON p.vendor_bill_id = b.id
-           WHERE b.status IN ('received','partial')
+           WHERE b.type = 'purchase' AND b.status IN ('received','partial')
            GROUP BY b.id, v.name ORDER BY b.due_date`,
         );
         break;
@@ -611,6 +650,7 @@ export class ReportsService {
            FROM ${schema}.vendor_payments p
            JOIN ${schema}.vendors v ON v.id = p.vendor_id
            JOIN ${schema}.vendor_bills b ON b.id = p.vendor_bill_id
+           WHERE b.type = 'purchase'
            ORDER BY p.payment_date DESC`,
         );
         break;
@@ -621,29 +661,8 @@ export class ReportsService {
            FROM ${schema}.invoices i JOIN ${schema}.customers c ON c.id = i.customer_id
            UNION ALL
            SELECT 'input_tax', b.bill_number, v.name, b.issue_date, b.tax_amount, b.total
-           FROM ${schema}.vendor_bills b JOIN ${schema}.vendors v ON v.id = b.vendor_id
+           FROM ${schema}.vendor_bills b LEFT JOIN ${schema}.vendors v ON v.id = b.vendor_id
            ORDER BY date DESC`,
-        );
-        break;
-      case 'budget_vs_actual':
-        rows = await this.db.$queryRawUnsafe(
-          `SELECT to_char(f.forecast_month, 'YYYY-MM') AS month,
-           f.predicted_revenue, f.predicted_expense,
-           COALESCE(a.actual_revenue, 0)::numeric AS actual_revenue,
-           COALESCE(a.actual_expense, 0)::numeric AS actual_expense
-           FROM ${schema}.forecasts f
-           LEFT JOIN (
-             SELECT month, SUM(revenue)::numeric actual_revenue,
-               SUM(expense)::numeric actual_expense
-             FROM (
-               SELECT date_trunc('month', issue_date) month, SUM(total) revenue, 0 expense
-               FROM ${schema}.invoices GROUP BY 1
-               UNION ALL
-               SELECT date_trunc('month', expense_date), 0, SUM(total)
-               FROM ${schema}.expenses GROUP BY 1
-             ) x GROUP BY month
-           ) a ON a.month = date_trunc('month', f.forecast_month)
-           ORDER BY f.forecast_month`,
         );
         break;
       case 'custom':
@@ -670,11 +689,20 @@ export class ReportsService {
 
   private expenseRows(schema: string) {
     return this.db.$queryRawUnsafe<ReportRow[]>(
-      `SELECT e.expense_number, e.description, e.category,
-       v.name AS vendor_name, e.amount, e.tax_amount, e.total,
-       e.expense_date, e.payment_method, e.created_at
-       FROM ${schema}.expenses e LEFT JOIN ${schema}.vendors v ON v.id = e.vendor_id
-       ORDER BY e.expense_date DESC`,
+      `SELECT b.bill_number, b.type AS bill_type,
+       COALESCE(v.name, 'No vendor') AS vendor_name,
+       COALESCE(string_agg(bl.description, ', ' ORDER BY bl.line_number), '') AS description,
+       a.name AS account_name, b.issue_date, b.due_date, b.subtotal,
+       b.tax_amount, b.total, b.status,
+       COALESCE((SELECT SUM(vp.amount) FROM ${schema}.vendor_payments vp
+                 WHERE vp.vendor_bill_id = b.id), 0)::numeric AS paid_amount,
+       b.created_at
+       FROM ${schema}.vendor_bills b
+       LEFT JOIN ${schema}.vendors v ON v.id = b.vendor_id
+       LEFT JOIN ${schema}.vendor_bill_lines bl ON bl.vendor_bill_id = b.id
+       LEFT JOIN ${schema}.accounts a ON a.id = b.account_id
+       GROUP BY b.id, v.name, a.name
+       ORDER BY b.issue_date DESC`,
     );
   }
 
@@ -769,18 +797,21 @@ export class ReportsService {
   ) {
     if (!config.groupBy || !config.aggregation) return rows;
     if (!(GROUP_FIELDS[reportType] ?? []).includes(config.groupBy)) return rows;
-    const numeric = columns.find((column) => rows.some((row) => Number.isFinite(Number(row[column.key]))));
-    if (!numeric) return rows;
+    const measureKey = (AGGREGATION_FIELDS[reportType] ?? [])
+      .find((key) => columns.some((column) => column.key === key)
+        && rows.some((row) => row[key] !== null && row[key] !== undefined && Number.isFinite(Number(row[key]))));
+    if (!measureKey && config.aggregation !== 'count') return rows;
+    const outputKey = config.aggregation === 'count' ? 'count' : measureKey!;
     const groups = new Map<string, number[]>();
     for (const row of rows) {
       const group = this.groupValue(row, config.groupBy);
       const values = groups.get(group) ?? [];
-      values.push(Number(row[numeric.key] ?? 0));
+      values.push(measureKey ? Number(row[measureKey] ?? 0) : 1);
       groups.set(group, values);
     }
     return Array.from(groups, ([group, values]) => ({
       [config.groupBy!]: group,
-      [numeric.key]: this.aggregate(values, config.aggregation!),
+      [outputKey]: this.aggregate(values, config.aggregation!),
     }));
   }
 

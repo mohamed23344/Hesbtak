@@ -17,7 +17,7 @@ type Props = {
 };
 
 type Party = { id: string; name: string; email?: string; phone?: string };
-type Account = { id: string; code: string; name: string; type: string; is_active: boolean };
+type Account = { id: string; code: string; name: string; type: string; is_active: boolean; is_leaf?: boolean };
 type DraftParty = { name: string; email?: string; phone?: string; address?: string };
 type Line = {
   id: string;
@@ -26,7 +26,6 @@ type Line = {
   unitPrice: string;
   discountAmount: string;
   taxRate: string;
-  accountId: string;
 };
 
 type ExtractionResponse = {
@@ -63,12 +62,12 @@ const newLine = (): Line => ({
   unitPrice: "",
   discountAmount: "0",
   taxRate: "0",
-  accountId: "",
 });
 
 export default function CreateInvoiceWithUpload({ title, type, documentId, onDone }: Props) {
   const { t } = useI18n();
   const isSales = type === "sales";
+  const isExpense = type === "expenses";
   const partyKind = isSales ? "customer" : "vendor";
   const partyLabel = isSales ? "Customer" : "Vendor";
   const partyEndpoint = isSales ? "/tenant/customers" : "/tenant/vendors";
@@ -93,6 +92,8 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
   const [dueDate, setDueDate] = useState(today());
   const [status, setStatus] = useState<"" | "draft" | "open" | "paid">("open");
   const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [accountId, setAccountId] = useState("");
+  const [relatedAccountId, setRelatedAccountId] = useState("");
   const [lines, setLines] = useState<Line[]>([newLine()]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -114,6 +115,18 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
   const accountOptions = useMemo(() => accounts.filter((account) =>
     account.is_active !== false && account.type === (isSales ? "Revenue" : "Expense"),
   ), [accounts, isSales]);
+  const relatedAccountType = isSales || status === "paid" ? "Asset" : "Liability";
+  const relatedAccountOptions = useMemo(() => accounts.filter((account) =>
+    account.is_active !== false
+    && account.is_leaf !== false
+    && account.type === relatedAccountType
+  ), [accounts, relatedAccountType]);
+  const relatedAccountLabel = status === "paid"
+    ? "Payment asset account"
+    : isSales
+      ? "Receivable asset account"
+      : "Payable liability account";
+  const preferredRelatedAccountCode = status === "paid" ? "1000" : isSales ? "1100" : "2000";
 
   useEffect(() => {
     if (!documentId) return;
@@ -126,6 +139,12 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
         const documentStatus = String(document.status ?? "draft");
         setStatus(documentStatus === "draft" || documentStatus === "paid" ? documentStatus : "open");
         setLockedByPayment(Number(document.paid_amount ?? 0) > 0);
+        setAccountId(String(
+          document.account_id
+          ?? document.lines[0]?.[isSales ? "revenue_account_id" : "expense_account_id"]
+          ?? "",
+        ));
+        setRelatedAccountId(String(document.related_account_id ?? ""));
         setLines(document.lines.map((line) => ({
           id: crypto.randomUUID(),
           description: String(line.description ?? ""),
@@ -133,7 +152,6 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
           unitPrice: String(line[isSales ? "unit_price" : "unit_cost"] ?? ""),
           discountAmount: String(line.discount_amount ?? 0),
           taxRate: String(line.tax_rate ?? 0),
-          accountId: String(line[isSales ? "revenue_account_id" : "expense_account_id"] ?? ""),
         })));
         setTab("manual");
       })
@@ -143,8 +161,19 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
 
   useEffect(() => {
     if (documentId || isAiDraft || !accountOptions[0]) return;
-    setLines((current) => current.map((line) => line.accountId ? line : { ...line, accountId: accountOptions[0].id }));
+    setAccountId((current) => current || accountOptions[0].id);
   }, [accountOptions, documentId, isAiDraft]);
+
+  useEffect(() => {
+    if (documentId && relatedAccountOptions.some((account) => account.id === relatedAccountId)) return;
+    setRelatedAccountId((current) =>
+      relatedAccountOptions.some((account) => account.id === current)
+        ? current
+        : relatedAccountOptions.find((account) => account.code === preferredRelatedAccountCode)?.id
+          ?? relatedAccountOptions[0]?.id
+          ?? ""
+    );
+  }, [documentId, preferredRelatedAccountCode, relatedAccountId, relatedAccountOptions]);
 
   const selectedParty = parties.find((party) => party.id === partyId);
   const hasParty = Boolean(selectedParty || draftParty?.name);
@@ -213,11 +242,18 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
     const validLines = lines.filter((line) =>
       line.description.trim()
       && Number(line.quantity) > 0
-      && Number(line.unitPrice) >= 0
-      && Boolean(line.accountId),
+      && Number(line.unitPrice) >= 0,
     );
-    if (!hasParty) {
+    if (!isExpense && !hasParty) {
       toast.error(`Select a ${partyKind}`);
+      return;
+    }
+    if (!accountId) {
+      toast.error(`Select one ${isSales ? "revenue" : "expense"} account`);
+      return;
+    }
+    if (!relatedAccountId) {
+      toast.error(`Select a ${relatedAccountType.toLowerCase()} account`);
       return;
     }
     if (!validLines.length || validLines.length !== lines.length) {
@@ -242,8 +278,11 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
       const apiStatus = status === "open" ? (isSales ? "unpaid" : "received") : status;
       const requestBody = {
         [isSales ? "customerId" : "vendorId"]: partyId,
+        type: isSales ? undefined : isExpense ? "expense" : "purchase",
         issueDate,
         dueDate,
+        accountId,
+        relatedAccountId,
         status: apiStatus,
         paymentMethod: status === "paid" ? paymentMethod : undefined,
         lines: validLines.map((line) => ({
@@ -252,7 +291,6 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
           unitPrice: Number(line.unitPrice),
           discountAmount: Number(line.discountAmount || 0),
           taxRate: Number(line.taxRate || 0),
-          accountId: line.accountId,
         })),
       };
       await api(isAiDraft ? "/tenant/ai-invoice-extraction/confirm" : documentId ? `${invoiceEndpoint}/${documentId}` : invoiceEndpoint, {
@@ -264,6 +302,8 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
             : draftParty,
           issueDate,
           dueDate,
+          accountId,
+          relatedAccountId,
           status,
           paymentMethod: status === "paid" ? paymentMethod : undefined,
           lines: requestBody.lines,
@@ -298,6 +338,7 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
         body,
       });
       const draft = result.draft;
+      setRelatedAccountId("");
       setPartyId(draft.party.id ?? "");
       setDraftParty(draft.party.id || !draft.party.name ? null : {
         name: draft.party.name,
@@ -322,7 +363,6 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
         unitPrice: line.unitPrice === null ? "" : String(line.unitPrice),
         discountAmount: String(line.discountAmount ?? 0),
         taxRate: String(line.taxRate ?? 0),
-        accountId: "",
       })) : [newLine()]);
       setIsAiDraft(true);
       setExtractionMeta({ fileName: result.fileName, model: result.model });
@@ -371,9 +411,13 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
           <section className="rounded-xl border border-border-default bg-surface-container/30 p-4 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <Label>{partyLabel}</Label>
+                <Label>{partyLabel}{isExpense ? " (optional)" : ""}</Label>
                 <p className="text-xs text-on-surface-variant mt-1">
-                  {isSales ? "The customer will own this sales invoice." : "The vendor will own this bill or expense."}
+                  {isSales
+                    ? "The customer will own this sales invoice."
+                    : isExpense
+                      ? "Optionally link this expense to a vendor."
+                      : "The vendor will own this purchase bill."}
                 </p>
               </div>
               <Button type="button" variant="outline" size="sm" onClick={() => setShowPartyDialog(true)} className="gap-1">
@@ -415,7 +459,7 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
             )}
           </section>
 
-          <div className="grid md:grid-cols-3 gap-4">
+          <div className="grid md:grid-cols-2 xl:grid-cols-5 gap-4">
             <div className="space-y-1.5">
               <Label>{t("issueDate")}</Label>
               <Input value={issueDate} onChange={(event) => setIssueDate(event.target.value)} type="date" />
@@ -426,11 +470,32 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
             </div>
             <div className="space-y-1.5">
               <Label>Document status</Label>
-              <select value={status} onChange={(event) => setStatus(event.target.value as "" | "draft" | "open" | "paid")} className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+              <select value={status} onChange={(event) => {
+                setRelatedAccountId("");
+                setStatus(event.target.value as "" | "draft" | "open" | "paid");
+              }} className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
                 <option value="">Select status</option>
                 <option value="draft">Draft - no journal posting</option>
                 <option value="open">{isSales ? "Unpaid" : "Received"} - post balance</option>
                 <option value="paid">Paid - post and settle</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>{relatedAccountLabel}</Label>
+              <select value={relatedAccountId} onChange={(event) => setRelatedAccountId(event.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                <option value="">Select related account</option>
+                {relatedAccountOptions.map((account) => (
+                  <option key={account.id} value={account.id}>{account.code} - {account.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>{isSales ? "Revenue" : "Expense"} account</Label>
+              <select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                <option value="">Select account</option>
+                {accountOptions.map((account) => (
+                  <option key={account.id} value={account.id}>{account.code} - {account.name}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -439,7 +504,7 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
             <div className="rounded-xl border border-status-success/30 bg-status-success/5 p-4 grid sm:grid-cols-2 gap-4">
               <div>
                 <p className="text-sm font-semibold text-status-success">Automatic settlement</p>
-                <p className="text-xs text-on-surface-variant mt-1">A payment record and linked receipt/expense voucher journal will be created automatically.</p>
+                <p className="text-xs text-on-surface-variant mt-1">The payment is recorded against the selected asset account in the document journal.</p>
               </div>
               <div className="space-y-1.5">
                 <Label>Payment method</Label>
@@ -457,7 +522,7 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
             <div className="flex items-center justify-between">
               <div>
                 <Label>Invoice lines</Label>
-                <p className="text-xs text-on-surface-variant mt-1">Choose the posting account and enter tax and discount for each line.</p>
+                <p className="text-xs text-on-surface-variant mt-1">All lines post to the single document account selected above.</p>
               </div>
               <Button type="button" variant="outline" size="sm" onClick={() => setLines((current) => [...current, newLine()])} className="gap-1">
                 <Plus className="h-4 w-4" /> Add line
@@ -476,15 +541,6 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
                       </button>
                     </div>
                     <Input value={line.description} onChange={(event) => updateLine(line.id, "description", event.target.value)} placeholder="Item or service description" />
-                    <div className="space-y-1">
-                      <Label className="text-xs">{isSales ? "Revenue" : "Expense"} account</Label>
-                      <select value={line.accountId} onChange={(event) => updateLine(line.id, "accountId", event.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
-                        <option value="">Select account</option>
-                        {accountOptions.map((account) => (
-                          <option key={account.id} value={account.id}>{account.code} - {account.name}</option>
-                        ))}
-                      </select>
-                    </div>
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                       <div className="space-y-1"><Label className="text-xs">Quantity</Label><Input min="0.0001" step="0.01" type="number" value={line.quantity} onChange={(event) => updateLine(line.id, "quantity", event.target.value)} /></div>
                       <div className="space-y-1"><Label className="text-xs">Unit price</Label><Input min="0" step="0.01" type="number" value={line.unitPrice} onChange={(event) => updateLine(line.id, "unitPrice", event.target.value)} /></div>
@@ -505,8 +561,8 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
           </div>
 
           <DialogFooter>
-            <Button className="bg-gradient-primary min-w-40" onClick={submitManual} disabled={submitting || lockedByPayment || !hasParty || !status || totals.total <= 0}>
-              {submitting ? "Saving..." : documentId ? "Save Changes" : isAiDraft ? "Confirm Reviewed Invoice" : status === "draft" ? "Save Draft" : status === "paid" ? "Create & Record Payment" : `Create ${isSales ? "Invoice" : "Bill"}`}
+            <Button className="bg-gradient-primary min-w-40" onClick={submitManual} disabled={submitting || lockedByPayment || (!isExpense && !hasParty) || !accountId || !relatedAccountId || !status || totals.total <= 0}>
+              {submitting ? "Saving..." : documentId ? "Save Changes" : isAiDraft ? "Confirm Reviewed Invoice" : status === "draft" ? "Save Draft" : status === "paid" ? "Create & Record Payment" : `Create ${isSales ? "Invoice" : isExpense ? "Expense" : "Bill"}`}
             </Button>
           </DialogFooter>
         </TabsContent>

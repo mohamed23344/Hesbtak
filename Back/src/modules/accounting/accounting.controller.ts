@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Delete, Get, Headers, Param, Patch, Post, UseGuards,
+  Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, UseGuards,
 } from '@nestjs/common';
 import { CurrentUser, JwtUser } from '../../common/auth/current-user.decorator';
 import { JwtAuthGuard } from '../../common/auth/jwt-auth.guard';
@@ -47,16 +47,42 @@ export class AccountingController {
     return this.accounting.createCustomer(await this.tenant.fromOrganizationId(orgId, user.sub, ['owner', 'accountant']), user.sub, dto);
   }
 
+  @Get('customers/:id/activity')
+  async customerActivity(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser, @Param('id') id: string) {
+    return this.accounting.getCustomerActivity(await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'invoices'), id);
+  }
+
   // ─── Vendors ────────────────────────────────────────────────────
 
   @Get('vendors')
-  async vendors(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser) {
-    return this.accounting.listVendors(await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'accounting'));
+  async vendors(
+    @Headers('x-tenant-id') orgId: string,
+    @CurrentUser() user: JwtUser,
+    @Query('billType') billType?: 'purchase' | 'expense',
+  ) {
+    return this.accounting.listVendors(
+      await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'accounting'),
+      billType,
+    );
   }
 
   @Post('vendors')
   async createVendor(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser, @Body() dto: PartyDto) {
     return this.accounting.createVendor(await this.tenant.fromOrganizationId(orgId, user.sub, ['owner', 'accountant']), user.sub, dto);
+  }
+
+  @Get('vendors/:id/activity')
+  async vendorActivity(
+    @Headers('x-tenant-id') orgId: string,
+    @CurrentUser() user: JwtUser,
+    @Param('id') id: string,
+    @Query('billType') billType: 'purchase' | 'expense' = 'purchase',
+  ) {
+    return this.accounting.getVendorActivity(
+      await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'accounting'),
+      id,
+      billType,
+    );
   }
 
   // ─── Journal Entries ────────────────────────────────────────────
@@ -135,13 +161,23 @@ export class AccountingController {
   // ─── Vendor Bills ──────────────────────────────────────────────
 
   @Get('vendor-bills')
-  async vendorBills(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser) {
-    return this.accounting.listVendorBills(await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'accounting'));
+  async vendorBills(
+    @Headers('x-tenant-id') orgId: string,
+    @CurrentUser() user: JwtUser,
+    @Query('type') type?: 'purchase' | 'expense',
+  ) {
+    return this.accounting.listVendorBills(
+      await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'accounting'),
+      type,
+    );
   }
 
   @Get('vendor-bills/unpaid')
   async unpaidBills(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser) {
-    return this.accounting.listUnpaidBills(await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'accounting'));
+    return this.accounting.listUnpaidBills(
+      await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'accounting'),
+      'purchase',
+    );
   }
 
   @Get('vendor-bills/:id')

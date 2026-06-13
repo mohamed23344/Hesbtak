@@ -3,7 +3,6 @@ import {
   IsArray,
   ArrayMinSize,
   IsDateString,
-  IsDefined,
   IsEmail,
   IsIn,
   Min,
@@ -59,24 +58,28 @@ export class ConfirmInvoiceLineDto {
   @Min(0)
   taxRate?: number = 0;
 
-  @IsString()
-  accountId!: string;
 }
 
 export class ConfirmInvoiceExtractionDto {
   @IsIn(['sales', 'purchases', 'expenses'])
   section!: InvoiceSection;
 
-  @IsDefined()
+  @IsOptional()
   @ValidateNested()
   @Type(() => ConfirmPartyDto)
-  party!: ConfirmPartyDto;
+  party?: ConfirmPartyDto;
 
   @IsDateString()
   issueDate!: string;
 
   @IsDateString()
   dueDate!: string;
+
+  @IsString()
+  accountId!: string;
+
+  @IsString()
+  relatedAccountId!: string;
 
   @IsIn(['draft', 'open', 'paid'])
   status!: 'draft' | 'open' | 'paid';

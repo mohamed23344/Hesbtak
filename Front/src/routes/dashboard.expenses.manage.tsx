@@ -15,8 +15,8 @@ export const Route = createFileRoute("/dashboard/expenses/manage")({ component: 
 type Expense = {
   id: string;
   bill_number: string;
-  vendor_id: string;
-  vendor_name: string;
+  vendor_id: string | null;
+  vendor_name: string | null;
   issue_date: string;
   due_date: string;
   total: string;
@@ -31,12 +31,13 @@ function ManageExpenses() {
   const [search, setSearch] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
+  const [vendorFilter, setVendorFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
   const load = async () => {
     try {
-      setExpenses(await api<Expense[]>("/tenant/vendor-bills"));
+      setExpenses(await api<Expense[]>("/tenant/vendor-bills?type=expense"));
     } catch {
       toast.error("Could not load expenses");
     }
@@ -46,18 +47,25 @@ function ManageExpenses() {
 
   const filtered = useMemo(() => {
     return expenses.filter((e) => {
-      if (search && !`${e.bill_number} ${e.vendor_name}`.toLowerCase().includes(search.toLowerCase())) return false;
+      if (search && !`${e.bill_number} ${e.vendor_name ?? ""}`.toLowerCase().includes(search.toLowerCase())) return false;
       if (statusFilter && e.status !== statusFilter) return false;
+      if (vendorFilter && e.vendor_id !== vendorFilter) return false;
       if (dateFrom && e.issue_date.slice(0, 10) < dateFrom) return false;
       if (dateTo && e.issue_date.slice(0, 10) > dateTo) return false;
       return true;
     });
-  }, [expenses, search, statusFilter, dateFrom, dateTo]);
+  }, [expenses, search, statusFilter, vendorFilter, dateFrom, dateTo]);
 
-  const activeFilterCount = [statusFilter, dateFrom, dateTo].filter(Boolean).length;
+  const activeFilterCount = [statusFilter, vendorFilter, dateFrom, dateTo].filter(Boolean).length;
+  const vendors = Array.from(new Map(
+    expenses
+      .filter((expense) => expense.vendor_id && expense.vendor_name)
+      .map((expense) => [expense.vendor_id!, { id: expense.vendor_id!, name: expense.vendor_name! }]),
+  ).values()).sort((a, b) => a.name.localeCompare(b.name));
 
   const clearFilters = () => {
     setStatusFilter("");
+    setVendorFilter("");
     setDateFrom("");
     setDateTo("");
   };
@@ -79,7 +87,7 @@ function ManageExpenses() {
         desc={t("expensesDesc")}
         action={
           <Button className="bg-gradient-primary gap-1.5" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" /> {t("createInvoice")}
+            <Plus className="h-4 w-4" /> {t("createExpense")}
           </Button>
         }
       />
@@ -109,7 +117,7 @@ function ManageExpenses() {
       </div>
 
       {filterOpen && (
-        <div className="bg-card border border-border-default rounded-2xl p-4 shadow-soft grid sm:grid-cols-3 gap-4 animate-in fade-in slide-in-from-top-2 duration-150">
+        <div className="bg-card border border-border-default rounded-2xl p-4 shadow-soft grid sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-in fade-in slide-in-from-top-2 duration-150">
           <div className="space-y-1.5">
             <Label className="text-xs">{t("status")}</Label>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm">
@@ -119,6 +127,13 @@ function ManageExpenses() {
               <option value="paid">Paid</option>
               <option value="partial">Partial</option>
               <option value="overdue">Overdue</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Vendor</Label>
+            <select value={vendorFilter} onChange={(e) => setVendorFilter(e.target.value)} className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm">
+              <option value="">All vendors</option>
+              {vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}
             </select>
           </div>
           <div className="space-y-1.5">
@@ -158,7 +173,7 @@ function ManageExpenses() {
               filtered.map((e) => (
                 <tr key={e.id} className="hover:bg-surface-subtle cursor-pointer" onClick={() => setEditingId(e.id)}>
                   <td className="p-3 font-medium text-primary">{e.bill_number}</td>
-                  <td className="p-3">{e.vendor_name}</td>
+                  <td className="p-3">{e.vendor_name || "No vendor"}</td>
                   <td className="p-3 text-on-surface-variant">{String(e.issue_date).slice(0, 10)}</td>
                   <td className="p-3 text-on-surface-variant">{String(e.due_date).slice(0, 10)}</td>
                   <td className="p-3"><StatusBadge status={e.status} /></td>

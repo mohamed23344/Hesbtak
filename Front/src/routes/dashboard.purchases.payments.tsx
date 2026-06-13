@@ -20,6 +20,8 @@ type Payment = {
   payment_date: string;
   payment_method: string;
   reference: string;
+  vendor_name: string;
+  bill_number: string;
 };
 
 type Vendor = { id: string; name: string; email?: string };
@@ -35,7 +37,8 @@ function PurchasePayments() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [bills, setBills] = useState<Bill[]>([]);
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
+  const [partySearch, setPartySearch] = useState("");
+  const [paymentSearch, setPaymentSearch] = useState("");
 
   const [form, setForm] = useState({
     vendorId: "",
@@ -71,7 +74,12 @@ function PurchasePayments() {
   }, []);
 
   const filteredVendors = vendors.filter(
-    (v) => v.name.toLowerCase().includes(search.toLowerCase()) || v.email?.toLowerCase().includes(search.toLowerCase()),
+    (v) => v.name.toLowerCase().includes(partySearch.toLowerCase()) || v.email?.toLowerCase().includes(partySearch.toLowerCase()),
+  );
+  const filteredPayments = payments.filter((payment) =>
+    `${payment.vendor_name} ${payment.bill_number ?? ""}`
+      .toLowerCase()
+      .includes(paymentSearch.toLowerCase()),
   );
 
   const vendorBills = bills.filter((b) => !form.vendorId || b.vendor_id === form.vendorId);
@@ -116,14 +124,14 @@ function PurchasePayments() {
                   <Label>Vendor</Label>
                   <div className="relative">
                     <Search className="h-4 w-4 absolute start-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
-                    <Input className="ps-9" placeholder="Search vendor..." value={search} onChange={(e) => setSearch(e.target.value)} />
+                    <Input className="ps-9" placeholder="Search vendor..." value={partySearch} onChange={(e) => setPartySearch(e.target.value)} />
                   </div>
                   <div className="max-h-32 overflow-y-auto border border-border-default rounded-lg divide-y">
                     {filteredVendors.map((v) => (
                       <button
                         key={v.id}
                         className={`w-full text-start p-2 text-sm hover:bg-surface-subtle ${form.vendorId === v.id ? "bg-primary/10" : ""}`}
-                        onClick={() => { setForm((prev) => ({ ...prev, vendorId: v.id })); setSearch(""); }}
+                        onClick={() => { setForm((prev) => ({ ...prev, vendorId: v.id })); setPartySearch(""); }}
                       >
                         {v.name}
                       </button>
@@ -174,24 +182,31 @@ function PurchasePayments() {
         }
       />
 
+      <div className="relative max-w-md">
+        <Search className="h-4 w-4 absolute start-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
+        <Input className="ps-9 bg-card" placeholder="Filter by vendor name..." value={paymentSearch} onChange={(event) => setPaymentSearch(event.target.value)} />
+      </div>
+
       <div className="bg-card border border-border-default rounded-2xl overflow-hidden shadow-soft">
         <table className="w-full text-sm">
           <thead className="bg-surface-container text-on-surface-variant text-xs uppercase">
             <tr>
               <th className="text-start p-3 font-medium">{t("date")}</th>
               <th className="text-start p-3 font-medium">Bill</th>
+              <th className="text-start p-3 font-medium">Vendor</th>
               <th className="text-start p-3 font-medium">Method</th>
               <th className="text-end p-3 font-medium">{t("amount")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border-default">
-            {payments.length === 0 ? (
-              <tr><td colSpan={4} className="p-8 text-center text-on-surface-variant text-sm">No payments recorded yet.</td></tr>
+            {filteredPayments.length === 0 ? (
+              <tr><td colSpan={5} className="p-8 text-center text-on-surface-variant text-sm">No payments found.</td></tr>
             ) : (
-              payments.map((p) => (
+              filteredPayments.map((p) => (
                 <tr key={p.id} className="hover:bg-surface-subtle">
                   <td className="p-3">{String(p.payment_date).slice(0, 10)}</td>
-                  <td className="p-3 text-on-surface-variant">{p.vendor_bill_id?.slice(0, 8) || "—"}</td>
+                  <td className="p-3 text-on-surface-variant">{p.bill_number || p.vendor_bill_id?.slice(0, 8) || "—"}</td>
+                  <td className="p-3">{p.vendor_name}</td>
                   <td className="p-3 text-on-surface-variant">{p.payment_method}</td>
                   <td className="p-3 text-end font-semibold">{money(p.amount)}</td>
                 </tr>

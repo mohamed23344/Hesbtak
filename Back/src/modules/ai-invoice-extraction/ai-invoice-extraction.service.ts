@@ -127,6 +127,7 @@ export class AiInvoiceExtractionService {
         draft,
       };
     } catch (error) {
+      console.log(error)
       if (
         error instanceof BadRequestException ||
         error instanceof BadGatewayException
@@ -153,14 +154,15 @@ export class AiInvoiceExtractionService {
       unitPrice: Number(line.unitPrice),
       discountAmount: Number(line.discountAmount ?? 0),
       taxRate: Number(line.taxRate ?? 0),
-      accountId: line.accountId,
     }));
 
     if (dto.section === 'sales') {
       return this.accounting.createInvoice(ctx, userId, {
-        customerId: partyId,
+        customerId: partyId ?? undefined,
         issueDate: dto.issueDate,
         dueDate: dto.dueDate,
+        accountId: dto.accountId,
+        relatedAccountId: dto.relatedAccountId,
         status: dto.status === 'open' ? 'unpaid' : dto.status,
         paymentMethod: dto.paymentMethod,
         lines,
@@ -168,9 +170,12 @@ export class AiInvoiceExtractionService {
     }
 
     return this.accounting.createVendorBill(ctx, userId, {
-      vendorId: partyId,
+      vendorId: partyId ?? undefined,
+      type: dto.section === 'expenses' ? 'expense' : 'purchase',
       issueDate: dto.issueDate,
       dueDate: dto.dueDate,
+      accountId: dto.accountId,
+      relatedAccountId: dto.relatedAccountId,
       status: dto.status === 'open' ? 'received' : dto.status,
       paymentMethod: dto.paymentMethod,
       lines,
@@ -264,8 +269,14 @@ export class AiInvoiceExtractionService {
     ctx: TenantContext,
     userId: string,
     section: InvoiceSection,
-    party: ConfirmPartyDto,
+    party?: ConfirmPartyDto,
   ) {
+    if (!party && section === 'expenses') return null;
+    if (!party) {
+      throw new BadRequestException(
+        `${section === 'sales' ? 'Customer' : 'Vendor'} is required`,
+      );
+    }
     if (party.id) return party.id;
     if (!party.name?.trim()) {
       throw new BadRequestException(

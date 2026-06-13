@@ -103,10 +103,8 @@ export default function DashboardLayout() {
       icon: Wallet,
       permission: "invoices",
       items: [
-        { to: "/dashboard/expenses/manage", label: t("manageInvoices") },
-        { to: "/dashboard/expenses/payments", label: t("payments") },
+        { to: "/dashboard/expenses/manage", label: t("manageExpenses") },
         { to: "/dashboard/expenses/vendors", label: t("vendors") },
-        { to: "/dashboard/expenses/returns", label: t("returns") },
       ],
     },
     {
