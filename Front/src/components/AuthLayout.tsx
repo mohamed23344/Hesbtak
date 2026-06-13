@@ -25,33 +25,45 @@ declare global {
   }
 }
 
+import { useEffect, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
+import { useI18n } from "@/lib/i18n";
+import { api, saveSession } from "@/lib/api";
+import { toast } from "sonner";
+
+declare global {
+  interface Window {
+    google?: any;
+  }
+}
+
 export function SocialButtons() {
   const navigate = useNavigate();
   const { t, dir } = useI18n();
 
   const [loading, setLoading] = useState(false);
+  const [googleReady, setGoogleReady] = useState(false);
 
-  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as
-    | string
-    | undefined;
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
   useEffect(() => {
     if (!clientId) return;
 
-    const initializeGoogle = () => {
+    const loadGoogle = () => {
       if (!window.google) return;
 
       window.google.accounts.id.initialize({
         client_id: clientId,
 
-        callback: async ({ credential }) => {
+        callback: async (response: { credential: string }) => {
           setLoading(true);
 
           try {
-            const data = await api<any>("/auth/google", {
+            const data = await api("/auth/google", {
               method: "POST",
               body: JSON.stringify({
-                credential,
+                credential: response.credential,
               }),
             });
 
@@ -73,6 +85,8 @@ export function SocialButtons() {
               });
             }
           } catch (error) {
+            console.error(error);
+
             toast.error(
               error instanceof Error
                 ? error.message
@@ -83,27 +97,13 @@ export function SocialButtons() {
           }
         },
       });
+
+      setGoogleReady(true);
     };
 
     if (window.google) {
-      initializeGoogle();
+      loadGoogle();
       return;
-    }
-
-    const existing = document.querySelector<HTMLScriptElement>(
-      'script[src="https://accounts.google.com/gsi/client"]'
-    );
-
-    if (existing) {
-      existing.addEventListener("load", initializeGoogle, {
-        once: true,
-      });
-
-      return () =>
-        existing.removeEventListener(
-          "load",
-          initializeGoogle
-        );
     }
 
     const script = document.createElement("script");
@@ -112,18 +112,13 @@ export function SocialButtons() {
     script.async = true;
     script.defer = true;
 
-    script.onload = initializeGoogle;
+    script.onload = loadGoogle;
 
     script.onerror = () => {
-      toast.error("Failed to load Google Sign-In");
+      toast.error("Failed to load Google SDK");
     };
 
     document.head.appendChild(script);
-
-    return () => {
-      script.onload = null;
-      script.onerror = null;
-    };
   }, [clientId, navigate]);
 
   const handleGoogleLogin = () => {
@@ -132,19 +127,37 @@ export function SocialButtons() {
       return;
     }
 
-    try {
-      window.google.accounts.id.prompt();
-    } catch (e) {
-      console.error(e);
-      toast.error("Could not open Google Sign-In");
+    const container = document.createElement("div");
+
+    document.body.appendChild(container);
+
+    window.google.accounts.id.renderButton(container, {
+      type: "standard",
+      theme: "outline",
+      size: "large",
+      width: 300,
+    });
+
+    const realButton =
+      container.querySelector<HTMLElement>('div[role="button"]');
+
+    if (!realButton) {
+      toast.error("Google button failed to initialize");
+      return;
     }
+
+    realButton.click();
+
+    setTimeout(() => {
+      container.remove();
+    }, 2000);
   };
 
   if (!clientId) {
     return (
       <Button
         variant="outline"
-        className="w-full h-11 justify-center gap-2.5"
+        className="w-full"
         disabled
       >
         <GoogleIcon />
@@ -156,45 +169,25 @@ export function SocialButtons() {
   return (
     <button
       type="button"
-      disabled={loading}
+      disabled={loading || !googleReady}
       onClick={handleGoogleLogin}
       className={[
         "w-full h-11 flex items-center justify-center gap-3",
         "rounded-lg border border-border bg-background",
         "text-sm font-medium text-foreground",
-        "transition-colors hover:bg-muted/50 active:bg-muted",
+        "transition-colors hover:bg-muted/50",
         "disabled:opacity-50 disabled:cursor-not-allowed",
         dir === "rtl" ? "flex-row-reverse" : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
+      ].join(" ")}
     >
       {loading ? (
-        <svg
-          className="h-4 w-4 animate-spin"
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-        >
-          <circle
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            strokeWidth="4"
-            opacity="0.25"
-          />
-          <path
-            fill="currentColor"
-            opacity="0.75"
-            d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 100 16v-4l-3 3 3 3v-4a8 8 0 01-8-8z"
-          />
-        </svg>
+        <span>Loading...</span>
       ) : (
-        <GoogleIcon />
+        <>
+          <GoogleIcon />
+          <span>{t("signInWithGoogle")}</span>
+        </>
       )}
-
-      <span>{t("signInWithGoogle")}</span>
     </button>
   );
 }
