@@ -2,14 +2,13 @@ import {
   BadRequestException,
   Injectable,
 } from '@nestjs/common';
-import Groq from 'groq-sdk';
 import { DatabaseCatalogService } from '../../database-catalog/database-catalog.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   FinancialDataRequest,
   QueryEvidence,
 } from '../contracts';
-import { LLM_MODELS } from '../config/llm.config';
+import { LlmClient, LLM_MODELS } from '../config/llm.config';
 import { StateType } from '../state/graph-state';
 import {
   aiTrace,
@@ -33,7 +32,7 @@ export class DatabaseSearchAgentGraph {
   async executeRequests(
     state: StateType,
     requests: FinancialDataRequest[],
-    groqClient: Groq,
+    groqClient: LlmClient,
   ): Promise<QueryEvidence[]> {
     const bounded = requests.slice(0, 10);
     aiTrace(state, 'database.batch_started', {
@@ -57,7 +56,7 @@ export class DatabaseSearchAgentGraph {
 
   async invoke(
     state: StateType,
-    groqClient: Groq,
+    groqClient: LlmClient,
   ): Promise<Partial<StateType>> {
     const request: FinancialDataRequest = {
       requestId: 'FIN-1',
@@ -82,7 +81,7 @@ export class DatabaseSearchAgentGraph {
  private async executeRequest(
     state: StateType,
     request: FinancialDataRequest,
-    groqClient: Groq,
+    groqClient: LlmClient,
   ): Promise<QueryEvidence> {
     const maxRows = Math.min(Math.max(request.maxRows || 50, 1), 200);
     const startedAt = Date.now();

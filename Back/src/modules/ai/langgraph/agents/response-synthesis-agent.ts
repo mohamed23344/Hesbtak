@@ -1,12 +1,11 @@
-import Groq from 'groq-sdk';
 import { AssistantCitation } from '../contracts';
-import { LLM_MODELS } from '../config/llm.config';
+import { LlmClient, LLM_MODELS } from '../config/llm.config';
 import { StateType } from '../state/graph-state';
 import { aiTrace } from '../trace';
 
 export async function responseSynthesisAgentNode(
   state: StateType,
-  groqClient: Groq,
+  groqClient: LlmClient,
 ): Promise<Partial<StateType>> {
   const financial = state.reasoningOutput?.trim();
   const knowledge = state.knowledgeEvidence?.answer?.trim();
