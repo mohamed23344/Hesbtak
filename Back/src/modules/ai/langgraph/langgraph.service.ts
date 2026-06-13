@@ -4,213 +4,316 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { StateGraph, START, END } from '@langchain/langgraph';
+import { END, START, StateGraph } from '@langchain/langgraph';
 import { TenantContext } from '../../tenant/tenant.service';
-import { RetrievalService } from '../retrieval/retrieval.service';
-import { EmbeddingsService } from '../embeddings/embeddings.service';
-import { RunGraphDto } from './dto/run-graph.dto';
-import {
-  getGroqClient,
-  hasGroqApiKey,
-  LLM_MODELS,
-} from './config/llm.config';
-import { MultiAgentState, StateType } from './state/graph-state';
+import { KnowledgeService } from '../knowledge/knowledge.service';
+import { ProductGuideCatalogService } from '../product-guide/product-guide-catalog.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { chattingAgentNode } from './agents/chatting-agent';
-import { orchestratorAgentNode } from './agents/orchestrator-agent';
 import { DatabaseSearchAgentGraph } from './agents/database-search-agent';
 import { financialReasoningAgentNode } from './agents/financial-reasoning-agent';
+import { knowledgeGuideAgentNode } from './agents/knowledge-guide-agent';
 import { reportGenerationAgentNode } from './agents/report-generation-agent';
-import { ragSearchAgentNode } from './agents/rag-search-agent';
-import Groq from 'groq-sdk';
-import { FinancialContextService } from '../financial-context.service';
-import { inferReportProfile } from './report-profile';
+import { requestPlannerAgentNode } from './agents/request-planner-agent';
+import { responseSynthesisAgentNode } from './agents/response-synthesis-agent';
+import {
+  getLlmClient,
+  hasLlmConfiguration,
+  LlmClient,
+  LLM_MODELS,
+} from './config/llm.config';
+import { RunGraphDto } from './dto/run-graph.dto';
+import { MultiAgentState, StateType } from './state/graph-state';
+import {
+  aiTrace,
+  aiTraceWarn,
+  errorSummary,
+  summarizeText,
+} from './trace';
 
 type GraphRunInput = RunGraphDto & { conversationHistory?: string };
 
 @Injectable()
 export class LanggraphService {
-  private readonly groqClient: Groq;
+  private readonly llmClient: LlmClient;
   private readonly compiledGraph;
 
   constructor(
     private readonly config: ConfigService,
-    private readonly databaseSearchAgentGraph: DatabaseSearchAgentGraph,
-    private readonly retrievalService: RetrievalService,
-    private readonly embeddingsService: EmbeddingsService,
-    private readonly financialContext: FinancialContextService,
+    private readonly databaseAgent: DatabaseSearchAgentGraph,
+    private readonly knowledge: KnowledgeService,
+    private readonly productCatalog: ProductGuideCatalogService,
+    private readonly prisma: PrismaService,
   ) {
-    this.groqClient = getGroqClient(this.config);
-
-    /**
-     * Graph topology:
-     *
-     *   START
-     *     → chattingAgent
-     *     → [orchestrator]
-     *          → databaseSearchAgent → chattingAgent → END
-     *          → ragSearchAgent      → chattingAgent → END
-     *          → financialReasoningAgent
-     *               → reportGenerationAgent → chattingAgent → END
-     *          → chattingAgent (other / unresolved) → END
-     */
+    this.llmClient = getLlmClient(this.config);
     const workflow = new StateGraph(MultiAgentState)
-      // ── Nodes ──────────────────────────────────────────────────────────────
-      .addNode('chattingAgent', (state) =>
-        chattingAgentNode(state, this.groqClient),
-      )
-      .addNode('orchestrator', (state) =>
-        orchestratorAgentNode(state, this.groqClient),
-      )
-      .addNode('databaseSearchAgent', (state) =>
-        this.databaseSearchAgentGraph.invoke(state, this.groqClient),
-      )
-      .addNode('ragSearchAgent', (state) =>
-        ragSearchAgentNode(state, this.groqClient, this.retrievalService),
-      )
-      .addNode('financialReasoningAgent', (state) =>
-        financialReasoningAgentNode(
-          state,
-          this.groqClient,
-          this.retrievalService,
-          this.embeddingsService,
-          this.financialContext,
+      .addNode('requestPlanner', (state) =>
+        this.runNode('requestPlanner', state, () =>
+          requestPlannerAgentNode(state, this.llmClient),
         ),
       )
-      .addNode('reportGenerationAgent', (state) =>
-        reportGenerationAgentNode(state, this.groqClient),
+      .addNode('financialReasoning', (state) =>
+        this.runNode('financialReasoning', state, () =>
+          financialReasoningAgentNode(
+            state,
+            this.llmClient,
+            this.databaseAgent,
+          ),
+        ),
       )
-
-      // ── Edges ──────────────────────────────────────────────────────────────
-      .addEdge(START, 'chattingAgent')
-
-      // First pass: no intent yet → orchestrate; Second pass: has response → end
-      .addConditionalEdges('chattingAgent', this.routeFromChattingAgent.bind(this))
-
-      // Orchestrator routes to one specialist agent
-      .addConditionalEdges('orchestrator', this.routeFromOrchestrator.bind(this))
-
-      // Simple agents return directly to chatting agent for final formatting
-      .addEdge('databaseSearchAgent', 'chattingAgent')
-      .addEdge('ragSearchAgent', 'chattingAgent')
-
-      // Financial reasoning always goes through report generation before chatting
-      .addEdge('financialReasoningAgent', 'reportGenerationAgent')
-      .addEdge('reportGenerationAgent', 'chattingAgent');
-
+      .addNode('knowledgeGuide', (state) =>
+        this.runNode('knowledgeGuide', state, () =>
+          knowledgeGuideAgentNode(
+            state,
+            this.llmClient,
+            this.knowledge,
+            this.databaseAgent,
+            this.productCatalog,
+          ),
+        ),
+      )
+      .addNode('synthesize', (state) =>
+        this.runNode('synthesize', state, () =>
+          responseSynthesisAgentNode(state, this.llmClient),
+        ),
+      )
+      .addNode('reportGeneration', (state) =>
+        this.runNode('reportGeneration', state, () =>
+          reportGenerationAgentNode(state, this.llmClient),
+        ),
+      )
+      .addNode('chattingAgent', (state) =>
+        this.runNode('chattingAgent', state, () =>
+          chattingAgentNode(state, this.llmClient),
+        ),
+      )
+      .addEdge(START, 'requestPlanner')
+      .addConditionalEdges(
+        'requestPlanner',
+        this.routeFromPlanner.bind(this),
+      )
+      .addConditionalEdges(
+        'financialReasoning',
+        this.routeAfterFinancial.bind(this),
+      )
+      .addConditionalEdges(
+        'knowledgeGuide',
+        this.routeAfterKnowledge.bind(this),
+      )
+      .addConditionalEdges(
+        'synthesize',
+        this.routeAfterSynthesis.bind(this),
+      )
+      .addEdge('reportGeneration', 'chattingAgent')
+      .addEdge('chattingAgent', END);
     this.compiledGraph = workflow.compile();
   }
 
-  // ─── Public API ─────────────────────────────────────────────────────────────
-
   async run(ctx: TenantContext, dto: GraphRunInput) {
-    if (!hasGroqApiKey(this.config)) {
+    if (!hasLlmConfiguration(this.config)) {
       throw new ServiceUnavailableException(
-        'AI assistant is not configured. Set GROQ_API_KEY in the backend environment.',
+        'AI assistant provider is not configured. Set its API key in the backend environment.',
       );
     }
-
+    const traceId = dto.sessionId ?? `run-${Date.now()}`;
+    const startedAt = Date.now();
+    aiTrace(
+      { traceId },
+      'graph.started',
+      {
+        organizationId: ctx.organizationId,
+        queryLength: dto.userQuery.length,
+        queryPreview: summarizeText(dto.userQuery),
+        hasConversationHistory: Boolean(dto.conversationHistory?.trim()),
+      },
+    );
     try {
-      const financialContext = await this.financialContext.build(ctx);
+      const organization = await this.prisma.organization.findUnique({
+        where: { id: ctx.organizationId },
+        select: { name: true },
+      });
       const conversationHistory = dto.conversationHistory?.trim() ?? '';
       const contextualQuery = await this.contextualizeQuery(
         dto.userQuery,
         conversationHistory,
+        traceId,
       );
-      const reportProfile = inferReportProfile(contextualQuery);
       const initialState: Partial<StateType> = {
+        traceId,
         userQuery: contextualQuery,
         originalUserQuery: dto.userQuery,
         conversationHistory,
         orgSlug: ctx.schemaName,
         tenantContext: ctx,
-        organizationName: financialContext.organization.name,
-        financialDatabaseContext: JSON.stringify(
-          financialContext,
-          (_key, value) =>
-            typeof value === 'bigint' ? Number(value) : value,
-        ),
-        intent: undefined,
-        agentOutput: undefined,
-        finalResponse: undefined,
-        unresolvedIntent: undefined,
-        ragContext: undefined,
-        reasoningOutput: undefined,
-        reportMarkdown: undefined,
-        reportType: reportProfile.title,
+        organizationName: organization?.name ?? 'your organization',
       };
-
+      aiTrace(initialState, 'graph.context_ready', {
+        organizationName: initialState.organizationName,
+        queryWasContextualized: contextualQuery !== dto.userQuery,
+        contextualQueryPreview: summarizeText(contextualQuery),
+        historyLength: conversationHistory.length,
+      });
       const result = await this.compiledGraph.invoke(initialState);
-
+      aiTrace(result, 'graph.completed', {
+        intent: result.intent,
+        needsClarification: result.needsClarification ?? false,
+        evidenceCount: result.queryEvidence?.length ?? 0,
+        retrievedChunkCount: result.retrievedChunks?.length ?? 0,
+        citationCount: result.citations?.length ?? 0,
+        linkCount: result.links?.length ?? 0,
+        hasReport: Boolean(result.reportMarkdown),
+        responseLength:
+          result.finalResponse?.length ?? result.agentOutput?.length ?? 0,
+        elapsedMs: Date.now() - startedAt,
+      });
       return {
         intent: result.intent,
         agentOutput: result.agentOutput,
         finalResponse: result.finalResponse,
         unresolvedIntent: result.unresolvedIntent ?? false,
+        needsClarification: result.needsClarification ?? false,
+        citations: result.citations ?? [],
+        links: result.links ?? [],
+        retrievedChunks: result.retrievedChunks ?? [],
         reportMarkdown: result.reportMarkdown ?? null,
       };
     } catch (error) {
-      if (error instanceof ServiceUnavailableException) {
-        throw error;
-      }
-      throw new InternalServerErrorException(`LangGraph execution failed: ${error}`);
+      aiTraceWarn({ traceId }, 'graph.failed', {
+        error: errorSummary(error),
+        elapsedMs: Date.now() - startedAt,
+      });
+      if (error instanceof ServiceUnavailableException) throw error;
+      throw new InternalServerErrorException(
+        `LangGraph execution failed: ${String(error)}`,
+      );
     }
   }
 
   private async contextualizeQuery(
     userQuery: string,
     conversationHistory: string,
+    traceId: string,
   ) {
     if (!conversationHistory) return userQuery;
     try {
-      const response = await this.groqClient.chat.completions.create({
+      const response = await this.llmClient.chat.completions.create({
         model: LLM_MODELS.ORCHESTRATOR_AGENT,
         messages: [
           {
             role: 'system',
             content:
-              'Rewrite the latest user message as a standalone financial request using the conversation history. Preserve intent, names, dates, and requested report type. Return only the rewritten request. Do not answer it.',
+              'Rewrite the latest message as a standalone request using the conversation history. Preserve intent, names, dates, language, and requested output format. Return only the rewritten request.',
           },
           {
             role: 'user',
-            content: `Conversation history:\n${conversationHistory}\n\nLatest user message:\n${userQuery}`,
+            content: `History:\n${conversationHistory}\n\nLatest:\n${userQuery}`,
           },
         ],
         temperature: 0,
-        max_tokens: 300,
+        max_tokens: 350,
       });
       return response.choices[0]?.message?.content?.trim() || userQuery;
-    } catch {
+    } catch (error) {
+      aiTraceWarn({ traceId }, 'contextualizer.fallback', {
+        error: errorSummary(error),
+      });
       return userQuery;
     }
   }
 
-  // ─── Routing functions ───────────────────────────────────────────────────────
-
-  /**
-   * After chattingAgent:
-   *  - No intent yet (first pass) → go to orchestrator
-   *  - Intent is set (second pass, after specialist ran) → END
-   */
-  private routeFromChattingAgent(state: StateType): string {
-    if (state.intent === undefined) {
-      return 'orchestrator';
+  private routeFromPlanner(state: StateType) {
+    let destination: string;
+    if (state.needsClarification) destination = 'chattingAgent';
+    else if (
+      state.intent === 'financial_data' ||
+      (state.intent === 'mixed' &&
+        state.requestPlan?.requiresFinancialData)
+    ) {
+      destination = 'financialReasoning';
+    } else if (
+      state.intent === 'accounting_knowledge' ||
+      state.intent === 'product_help' ||
+      state.intent === 'mixed'
+    ) {
+      destination = 'knowledgeGuide';
+    } else {
+      destination = 'chattingAgent';
     }
-    return END;
+    aiTrace(state, 'route.after_planner', {
+      intent: state.intent,
+      requiresFinancialData:
+        state.requestPlan?.requiresFinancialData ?? false,
+      destination,
+    });
+    return destination;
   }
 
-  /**
-   * After orchestrator:
-   *  - Classified intent → route to matching specialist agent
-   *  - 'other' or unresolved → loop back to chattingAgent for friendly response
-   */
-  private routeFromOrchestrator(state: StateType): string {
-    const intent = state.intent;
+  private routeAfterFinancial(state: StateType) {
+    const destination = state.needsClarification
+      ? 'chattingAgent'
+      : state.intent === 'mixed'
+        ? 'knowledgeGuide'
+        : state.requestPlan?.outputMode === 'pdf_report'
+          ? 'reportGeneration'
+          : 'chattingAgent';
+    aiTrace(state, 'route.after_financial', {
+      destination,
+      evidenceCount: state.queryEvidence?.length ?? 0,
+    });
+    return destination;
+  }
 
-    if (intent === 'databaseSearchAgent') return 'databaseSearchAgent';
-    if (intent === 'ragSearchAgent') return 'ragSearchAgent';
-    if (intent === 'financialReasoningAgent') return 'financialReasoningAgent';
+  private routeAfterKnowledge(state: StateType) {
+    const destination =
+      state.requestPlan?.outputMode === 'pdf_report'
+        ? state.intent === 'mixed'
+          ? 'synthesize'
+          : 'reportGeneration'
+        : state.intent === 'mixed'
+          ? 'synthesize'
+          : 'chattingAgent';
+    aiTrace(state, 'route.after_knowledge', {
+      destination,
+      retrievedChunkCount: state.retrievedChunks?.length ?? 0,
+    });
+    return destination;
+  }
 
-    // 'other' or undefined → chattingAgent handles it with an unresolved response
-    return 'chattingAgent';
+  private routeAfterSynthesis(state: StateType) {
+    const destination =
+      state.requestPlan?.outputMode === 'pdf_report'
+        ? 'reportGeneration'
+        : 'chattingAgent';
+    aiTrace(state, 'route.after_synthesis', { destination });
+    return destination;
+  }
+
+  private async runNode(
+    name: string,
+    state: StateType,
+    run: () => Promise<Partial<StateType>>,
+  ) {
+    const startedAt = Date.now();
+    aiTrace(state, 'agent.started', { agent: name });
+    try {
+      const result = await run();
+      aiTrace(state, 'agent.completed', {
+        agent: name,
+        elapsedMs: Date.now() - startedAt,
+        outputLength:
+          result.finalResponse?.length ??
+          result.agentOutput?.length ??
+          result.reportMarkdown?.length ??
+          0,
+      });
+      return result;
+    } catch (error) {
+      aiTraceWarn(state, 'agent.failed', {
+        agent: name,
+        error: errorSummary(error),
+        elapsedMs: Date.now() - startedAt,
+      });
+      throw error;
+    }
   }
 }

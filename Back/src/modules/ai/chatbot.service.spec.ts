@@ -20,7 +20,7 @@ describe('ChatbotService', () => {
     };
     const langgraph = {
       run: jest.fn().mockResolvedValue({
-        intent: 'databaseSearchAgent',
+        intent: 'financial_data',
         agentOutput: 'AI-generated answer',
         finalResponse: 'AI-generated answer',
         reportMarkdown: null,
@@ -64,5 +64,54 @@ describe('ChatbotService', () => {
     });
     expect(result).not.toHaveProperty('agent');
     expect(result).not.toHaveProperty('agentOutput');
+  });
+
+  it('creates and returns a PDF attachment for report output', async () => {
+    const db = {
+      $executeRawUnsafe: jest.fn().mockResolvedValue(1),
+      $queryRawUnsafe: jest.fn().mockResolvedValue([]),
+    };
+    const tenant = {
+      quote: jest.fn().mockReturnValue('"tenant_test"'),
+    };
+    const langgraph = {
+      run: jest.fn().mockResolvedValue({
+        intent: 'financial_data',
+        finalResponse: 'Your requested PDF report is ready.',
+        reportMarkdown: '# Expense Analysis\n\nVerified report content.',
+      }),
+    };
+    const attachment = {
+      id: 'report-id',
+      fileName: 'expense-analysis.pdf',
+      url: '/api/ai/reports/report-id',
+    };
+    const reports = {
+      save: jest.fn().mockResolvedValue(attachment),
+    };
+    const service = new ChatbotService(
+      db as never,
+      tenant as never,
+      langgraph as never,
+      reports as never,
+    );
+    const context = {
+      organizationId: 'org-id',
+      schemaName: 'tenant_test',
+      role: 'owner',
+    };
+
+    const result = await service.run(context, 'user-id', {
+      userQuery: 'Generate a PDF expense analysis report',
+      sessionId: '11111111-1111-4111-8111-111111111111',
+    });
+
+    expect(reports.save).toHaveBeenCalledWith(
+      context,
+      'user-id',
+      '11111111-1111-4111-8111-111111111111',
+      '# Expense Analysis\n\nVerified report content.',
+    );
+    expect(result.attachment).toEqual(attachment);
   });
 });

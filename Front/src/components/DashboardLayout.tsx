@@ -227,6 +227,10 @@ export default function DashboardLayout() {
           })}
         </nav>
         <div className="border-t border-border-default p-3">
+          <div className="mb-2 flex items-center justify-between gap-2 rounded-lg bg-surface-container/60 p-2 lg:hidden">
+            <LangToggle />
+            <ThemeToggle />
+          </div>
           <Link
             to="/login"
             onClick={() => clearSession()}
@@ -248,11 +252,11 @@ export default function DashboardLayout() {
           <button onClick={() => setOpen(true)} className="lg:hidden text-on-surface-variant">
             <Menu className="h-5 w-5" />
           </button>
-          <div className="relative flex-1 max-w-xl">
+          <div className="relative min-w-0 flex-1 w-full lg:max-w-xl">
             <Search className="h-4 w-4 absolute start-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
             <Input placeholder={t("search")} className="ps-9 bg-card" />
           </div>
-          <div className="ms-auto flex items-center gap-2">
+          <div className="ms-auto flex shrink-0 items-center gap-2">
             {(session?.tenants.length ?? 0) > 1 && (
               <select
                 aria-label="Switch organization"
@@ -266,8 +270,10 @@ export default function DashboardLayout() {
                 {session?.tenants.map((tenant) => <option key={tenant.organizationId} value={tenant.organizationId}>{tenant.organizationName}</option>)}
               </select>
             )}
-            <LangToggle />
-            <ThemeToggle />
+            <div className="hidden lg:flex items-center gap-2">
+              <LangToggle />
+              <ThemeToggle />
+            </div>
             <Button asChild variant="ghost" size="icon">
               <Link to="/dashboard/notifications" aria-label={t("notifications")}>
                 <Bell className="h-4 w-4" />
@@ -277,7 +283,7 @@ export default function DashboardLayout() {
               <p className="text-sm font-medium leading-tight">{session?.user.fullName ?? "Account"}</p>
               <p className="text-xs text-on-surface-variant leading-tight">{activeTenant?.organizationName ?? "Onboarding"}</p>
             </div>
-            <div className="h-11 w-11 rounded-full bg-gradient-primary text-primary-foreground grid place-items-center text-base font-semibold">
+            <div className="hidden sm:grid h-11 w-11 rounded-full bg-gradient-primary text-primary-foreground place-items-center text-base font-semibold">
               {session?.user.fullName?.[0] ?? "A"}
             </div>
           </div>
