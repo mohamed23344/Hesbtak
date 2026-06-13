@@ -1,5 +1,4 @@
-import Groq from 'groq-sdk';
-import { LLM_MODELS } from '../config/llm.config';
+import { LlmClient, LLM_MODELS } from '../config/llm.config';
 import { RequestPlan } from '../contracts';
 import { StateType } from '../state/graph-state';
 import {
@@ -64,7 +63,7 @@ requiresFinancialData, requiresClarification, clarificationQuestion.`;
 
 export async function requestPlannerAgentNode(
   state: StateType,
-  groqClient: Groq,
+  groqClient: LlmClient,
 ): Promise<Partial<StateType>> {
   try {
     const response = await groqClient.chat.completions.create({

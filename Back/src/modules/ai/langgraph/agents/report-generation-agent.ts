@@ -1,11 +1,10 @@
-import Groq from 'groq-sdk';
-import { LLM_MODELS } from '../config/llm.config';
+import { LlmClient, LLM_MODELS } from '../config/llm.config';
 import { StateType } from '../state/graph-state';
 import { aiTrace, aiTraceWarn } from '../trace';
 
 export async function reportGenerationAgentNode(
   state: StateType,
-  groqClient: Groq,
+  groqClient: LlmClient,
 ): Promise<Partial<StateType>> {
   const reportSource =
     state.reasoningOutput ??

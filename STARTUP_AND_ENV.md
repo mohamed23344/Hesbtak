@@ -27,7 +27,9 @@ GOOGLE_EMAIL=
 GOOGLE_APP_PASSWORD=
 GOOGLE_CLIENT_ID=
 GOOGLE_SMTP_REJECT_UNAUTHORIZED=true
+AI_LLM_PROVIDER=groq
 GROQ_API_KEY=
+OPENAI_API_KEY=
 AI_EMBEDDING_PROVIDER=mock
 HF_TOKEN=your_hugging_face_token
 HF_EMBEDDING_MODEL=BAAI/bge-m3
@@ -35,7 +37,11 @@ HF_EMBEDDING_MODEL=BAAI/bge-m3
 
 `GOOGLE_EMAIL` and `GOOGLE_APP_PASSWORD` are used for OTP, invitation, and organization-access emails. Use a Google app password. `GOOGLE_CLIENT_ID` is the OAuth 2.0 Web client ID used to verify Google sign-in tokens.
 
-`GROQ_API_KEY` enables the tenant financial assistant. Local embeddings default to
+`AI_LLM_PROVIDER` switches the chatbot between `groq`, `openai`, and
+`huggingface`. Configure the matching `GROQ_API_KEY`, `OPENAI_API_KEY`, or
+`HF_TOKEN`. Use `AI_LLM_MODEL` for a shared model override, or provider-specific
+values such as `OPENAI_CHAT_MODEL`, `GROQ_CHAT_MODEL`, and
+`HUGGINGFACE_CHAT_MODEL`. Local embeddings default to
 the deterministic `mock` provider. Set `AI_EMBEDDING_PROVIDER=huggingface` and
 provide `HF_TOKEN` to use hosted Hugging Face embeddings.
 The same token enables invoice image extraction with

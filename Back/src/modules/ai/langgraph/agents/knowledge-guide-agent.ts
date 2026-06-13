@@ -1,4 +1,4 @@
-import Groq from 'groq-sdk';
+import type Groq from 'groq-sdk';
 import { KnowledgeService } from '../../knowledge/knowledge.service';
 import { ProductGuideCatalogService } from '../../product-guide/product-guide-catalog.service';
 import {
@@ -8,7 +8,7 @@ import {
   KnowledgeCorpus,
   QueryEvidence,
 } from '../contracts';
-import { LLM_MODELS } from '../config/llm.config';
+import { LlmClient, LLM_MODELS } from '../config/llm.config';
 import { StateType } from '../state/graph-state';
 import { aiTrace, aiTraceWarn, errorSummary, summarizeText } from '../trace';
 import { DatabaseSearchAgentGraph } from './database-search-agent';
@@ -47,6 +47,7 @@ const FETCH_ORG_DATA_TOOL: Groq.Chat.ChatCompletionTool = {
       'Request live organization data from the tenant database. Do not pass SQL — ' +
       'describe the evidence needed (objective, metrics, filters, columns) and the ' +
       'database search agent will generate and execute a read-only query. ' +
+      'call when you want to make response more personalized to the organization data so usually call it' +
       'Call when knowledge chunks alone are insufficient. Up to two requests per call.',
     parameters: {
       type: 'object',
@@ -117,7 +118,7 @@ const FETCH_ORG_DATA_TOOL: Groq.Chat.ChatCompletionTool = {
 
 export async function knowledgeGuideAgentNode(
   state: StateType,
-  groqClient: Groq,
+  groqClient: LlmClient,
   knowledge: KnowledgeService,
   databaseAgent: DatabaseSearchAgentGraph,
   productCatalog: ProductGuideCatalogService,
@@ -234,7 +235,7 @@ export async function knowledgeGuideAgentNode(
  */
 async function runAnswerAgentLoop(
   state: StateType,
-  groqClient: Groq,
+  groqClient: LlmClient,
   databaseAgent: DatabaseSearchAgentGraph,
   chunks: KnowledgeChunk[],
   productPlan: ProductRetrievalPlan,
@@ -356,7 +357,7 @@ async function runAnswerAgentLoop(
 
 async function planAccountingRetrieval(
   state: StateType,
-  groqClient: Groq,
+  groqClient: LlmClient,
 ): Promise<RetrievalPlan> {
   const fallback: RetrievalPlan = {
     queries: [state.userQuery],
@@ -406,7 +407,7 @@ Return JSON only: {"queries": string[], "limit": number}`,
 async function planProductRetrieval(
   state: StateType,
   productCatalog: ProductGuideCatalogService,
-  groqClient: Groq,
+  groqClient: LlmClient,
 ): Promise<ProductRetrievalPlan> {
   const comprehensive = broadProductRequest(state.userQuery);
   const fallback: ProductRetrievalPlan = {
@@ -623,10 +624,12 @@ answer — for example the user asks about *their* balances, invoices, accounts,
 customers, or vendors. Do not write SQL — pass structured requests (objective,
 metrics, filters, expectedColumns). The database search agent generates and runs
 the query.
+ - always call it
+ - whenever u ask user to check something CALL THIS TOOL AND CHECK IT YOURSELF
 Good reasons to call:
-- The user asks about their specific accounts, balances, or transactions.
-- You need current invoice or payment data for a concrete recommendation.
-- You must check whether an existing account or customer already exists.
+ - to augment your answer with more personalized responses
+ - always call it
+ - whenever u ask user to check something CALL THIS TOOL AND CHECK IT YOURSELF
 Do NOT call it for:
 - Pure accounting theory or textbook exercises.
 - Procedural how-to questions ("how do I record...", "steps to create...").

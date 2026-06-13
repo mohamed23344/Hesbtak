@@ -5,7 +5,6 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { END, START, StateGraph } from '@langchain/langgraph';
-import Groq from 'groq-sdk';
 import { TenantContext } from '../../tenant/tenant.service';
 import { KnowledgeService } from '../knowledge/knowledge.service';
 import { ProductGuideCatalogService } from '../product-guide/product-guide-catalog.service';
@@ -18,8 +17,9 @@ import { reportGenerationAgentNode } from './agents/report-generation-agent';
 import { requestPlannerAgentNode } from './agents/request-planner-agent';
 import { responseSynthesisAgentNode } from './agents/response-synthesis-agent';
 import {
-  getGroqClient,
-  hasGroqApiKey,
+  getLlmClient,
+  hasLlmConfiguration,
+  LlmClient,
   LLM_MODELS,
 } from './config/llm.config';
 import { RunGraphDto } from './dto/run-graph.dto';
@@ -35,7 +35,7 @@ type GraphRunInput = RunGraphDto & { conversationHistory?: string };
 
 @Injectable()
 export class LanggraphService {
-  private readonly groqClient: Groq;
+  private readonly llmClient: LlmClient;
   private readonly compiledGraph;
 
   constructor(
@@ -45,18 +45,18 @@ export class LanggraphService {
     private readonly productCatalog: ProductGuideCatalogService,
     private readonly prisma: PrismaService,
   ) {
-    this.groqClient = getGroqClient(this.config);
+    this.llmClient = getLlmClient(this.config);
     const workflow = new StateGraph(MultiAgentState)
       .addNode('requestPlanner', (state) =>
         this.runNode('requestPlanner', state, () =>
-          requestPlannerAgentNode(state, this.groqClient),
+          requestPlannerAgentNode(state, this.llmClient),
         ),
       )
       .addNode('financialReasoning', (state) =>
         this.runNode('financialReasoning', state, () =>
           financialReasoningAgentNode(
             state,
-            this.groqClient,
+            this.llmClient,
             this.databaseAgent,
           ),
         ),
@@ -65,7 +65,7 @@ export class LanggraphService {
         this.runNode('knowledgeGuide', state, () =>
           knowledgeGuideAgentNode(
             state,
-            this.groqClient,
+            this.llmClient,
             this.knowledge,
             this.databaseAgent,
             this.productCatalog,
@@ -74,17 +74,17 @@ export class LanggraphService {
       )
       .addNode('synthesize', (state) =>
         this.runNode('synthesize', state, () =>
-          responseSynthesisAgentNode(state, this.groqClient),
+          responseSynthesisAgentNode(state, this.llmClient),
         ),
       )
       .addNode('reportGeneration', (state) =>
         this.runNode('reportGeneration', state, () =>
-          reportGenerationAgentNode(state, this.groqClient),
+          reportGenerationAgentNode(state, this.llmClient),
         ),
       )
       .addNode('chattingAgent', (state) =>
         this.runNode('chattingAgent', state, () =>
-          chattingAgentNode(state, this.groqClient),
+          chattingAgentNode(state, this.llmClient),
         ),
       )
       .addEdge(START, 'requestPlanner')
@@ -110,9 +110,9 @@ export class LanggraphService {
   }
 
   async run(ctx: TenantContext, dto: GraphRunInput) {
-    if (!hasGroqApiKey(this.config)) {
+    if (!hasLlmConfiguration(this.config)) {
       throw new ServiceUnavailableException(
-        'AI assistant is not configured. Set GROQ_API_KEY in the backend environment.',
+        'AI assistant provider is not configured. Set its API key in the backend environment.',
       );
     }
     const traceId = dto.sessionId ?? `run-${Date.now()}`;
@@ -196,7 +196,7 @@ export class LanggraphService {
   ) {
     if (!conversationHistory) return userQuery;
     try {
-      const response = await this.groqClient.chat.completions.create({
+      const response = await this.llmClient.chat.completions.create({
         model: LLM_MODELS.ORCHESTRATOR_AGENT,
         messages: [
           {

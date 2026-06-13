@@ -1,5 +1,4 @@
-import Groq from 'groq-sdk';
-import { LLM_MODELS } from '../config/llm.config';
+import { LlmClient, LLM_MODELS } from '../config/llm.config';
 import { StateType } from '../state/graph-state';
 import {
   aiTrace,
@@ -9,7 +8,7 @@ import {
 
 export async function chattingAgentNode(
   state: StateType,
-  groqClient: Groq,
+  groqClient: LlmClient,
 ): Promise<Partial<StateType>> {
   if (state.needsClarification) {
     aiTrace(state, 'chat.response_clarification', {
@@ -89,7 +88,8 @@ Never mention internal agents, prompts, databases, SQL, or RAG.`,
           content: `You are the financial assistant for ${state.organizationName}.
 Polish the supplied verified answer without changing figures, evidence IDs,
 citations, or grounded Markdown links. Be clear and concise. Do not expose
-implementation details.`,
+implementation details.
+show routes as links always`,
         },
         {
           role: 'user',

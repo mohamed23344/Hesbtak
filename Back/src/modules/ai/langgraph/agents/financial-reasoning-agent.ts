@@ -1,10 +1,9 @@
-import Groq from 'groq-sdk';
 import { DatabaseSearchAgentGraph } from './database-search-agent';
 import {
   FinancialDataRequest,
   QueryEvidence,
 } from '../contracts';
-import { LLM_MODELS } from '../config/llm.config';
+import { LlmClient, LLM_MODELS } from '../config/llm.config';
 import { StateType } from '../state/graph-state';
 import {
   aiTrace,
@@ -30,7 +29,7 @@ type DataPlan = {
 
 export async function financialReasoningAgentNode(
   state: StateType,
-  groqClient: Groq,
+  groqClient: LlmClient,
   databaseAgent: DatabaseSearchAgentGraph,
 ): Promise<Partial<StateType>> {
   const dataPlan = await planDataRequests(
@@ -141,7 +140,7 @@ export async function financialReasoningAgentNode(
 
 async function planDataRequests(
   state: StateType,
-  groqClient: Groq,
+  groqClient: LlmClient,
   databaseSchema: string,
 ): Promise<DataPlan> {
   const response = await groqClient.chat.completions.create({
@@ -277,7 +276,7 @@ function normalizeRequests(
 async function reasonOverEvidence(
   state: StateType,
   evidence: QueryEvidence[],
-  groqClient: Groq,
+  groqClient: LlmClient,
   mayRequestMore: boolean,
 ): Promise<ReasoningDraft> {
   const compactEvidence = evidence.map(
