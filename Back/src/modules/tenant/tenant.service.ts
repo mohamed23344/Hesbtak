@@ -514,14 +514,35 @@ export class TenantService {
   ): Promise<void> {
     const schema = this.quote(schemaName);
     const hierarchy = [
-      ['100', 'Assets', 'Asset', null, 1, false],
-      ['110', 'Current Assets', 'Asset', '100', 2, false],
-      ['150', 'Fixed Assets', 'Asset', '100', 2, false],
-      ['1000', 'Cash and Bank', 'Asset', '110', 3, true],
-      ['1100', 'Accounts Receivable', 'Asset', '110', 3, true],
-      ['1200', 'Input Tax Receivable', 'Asset', '110', 3, true],
-      ['1300', 'Inventory', 'Asset', '110', 3, true],
-      ['1500', 'Property and Equipment', 'Asset', '150', 3, true],
+      ['1000', 'Assets', 'Asset', null, 1, false],
+      ['1100', 'Current Assets', 'Asset', '1000', 2, false],
+      ['1110', 'Trade Receivables', 'Asset', '1100', 3, true],
+      ['1120', 'Accrued Revenues', 'Asset', '1100', 3, true],
+      ['1130', 'Cash on Hand', 'Asset', '1100', 3, true],
+      ['1140', 'Bank Accounts', 'Asset', '1100', 3, true],
+      ['1150', 'Payment Processors', 'Asset', '1100', 3, true],
+      ['1160', 'Prepaid Expenses', 'Asset', '1100', 3, true],
+      ['1170', 'Recoverable VAT', 'Asset', '1100', 3, true],
+      ['1180', 'Withholding Tax Receivable', 'Asset', '1100', 3, true],
+      ['1190', 'Deposits with Others', 'Asset', '1100', 3, true],
+      ['1200', 'Fixed Assets', 'Asset', '1000', 2, false],
+      ['1210', 'Furniture and Fixtures', 'Asset', '1200', 3, true],
+      ['1220', 'Machinery and Equipment', 'Asset', '1200', 3, true],
+      ['1230', 'Software and Systems', 'Asset', '1200', 3, true],
+      ['1240', 'Vehicles and Transportation', 'Asset', '1200', 3, true],
+      ['1250', 'Computers and Accessories', 'Asset', '1200', 3, true],
+      ['1260', 'Accumulated Depreciation', 'Asset', '1200', 3, true],
+      ['1300', 'Inventory', 'Asset', '1000', 2, false],
+      ['2000', 'Liabilities', 'Liability', null, 1, false],
+      ['2100', 'Current Liabilities', 'Liability', '2000', 2, false],
+      ['2110', 'Suppliers and Accounts Payable', 'Liability', '2100', 3, true],
+      ['2120', 'Output Tax Payable', 'Liability', '2100', 3, true],
+      ['3000', 'Equity', 'Equity', null, 1, false],
+      ['3100', 'Owner Equity', 'Equity', '3000', 2, true],
+      ['4000', 'Revenue', 'Revenue', null, 1, false],
+      ['4100', 'Sales Revenue', 'Revenue', '4000', 2, true],
+      ['5000', 'Expenses', 'Expense', null, 1, false],
+      ['5200', 'Operating Expenses', 'Expense', '5000', 2, false],
     ] as const;
 
     for (const [code, name, type, parentCode, level, isLeaf] of hierarchy) {
@@ -539,22 +560,20 @@ export class TenantService {
     }
 
     const baseAccounts = [
-      ['2000', 'Accounts Payable', 'Liability'],
-      ['2100', 'Output Tax Payable', 'Liability'],
-      ['3000', 'Owner Equity', 'Equity'],
-      ['4000', 'Sales Revenue', 'Revenue'],
-      ['5000', 'Operating Expenses', 'Expense'],
-      ['5100', industry.toLowerCase().includes('software') ? 'Cloud Services' : 'Office Supplies', 'Expense'],
+      ['5210', industry.toLowerCase().includes('software') ? 'Cloud Services' : 'Office Supplies', 'Expense', '5200', 3, true],
     ];
 
-    for (const account of baseAccounts) {
+    for (const [code, name, type, parentCode, level, isLeaf] of baseAccounts) {
       await this.db.$executeRawUnsafe(
-        `INSERT INTO ${schema}.accounts (code, name, type)
-         VALUES ($1, $2, $3)
+        `INSERT INTO ${schema}.accounts (code, name, type, parent_id, level, is_leaf)
+         VALUES ($1, $2, $3, (SELECT id FROM ${schema}.accounts WHERE code = $4), $5, $6)
          ON CONFLICT (code) DO NOTHING`,
-        account[0],
-        account[1],
-        account[2],
+        code,
+        name,
+        type,
+        parentCode,
+        level,
+        isLeaf,
       );
     }
   }

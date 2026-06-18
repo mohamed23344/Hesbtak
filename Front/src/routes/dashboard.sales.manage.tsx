@@ -20,6 +20,7 @@ type Invoice = {
   issue_date: string;
   due_date: string;
   total: string;
+  remaining_amount?: string;
   status: string;
 };
 
@@ -176,7 +177,14 @@ function ManageSalesPage() {
                   <td className="p-3 text-on-surface-variant">{String(i.issue_date).slice(0, 10)}</td>
                   <td className="p-3 text-on-surface-variant">{String(i.due_date).slice(0, 10)}</td>
                   <td className="p-3"><StatusBadge status={i.status} /></td>
-                  <td className="p-3 text-end font-semibold">{money(i.total)}</td>
+                  <td className="p-3 text-end">
+                    <div className="font-semibold">{money(i.total)}</div>
+                    {i.status === "partial" && (
+                      <div className="text-xs text-status-warning font-medium">
+                        Remaining: {money(i.remaining_amount ?? i.total)}
+                      </div>
+                    )}
+                  </td>
                   <td className="p-3">
                     <button onClick={(event) => { event.stopPropagation(); void handleDelete(i.id); }} className="p-1 rounded text-on-surface-variant hover:text-status-error hover:bg-status-error/10 transition" title="Delete">
                       <Trash2 className="h-4 w-4" />

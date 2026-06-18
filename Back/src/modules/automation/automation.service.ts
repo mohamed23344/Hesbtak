@@ -235,6 +235,17 @@ export class AutomationService {
     return this.db.$queryRawUnsafe(`SELECT * FROM ${schema}.alerts ORDER BY created_at DESC`);
   }
 
+  async markAlertsRead(ctx: TenantContext) {
+    const schema = this.tenant.quote(ctx.schemaName);
+    const rows = await this.db.$queryRawUnsafe<{ count: string }[]>(
+      `UPDATE ${schema}.alerts
+       SET is_read = true
+       WHERE is_read = false
+       RETURNING id`,
+    );
+    return { updated: rows.length };
+  }
+
   async evaluateAlerts(ctx: TenantContext) {
     const schema = this.tenant.quote(ctx.schemaName);
     await this.db.$executeRawUnsafe(

@@ -3,7 +3,7 @@ import { Header } from "./dashboard.transactions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ChevronRight, FileText, Folder, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, FileText, Folder, LoaderCircle, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -67,12 +67,31 @@ function flattenTree(nodes: AccountNode[], depth = 0): AccountOption[] {
   ]);
 }
 
+function suggestChildAccountCode(parentCode: string, usedCodes: string[]) {
+  const numeric = Number(parentCode);
+  if (!Number.isFinite(numeric)) return "";
+  const trailingZeros = parentCode.match(/0+$/)?.[0].length ?? 0;
+  const step = trailingZeros >= 3 ? 100 : trailingZeros >= 2 ? 10 : 1;
+  const used = new Set(usedCodes);
+  const max = numeric + step * 9;
+  for (let candidate = numeric + step; candidate <= max; candidate += step) {
+    const code = String(candidate).padStart(parentCode.length, "0");
+    if (!used.has(code)) return code;
+  }
+  for (let candidate = max + step; candidate <= 9999; candidate += step) {
+    const code = String(candidate).padStart(parentCode.length, "0");
+    if (!used.has(code)) return code;
+  }
+  return "";
+}
+
 function Page() {
   const { t } = useI18n();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Account | null>(null);
+  const [savingAccount, setSavingAccount] = useState(false);
   const [accName, setAccName] = useState("");
   const [accCode, setAccCode] = useState("");
   const [accType, setAccType] = useState("Expense");
@@ -120,9 +139,10 @@ function Page() {
 
   const handleSave = async () => {
     const selectedParent = accounts.find((account) => account.id === parentId);
+    setSavingAccount(true);
     try {
-      await api("/tenant/accounts", {
-        method: "POST",
+      await api(editing ? `/tenant/accounts/${editing.id}` : "/tenant/accounts", {
+        method: editing ? "PATCH" : "POST",
         body: JSON.stringify({
           code: accCode,
           name: accName,
@@ -135,6 +155,8 @@ function Page() {
       await load();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not save account");
+    } finally {
+      setSavingAccount(false);
     }
   };
 
@@ -153,7 +175,7 @@ function Page() {
   const openAddChild = (account: Account) => {
     setEditing(null);
     setAccName("");
-    setAccCode("");
+    setAccCode(suggestChildAccountCode(account.code, accounts.map((item) => item.code)));
     setAccType(account.type);
     setParentId(account.id);
     setDialogOpen(true);
@@ -185,7 +207,7 @@ function Page() {
         )}
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => !savingAccount && setDialogOpen(open)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editing ? t("editAccount") : t("addAccount")}</DialogTitle>
@@ -199,7 +221,12 @@ function Page() {
                   const nextParentId = e.target.value;
                   setParentId(nextParentId);
                   const nextParent = accounts.find((account) => account.id === nextParentId);
-                  if (nextParent) setAccType(nextParent.type);
+                  if (nextParent) {
+                    setAccType(nextParent.type);
+                    if (!editing) {
+                      setAccCode(suggestChildAccountCode(nextParent.code, accounts.map((account) => account.code)));
+                    }
+                  }
                 }}
                 className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
               >
@@ -215,6 +242,11 @@ function Page() {
             <div className="space-y-1.5">
               <Label>{t("accountCode")}</Label>
               <Input value={accCode} onChange={(e) => setAccCode(e.target.value)} placeholder="e.g. 5800" />
+              {!editing && parentId && (
+                <p className="text-xs text-on-surface-variant">
+                  Suggested from the parent account. You can change it.
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>{t("accountName")}</Label>
@@ -233,8 +265,11 @@ function Page() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>{t("cancel")}</Button>
-            <Button className="bg-gradient-primary" onClick={handleSave}>{t("saveChanges")}</Button>
+            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={savingAccount}>{t("cancel")}</Button>
+            <Button className="bg-gradient-primary gap-1.5" onClick={handleSave} disabled={savingAccount}>
+              {savingAccount && <LoaderCircle className="h-4 w-4 animate-spin" />}
+              {savingAccount ? "Saving..." : t("saveChanges")}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,5 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { AccountingService } from '../accounting/accounting.service';
+import { ExpenseAccountAgent } from '../accounting/expense-account.agent';
+import { RevenueAccountAgent } from '../accounting/revenue-account.agent';
 import { TenantContext } from '../tenant/tenant.service';
 import { AiInvoiceExtractionService } from './ai-invoice-extraction.service';
 
@@ -14,9 +16,17 @@ describe('AiInvoiceExtractionService', () => {
     createInvoice: jest.fn(),
     createVendorBill: jest.fn(),
   } as unknown as jest.Mocked<AccountingService>;
+  const revenueAccountAgent = {
+    classify: jest.fn(),
+  } as unknown as jest.Mocked<RevenueAccountAgent>;
+  const expenseAccountAgent = {
+    classify: jest.fn(),
+  } as unknown as jest.Mocked<ExpenseAccountAgent>;
   const service = new AiInvoiceExtractionService(
     new ConfigService(),
     accounting,
+    revenueAccountAgent,
+    expenseAccountAgent,
   );
 
   beforeEach(() => jest.clearAllMocks());
@@ -50,6 +60,14 @@ describe('AiInvoiceExtractionService', () => {
       invoiceNumber: 'INV-00001',
       total: '110',
       status: 'unpaid',
+      revenueAccount: {
+        accountId: 'revenue-account-id',
+        code: '4010',
+        name: 'Consulting Revenue',
+        confidence: 0.95,
+        reason: 'The invoice line describes consulting services.',
+        alternatives: [],
+      },
     });
 
     await service.confirm(ctx, 'user-1', {
@@ -89,6 +107,13 @@ describe('AiInvoiceExtractionService', () => {
       total: '50',
       status: 'received',
       type: 'expense',
+      expenseAccount: {
+        accountId: 'expense-account-id',
+        code: '5110',
+        name: 'Office Supplies',
+        confidence: 1,
+        reason: 'Selected by the user.',
+      },
     });
 
     await service.confirm(ctx, 'user-1', {
@@ -129,6 +154,13 @@ describe('AiInvoiceExtractionService', () => {
       total: '25',
       status: 'paid',
       type: 'expense',
+      expenseAccount: {
+        accountId: 'expense-account-id',
+        code: '5210',
+        name: 'Transport Expense',
+        confidence: 1,
+        reason: 'Selected by the user.',
+      },
     });
 
     await service.confirm(ctx, 'user-1', {
@@ -151,6 +183,42 @@ describe('AiInvoiceExtractionService', () => {
         type: 'expense',
         accountId: 'expense-account-id',
         relatedAccountId: 'cash-account-id',
+      }),
+    );
+  });
+
+  it('allows the expense account to be selected by AI on confirmation', async () => {
+    accounting.createVendorBill.mockResolvedValue({
+      id: 'bill-3',
+      billNumber: 'BILL-00003',
+      total: '80',
+      status: 'received',
+      type: 'expense',
+      expenseAccount: {
+        accountId: 'expense-account-id',
+        code: '5310',
+        name: 'Professional Fees',
+        confidence: 0.9,
+        reason: 'Closest matching expense account.',
+      },
+    });
+
+    await service.confirm(ctx, 'user-1', {
+      section: 'expenses',
+      issueDate: '2026-06-15',
+      dueDate: '2026-06-15',
+      relatedAccountId: 'payable-account-id',
+      status: 'open',
+      lines: [{ description: 'Legal consultation', quantity: 1, unitPrice: 80 }],
+    });
+
+    expect(accounting.createVendorBill).toHaveBeenCalledWith(
+      ctx,
+      'user-1',
+      expect.objectContaining({
+        type: 'expense',
+        accountId: undefined,
+        relatedAccountId: 'payable-account-id',
       }),
     );
   });

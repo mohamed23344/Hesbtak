@@ -11,7 +11,7 @@ import {
 import { useEffect, useMemo, useState, type ElementType, type ReactNode } from "react";
 import {
   Building2, Briefcase, Coins, Wallet, ArrowRight, ArrowLeft,
-  Check, Info, ChevronRight, Folder, FileText, Plus, Trash2
+  Check, Info, ChevronRight, Folder, FileText, Plus, Trash2, LoaderCircle, Pencil
 } from "lucide-react";
 import { BrandMark, LangToggle, ThemeToggle } from "@/components/Brand";
 import { toast } from "sonner";
@@ -60,9 +60,9 @@ const COA_QUESTIONS: Array<{
     label: "Do you buy, stock, or sell physical products?",
     hint: "Adds inventory, stock adjustments, freight, and cost of goods sold accounts.",
     additions: [
-      { parentId: "1", id: "15", code: "1500", name: "Inventory", type: "Asset", children: [
-        { id: "151", code: "1510", name: "Merchandise Inventory", type: "Asset" },
-        { id: "152", code: "1520", name: "Inventory in Transit", type: "Asset" },
+      { parentId: "1", id: "13", code: "1300", name: "Inventory", type: "Asset", children: [
+        { id: "131", code: "1310", name: "Merchandise Inventory", type: "Asset" },
+        { id: "132", code: "1320", name: "Inventory in Transit", type: "Asset" },
       ] },
       { parentId: "51", id: "515", code: "5150", name: "Cost of Goods Sold", type: "Expense" },
       { parentId: "51", id: "516", code: "5160", name: "Freight and Customs", type: "Expense" },
@@ -74,13 +74,13 @@ const COA_QUESTIONS: Array<{
     label: "Do you manufacture or assemble products?",
     hint: "Adds raw materials, work in progress, finished goods, and factory overhead.",
     additions: [
-      { parentId: "1", id: "15", code: "1500", name: "Inventory", type: "Asset", children: [
-        { id: "151", code: "1510", name: "Merchandise Inventory", type: "Asset" },
-        { id: "152", code: "1520", name: "Inventory in Transit", type: "Asset" },
+      { parentId: "1", id: "13", code: "1300", name: "Inventory", type: "Asset", children: [
+        { id: "131", code: "1310", name: "Merchandise Inventory", type: "Asset" },
+        { id: "132", code: "1320", name: "Inventory in Transit", type: "Asset" },
       ] },
-      { parentId: "15", id: "153", code: "1530", name: "Raw Materials", type: "Asset" },
-      { parentId: "15", id: "154", code: "1540", name: "Work in Progress", type: "Asset" },
-      { parentId: "15", id: "155", code: "1550", name: "Finished Goods", type: "Asset" },
+      { parentId: "13", id: "133", code: "1330", name: "Raw Materials", type: "Asset" },
+      { parentId: "13", id: "134", code: "1340", name: "Work in Progress", type: "Asset" },
+      { parentId: "13", id: "135", code: "1350", name: "Finished Goods", type: "Asset" },
       { parentId: "51", id: "518", code: "5180", name: "Factory Overhead", type: "Expense" },
       { parentId: "51", id: "519", code: "5190", name: "Production Supplies", type: "Expense" },
     ],
@@ -91,7 +91,7 @@ const COA_QUESTIONS: Array<{
     hint: "Adds project revenue, project costs, customer advances, and work in progress tracking.",
     additions: [
       { parentId: "41", id: "414", code: "4140", name: "Contract Revenue", type: "Income" },
-      { parentId: "13", id: "135", code: "1350", name: "Contract Assets / WIP", type: "Asset" },
+      { parentId: "11", id: "1195", code: "1195", name: "Contract Assets / WIP", type: "Asset" },
       { parentId: "21", id: "217", code: "2170", name: "Customer Retentions", type: "Liability" },
       { parentId: "51", id: "5105", code: "5105", name: "Project Direct Costs", type: "Expense" },
     ],
@@ -134,8 +134,8 @@ const COA_QUESTIONS: Array<{
     hint: "Uses the workbook fixed asset categories and matching depreciation accounts.",
     defaultOn: true,
     additions: [
-      { parentId: "14", id: "147", code: "1470", name: "Buildings and Improvements", type: "Asset" },
-      { parentId: "14", id: "148", code: "1480", name: "Tools and Small Equipment", type: "Asset" },
+      { parentId: "12", id: "127", code: "1270", name: "Buildings and Improvements", type: "Asset" },
+      { parentId: "12", id: "128", code: "1280", name: "Tools and Small Equipment", type: "Asset" },
       { parentId: "54", id: "546", code: "5460", name: "Tools and Small Equipment Depreciation", type: "Expense" },
     ],
   },
@@ -155,7 +155,7 @@ const COA_QUESTIONS: Array<{
     hint: "Adds tax receivable/payable accounts and government tax expense branches.",
     defaultOn: true,
     additions: [
-      { parentId: "13", id: "136", code: "1360", name: "Sales Tax Receivable", type: "Asset" },
+      { parentId: "11", id: "1175", code: "1175", name: "Sales Tax Receivable", type: "Asset" },
       { parentId: "21", id: "2108", code: "2108", name: "Withholding Tax Payable", type: "Liability" },
       { parentId: "55", id: "555", code: "5550", name: "Tax Advisory and Filing Fees", type: "Expense" },
     ],
@@ -165,8 +165,8 @@ const COA_QUESTIONS: Array<{
     label: "Do you receive or pay in more than one currency?",
     hint: "Adds foreign currency bank, receivable/payable revaluation, and exchange difference accounts.",
     additions: [
-      { parentId: "12", id: "124", code: "1240", name: "Foreign Currency Bank Accounts", type: "Asset" },
-      { parentId: "11", id: "113", code: "1130", name: "Foreign Currency Receivables", type: "Asset" },
+      { parentId: "11", id: "1145", code: "1145", name: "Foreign Currency Bank Accounts", type: "Asset" },
+      { parentId: "11", id: "1125", code: "1125", name: "Foreign Currency Receivables", type: "Asset" },
       { parentId: "21", id: "2109", code: "2109", name: "Foreign Currency Payables", type: "Liability" },
     ],
   },
@@ -175,7 +175,7 @@ const COA_QUESTIONS: Array<{
     label: "Do customers pay through cards, wallets, or online gateways?",
     hint: "Adds payment processor clearing and gateway fee accounts.",
     additions: [
-      { parentId: "12", id: "125", code: "1250", name: "Card and Wallet Clearing", type: "Asset" },
+      { parentId: "11", id: "1155", code: "1155", name: "Card and Wallet Clearing", type: "Asset" },
       { parentId: "52", id: "5216", code: "5216", name: "Payment Gateway Fees", type: "Expense" },
     ],
   },
@@ -207,6 +207,24 @@ const flattenCOA = (nodes: COANode[], depth = 0): COAOption[] =>
     ...flattenCOA(node.children ?? [], depth + 1),
   ]);
 
+const suggestChildAccountCode = (parentCode: string, usedCodes: string[]) => {
+  const numeric = Number(parentCode);
+  if (!Number.isFinite(numeric)) return "";
+  const trailingZeros = parentCode.match(/0+$/)?.[0].length ?? 0;
+  const step = trailingZeros >= 3 ? 100 : trailingZeros >= 2 ? 10 : 1;
+  const used = new Set(usedCodes);
+  const max = numeric + step * 9;
+  for (let candidate = numeric + step; candidate <= max; candidate += step) {
+    const code = String(candidate).padStart(parentCode.length, "0");
+    if (!used.has(code)) return code;
+  }
+  for (let candidate = max + step; candidate <= 9999; candidate += step) {
+    const code = String(candidate).padStart(parentCode.length, "0");
+    if (!used.has(code)) return code;
+  }
+  return "";
+};
+
 const findCOANode = (nodes: COANode[], id: string): COANode | undefined => {
   for (const node of nodes) {
     if (node.id === id) return node;
@@ -232,6 +250,12 @@ const removeCOANode = (nodes: COANode[], id: string): COANode[] =>
   nodes
     .filter((node) => node.id !== id)
     .map((node) => ({ ...node, children: node.children ? removeCOANode(node.children, id) : node.children }));
+
+const updateCOANode = (nodes: COANode[], id: string, update: Partial<COANode>): COANode[] =>
+  nodes.map((node) => {
+    if (node.id === id) return { ...node, ...update };
+    return { ...node, children: node.children ? updateCOANode(node.children, id, update) : node.children };
+  });
 
 const buildCOA = (enabledQuestionKeys: Set<string>) => {
   let next = cloneCOA(DEFAULT_COA);
@@ -268,6 +292,7 @@ function Onboarding() {
   const [customCOA, setCustomCOA] = useState<COANode[]>(DEFAULT_COA);
 
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [newAccName, setNewAccName] = useState("");
   const [newAccCode, setNewAccCode] = useState("");
   const [newAccParent, setNewAccParent] = useState("5");
@@ -430,8 +455,20 @@ function Onboarding() {
       toast.error("Account code and name are required");
       return;
     }
-    if (hasCode(customCOA, newAccCode.trim())) {
+    const duplicate = flattenCOA(customCOA).find((node) => node.code === newAccCode.trim());
+    if (duplicate && duplicate.id !== editingAccountId) {
       toast.error("Account code already exists");
+      return;
+    }
+    if (editingAccountId) {
+      setCustomCOA((prev) => updateCOANode(prev, editingAccountId, {
+        code: newAccCode.trim(),
+        name: newAccName.trim(),
+      }));
+      setAddDialogOpen(false);
+      setEditingAccountId(null);
+      setNewAccName("");
+      setNewAccCode("");
       return;
     }
 
@@ -450,6 +487,22 @@ function Onboarding() {
     setNewAccCode("");
   };
 
+  const handleEditAccount = (node: COANode) => {
+    setEditingAccountId(node.id);
+    setNewAccName(node.name);
+    setNewAccCode(node.code);
+    setAddDialogOpen(true);
+  };
+
+  const openAddAccount = (parentId?: string) => {
+    const parent = findCOANode(customCOA, parentId ?? newAccParent);
+    setEditingAccountId(null);
+    setNewAccName("");
+    setNewAccCode(parent ? suggestChildAccountCode(parent.code, flattenCOA(customCOA).map((node) => node.code)) : "");
+    if (parentId) setNewAccParent(parentId);
+    setAddDialogOpen(true);
+  };
+
   const handleRemoveAccount = (id: string) => {
     setCustomCOA((prev) => removeCOANode(prev, id));
   };
@@ -458,6 +511,17 @@ function Onboarding() {
 
   return (
     <div dir={dir} className="min-h-screen bg-gradient-hero">
+      {saving && (
+        <div className="fixed inset-0 z-[100] grid place-items-center bg-surface/80 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-border-default bg-card p-6 text-center shadow-card">
+            <LoaderCircle className="mx-auto h-10 w-10 animate-spin text-primary" />
+            <h2 className="mt-4 text-lg font-bold">Creating chart of accounts</h2>
+            <p className="mt-2 text-sm text-on-surface-variant">
+              We are creating your workspace accounts. This can take a moment.
+            </p>
+          </div>
+        </div>
+      )}
       <header className="flex items-center justify-between p-4 md:px-8 border-b border-border-default bg-card/75 backdrop-blur-md sticky top-0 z-50">
         <BrandMark large />
         <div className="flex items-center gap-2">
@@ -646,7 +710,7 @@ function Onboarding() {
                 <div className="mt-8 border-t border-border-default/60 pt-6">
                   <div className="flex items-center justify-between gap-3 mb-4">
                     <h3 className="font-semibold text-lg">{t("customAccountsPreview")}</h3>
-                    <Button variant="outline" size="sm" onClick={() => setAddDialogOpen(true)} className="gap-1 cursor-pointer">
+                    <Button variant="outline" size="sm" onClick={() => openAddAccount()} className="gap-1 cursor-pointer">
                       <Plus className="h-4 w-4" /> {t("addCustomAccount")}
                     </Button>
                   </div>
@@ -657,9 +721,9 @@ function Onboarding() {
                         node={n}
                         depth={0}
                         onAdd={(id) => {
-                          setNewAccParent(id);
-                          setAddDialogOpen(true);
+                          openAddAccount(id);
                         }}
+                        onEdit={handleEditAccount}
                         onRemove={handleRemoveAccount}
                       />
                     ))}
@@ -681,24 +745,46 @@ function Onboarding() {
             )}
 
             <Button onClick={handleNext} disabled={saving} className="bg-gradient-primary gap-1.5 cursor-pointer shadow-soft hover-glow">
-              {saving ? "..." : step === STEPS.length - 1 ? t("finish") : t("continue")}
-              <ArrowRight className="h-4 w-4 rtl:rotate-180" />
+              {saving ? (
+                <>
+                  <LoaderCircle className="h-4 w-4 animate-spin" /> Creating...
+                </>
+              ) : (
+                <>
+                  {step === STEPS.length - 1 ? t("finish") : t("continue")}
+                  <ArrowRight className="h-4 w-4 rtl:rotate-180" />
+                </>
+              )}
             </Button>
           </div>
         </div>
       </main>
 
-      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+      <Dialog open={addDialogOpen} onOpenChange={(open) => {
+        setAddDialogOpen(open);
+        if (!open) {
+          setEditingAccountId(null);
+          setNewAccName("");
+          setNewAccCode("");
+        }
+      }}>
         <DialogContent className="rounded-2xl max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-lg font-bold">{t("addCustomAccount")}</DialogTitle>
+            <DialogTitle className="text-lg font-bold">{editingAccountId ? "Edit account" : t("addCustomAccount")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-3">
-            <div className="space-y-1.5">
+            {!editingAccountId && <div className="space-y-1.5">
               <Label className="font-semibold">Parent account</Label>
               <select
                 value={newAccParent}
-                onChange={(e) => setNewAccParent(e.target.value)}
+                onChange={(e) => {
+                  const nextParentId = e.target.value;
+                  setNewAccParent(nextParentId);
+                  const parent = findCOANode(customCOA, nextParentId);
+                  if (parent) {
+                    setNewAccCode(suggestChildAccountCode(parent.code, flattenCOA(customCOA).map((node) => node.code)));
+                  }
+                }}
                 className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
               >
                 {parentOptions.map((n) => (
@@ -708,10 +794,15 @@ function Onboarding() {
                 ))}
               </select>
               <p className="text-xs text-on-surface-variant">Choose a level 1, 2, or 3 parent to create a child account.</p>
-            </div>
+            </div>}
             <div className="space-y-1.5">
               <Label className="font-semibold">{t("accountCode")}</Label>
               <Input value={newAccCode} onChange={(e) => setNewAccCode(e.target.value)} placeholder="e.g. 5800" />
+              {!editingAccountId && (
+                <p className="text-xs text-on-surface-variant">
+                  Suggested from the parent account. You can change it.
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label className="font-semibold">{t("accountName")}</Label>
@@ -751,10 +842,11 @@ type TreeRowProps = {
   node: COANode;
   depth: number;
   onAdd: (id: string) => void;
+  onEdit: (node: COANode) => void;
   onRemove: (id: string) => void;
 };
 
-function TreeRow({ node, depth, onAdd, onRemove }: TreeRowProps) {
+function TreeRow({ node, depth, onAdd, onEdit, onRemove }: TreeRowProps) {
   const [open, setOpen] = useState(depth < 2);
   const hasChildren = !!node.children?.length;
   return (
@@ -792,6 +884,14 @@ function TreeRow({ node, depth, onAdd, onRemove }: TreeRowProps) {
         )}
         <button
           type="button"
+          title="Edit account"
+          onClick={() => onEdit(node)}
+          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-md hover:bg-surface-container text-on-surface-variant transition"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
           title="Remove account"
           onClick={() => onRemove(node.id)}
           className="opacity-0 group-hover:opacity-100 p-1.5 rounded-md hover:bg-destructive/10 text-on-surface-variant hover:text-destructive transition"
@@ -800,7 +900,7 @@ function TreeRow({ node, depth, onAdd, onRemove }: TreeRowProps) {
         </button>
       </div>
       {open && node.children?.map((c) => (
-        <TreeRow key={c.id} node={c} depth={depth + 1} onAdd={onAdd} onRemove={onRemove} />
+        <TreeRow key={c.id} node={c} depth={depth + 1} onAdd={onAdd} onEdit={onEdit} onRemove={onRemove} />
       ))}
     </>
   );

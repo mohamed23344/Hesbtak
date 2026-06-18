@@ -7,7 +7,8 @@ import {
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { clearSession, getSession, updateSession } from "@/lib/api";
+import { api, clearSession, getSession, updateSession } from "@/lib/api";
+import { toast } from "sonner";
 
 type NavItem = {
   to: string;
@@ -25,13 +26,26 @@ type NavSection = {
   items: NavItem[];
 };
 
+type Notification = {
+  id: string;
+  title?: string;
+  message?: string;
+  source?: "user" | "tenant";
+  isRead?: boolean;
+  is_read?: boolean;
+};
+
 export default function DashboardLayout() {
   const { t, dir } = useI18n();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const [open, setOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const pathRef = useRef(path);
+  const notificationPollReadyRef = useRef(false);
+  const unreadNotificationIdsRef = useRef<Set<string>>(new Set());
   const session = getSession();
   const activeTenant = session?.tenants.find((tenant) => tenant.organizationId === session.activeTenantId);
   const features = activeTenant?.subscription?.plan.features ?? {};
@@ -45,6 +59,60 @@ export default function DashboardLayout() {
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    pathRef.current = path;
+  }, [path]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadUnreadNotifications = async () => {
+      try {
+        const [userResult, tenantResult] = await Promise.allSettled([
+          api<Notification[]>("/auth/notifications"),
+          api<Notification[]>("/tenant/alerts"),
+        ]);
+        const userNotifications = userResult.status === "fulfilled"
+          ? userResult.value.map((item) => ({ ...item, source: "user" as const }))
+          : [];
+        const tenantAlerts = tenantResult.status === "fulfilled"
+          ? tenantResult.value.map((item) => ({ ...item, source: "tenant" as const }))
+          : [];
+        const notifications = [...userNotifications, ...tenantAlerts];
+        if (!cancelled) {
+          const unread = notifications.filter((item) => !(item.isRead ?? item.is_read));
+          const nextUnreadIds = new Set(unread.map((item) => `${item.source}:${item.id}`));
+          const newUnread = unread.filter((item) => !unreadNotificationIdsRef.current.has(`${item.source}:${item.id}`));
+
+          setUnreadNotifications(unread.length);
+          if (
+            notificationPollReadyRef.current
+            && newUnread.length > 0
+            && pathRef.current !== "/dashboard/notifications"
+          ) {
+            const newest = newUnread[0];
+            toast.info(newUnread.length === 1 ? (newest.title ?? "New notification") : `${newUnread.length} new notifications`, {
+              description: newest.message ?? "Open notifications to review it.",
+              
+            });
+          }
+
+          unreadNotificationIdsRef.current = nextUnreadIds;
+          notificationPollReadyRef.current = true;
+        }
+      } catch {
+        if (!cancelled) setUnreadNotifications(0);
+      }
+    };
+    void loadUnreadNotifications();
+    const interval = window.setInterval(() => void loadUnreadNotifications(), 10000);
+    window.addEventListener("notifications:updated", loadUnreadNotifications);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener("notifications:updated", loadUnreadNotifications);
+    };
   }, []);
 
   const toggleSection = (key: string) => {
@@ -80,7 +148,7 @@ export default function DashboardLayout() {
         { to: "/dashboard/sales/manage", label: t("manageInvoices") },
         { to: "/dashboard/sales/payments", label: t("payments") },
         { to: "/dashboard/sales/customers", label: t("customers") },
-        { to: "/dashboard/sales/returns", label: t("returns") },
+        // { to: "/dashboard/sales/returns", label: t("returns") },
       ],
     },
     {
@@ -93,7 +161,7 @@ export default function DashboardLayout() {
         { to: "/dashboard/purchases/manage", label: t("manageInvoices") },
         { to: "/dashboard/purchases/payments", label: t("payments") },
         { to: "/dashboard/purchases/vendors", label: t("vendors") },
-        { to: "/dashboard/purchases/returns", label: t("returns") },
+        // { to: "/dashboard/purchases/returns", label: t("returns") },
       ],
     },
     {
@@ -313,8 +381,13 @@ export default function DashboardLayout() {
             <div className="flex items-center gap-4 ml-auto">
               <div className="flex items-center gap-2">
                 <Button asChild variant="ghost" size="icon">
-                  <Link to="/dashboard/notifications" aria-label={t("notifications")}>
+                  <Link to="/dashboard/notifications" aria-label={t("notifications")} className="relative">
                     <Bell className="h-4 w-4" />
+                    {unreadNotifications > 0 && (
+                      <span className="absolute -right-1 -top-1 min-w-4 h-4 rounded-full bg-red-600 px-1 text-[10px] leading-4 text-white text-center font-bold">
+                        {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                      </span>
+                    )}
                   </Link>
                 </Button>
                 {/* Settings button is commented out; using dropdown entry instead */}

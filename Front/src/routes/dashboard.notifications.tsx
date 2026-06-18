@@ -45,6 +45,17 @@ function Page() {
       if (results.every((result) => result.status === "rejected")) {
         toast.error("Could not load notifications");
       }
+      const readRequests = [];
+      if (userAlerts.some((alert) => !alert.is_read)) {
+        readRequests.push(api("/auth/notifications/read", { method: "POST" }));
+      }
+      if (tenantAlerts.some((alert) => !alert.is_read)) {
+        readRequests.push(api("/tenant/alerts/read", { method: "POST" }));
+      }
+      if (readRequests.length > 0) {
+        void Promise.allSettled(readRequests)
+          .then(() => window.dispatchEvent(new Event("notifications:updated")));
+      }
     });
   }, []);
 

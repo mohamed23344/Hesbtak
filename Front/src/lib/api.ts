@@ -160,9 +160,17 @@ export async function apiBlob(path: string, options: RequestInit = {}): Promise<
   return res.blob();
 }
 
-export const money = (value: number | string | null | undefined) =>
+export function activeCurrency() {
+  const session = getSession();
+  return session?.tenants.find((tenant) => tenant.organizationId === session.activeTenantId)?.currency
+    ?? session?.tenants[0]?.currency
+    ?? "USD";
+}
+
+export const money = (value: number | string | null | undefined, currency = activeCurrency()) =>
   Number(value ?? 0).toLocaleString(undefined, {
     style: "currency",
-    currency: getSession()?.tenants[0]?.organizationName ? "USD" : "USD",
-    maximumFractionDigits: 0,
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
   });

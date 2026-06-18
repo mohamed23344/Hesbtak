@@ -612,7 +612,7 @@ export class ReportsService {
            FROM ${schema}.journal_lines jl
            JOIN ${schema}.journal_entries je ON je.id = jl.journal_entry_id
            JOIN ${schema}.accounts a ON a.id = jl.account_id
-           WHERE a.code = '1000'
+           WHERE a.code IN ('1130', '1140', '1150')
            GROUP BY 1, 2 ORDER BY 1`,
         );
         break;

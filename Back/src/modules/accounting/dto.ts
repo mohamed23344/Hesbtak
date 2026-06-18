@@ -168,10 +168,12 @@ export class InvoiceDto {
   dueDate!: string;
 
   @IsString()
-  accountId!: string;
+  @IsOptional()
+  accountId?: string;
 
   @IsString()
-  relatedAccountId!: string;
+  @IsOptional()
+  relatedAccountId?: string;
 
   @IsArray()
   @ValidateNested({ each: true })
@@ -185,6 +187,7 @@ export class InvoiceDto {
 
   @IsString()
   @IsOptional()
+  @IsIn(['cash', 'bank', 'card', 'transfer', 'bank_transfer'])
   paymentMethod?: string;
 
   @IsString()
@@ -214,10 +217,12 @@ export class VendorBillDto {
   dueDate!: string;
 
   @IsString()
-  accountId!: string;
+  @IsOptional()
+  accountId?: string;
 
   @IsString()
-  relatedAccountId!: string;
+  @IsOptional()
+  relatedAccountId?: string;
 
   @IsArray()
   @ValidateNested({ each: true })
@@ -231,6 +236,7 @@ export class VendorBillDto {
 
   @IsString()
   @IsOptional()
+  @IsIn(['cash', 'bank', 'card', 'transfer', 'bank_transfer'])
   paymentMethod?: string;
 
   @IsString()

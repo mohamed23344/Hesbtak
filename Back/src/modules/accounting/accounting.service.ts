@@ -5,6 +5,8 @@ import {
   AccountDto, AttachInvoiceDto, InvoiceDto, JournalEntryDto,
   JournalLineDto, PartyDto, PaymentDto, ReturnDto, VendorBillDto, VoucherDto,
 } from './dto';
+import { ExpenseAccountAgent } from './expense-account.agent';
+import { RevenueAccountAgent } from './revenue-account.agent';
 
 export interface IdRow { id: string; }
 export interface TotalRow { total: string; }
@@ -14,6 +16,8 @@ export class AccountingService {
   constructor(
     private readonly db: DataBaseService,
     private readonly tenant: TenantService,
+    private readonly revenueAccountAgent: RevenueAccountAgent,
+    private readonly expenseAccountAgent: ExpenseAccountAgent,
   ) {}
 
   // ─── Accounts ──────────────────────────────────────────────────────
@@ -39,6 +43,51 @@ export class AccountingService {
        ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, type = EXCLUDED.type, parent_id = EXCLUDED.parent_id, level = EXCLUDED.level
        RETURNING id`,
       dto.code, dto.name, dto.type, dto.parentId ?? null,
+    );
+    return rows[0];
+  }
+
+  async updateAccount(ctx: TenantContext, accountId: string, dto: AccountDto) {
+    const schema = this.tenant.quote(ctx.schemaName);
+    const existingRows = await this.db.$queryRawUnsafe<{ id: string }[]>(
+      `SELECT id FROM ${schema}.accounts WHERE id = $1::uuid`,
+      accountId,
+    );
+    if (!existingRows[0]) throw new BadRequestException('Account not found');
+    if (dto.parentId === accountId) {
+      throw new BadRequestException('An account cannot be its own parent');
+    }
+    const duplicateRows = await this.db.$queryRawUnsafe<{ id: string }[]>(
+      `SELECT id FROM ${schema}.accounts WHERE code = $1 AND id <> $2::uuid LIMIT 1`,
+      dto.code, accountId,
+    );
+    if (duplicateRows[0]) {
+      throw new BadRequestException('Account code already exists');
+    }
+    if (dto.parentId) {
+      const parentRows = await this.db.$queryRawUnsafe<{ type: string; level: number; is_descendant: boolean }[]>(
+        `WITH RECURSIVE branch AS (
+           SELECT id FROM ${schema}.accounts WHERE parent_id = $1::uuid
+           UNION ALL SELECT child.id FROM ${schema}.accounts child INNER JOIN branch parent ON child.parent_id = parent.id
+         )
+         SELECT a.type, a.level, EXISTS(SELECT 1 FROM branch WHERE id = $2::uuid) AS is_descendant
+         FROM ${schema}.accounts a WHERE a.id = $2::uuid`,
+        accountId, dto.parentId,
+      );
+      if (!parentRows[0]) throw new BadRequestException('Parent account not found');
+      if (parentRows[0].is_descendant) {
+        throw new BadRequestException('An account cannot be moved under one of its child accounts');
+      }
+      if (parentRows[0].level >= 4) throw new BadRequestException('Accounts can only be nested up to level 4');
+      if (parentRows[0].type !== dto.type) throw new BadRequestException('Child account type must match its parent account type');
+    }
+    const rows = await this.db.$queryRawUnsafe<IdRow[]>(
+      `UPDATE ${schema}.accounts
+       SET code = $1, name = $2, type = $3, parent_id = $4::uuid,
+           level = COALESCE((SELECT level + 1 FROM ${schema}.accounts WHERE id = $4::uuid), 1)
+       WHERE id = $5::uuid
+       RETURNING id`,
+      dto.code, dto.name, dto.type, dto.parentId ?? null, accountId,
     );
     return rows[0];
   }
@@ -284,12 +333,15 @@ export class AccountingService {
       id: dto.customerId, name: dto.customerInfo?.name, email: dto.customerInfo?.email,
     });
 
-    const accountId = await this.ensureDocumentAccount(ctx, dto.accountId, 'Revenue');
-    const relatedAccountId = await this.ensureDocumentAccount(ctx, dto.relatedAccountId, 'Asset');
     const status = dto.status ?? 'unpaid';
-    const totals = this.calculateLines(
-      dto.lines.map((line) => ({ ...line, accountId })),
-    );
+    const totals = this.calculateLines(dto.lines);
+    const revenueClassification = dto.accountId
+      ? await this.revenueAccountAgent.selected(ctx, dto.accountId)
+      : await this.revenueAccountAgent.classify(ctx, totals.lines);
+    const accountId = revenueClassification.accountId;
+    const relatedAccountId = dto.relatedAccountId
+      ? await this.ensureDocumentAccount(ctx, dto.relatedAccountId, 'Asset')
+      : await this.salesInvoiceAssetAccount(ctx, status, dto.paymentMethod);
     const number = await this.nextNumber(ctx, 'invoices', 'INV');
     const invoiceRows = await this.db.$queryRawUnsafe<(IdRow & { total: string })[]>(
       `INSERT INTO ${schema}.invoices
@@ -343,14 +395,21 @@ export class AccountingService {
     }
 
     await this.createAlert(ctx, 'due_date', 'info', 'Invoice due date scheduled', `Invoice ${number} is due on ${dto.dueDate}`, 'invoice', invoice.id);
-    return { id: invoice.id, invoiceNumber: number, total: invoice.total, status };
+    return {
+      id: invoice.id,
+      invoiceNumber: number,
+      total: invoice.total,
+      status,
+      revenueAccount: revenueClassification,
+    };
   }
 
   async listInvoices(ctx: TenantContext) {
     const schema = this.tenant.quote(ctx.schemaName);
     return this.db.$queryRawUnsafe(
       `SELECT i.*, c.name AS customer_name,
-        COALESCE((SELECT SUM(cp.amount) FROM ${schema}.customer_payments cp WHERE cp.invoice_id = i.id), 0) AS paid_amount
+        COALESCE((SELECT SUM(cp.amount) FROM ${schema}.customer_payments cp WHERE cp.invoice_id = i.id), 0) AS paid_amount,
+        i.total - COALESCE((SELECT SUM(cp.amount) FROM ${schema}.customer_payments cp WHERE cp.invoice_id = i.id), 0) AS remaining_amount
        FROM ${schema}.invoices i
        JOIN ${schema}.customers c ON c.id = i.customer_id
        ORDER BY i.created_at DESC`,
@@ -394,12 +453,15 @@ export class AccountingService {
     const customerId = await this.resolveCustomer(ctx, userId, {
       id: dto.customerId, name: dto.customerInfo?.name, email: dto.customerInfo?.email,
     });
-    const accountId = await this.ensureDocumentAccount(ctx, dto.accountId, 'Revenue');
-    const relatedAccountId = await this.ensureDocumentAccount(ctx, dto.relatedAccountId, 'Asset');
-    const totals = this.calculateLines(
-      dto.lines.map((line) => ({ ...line, accountId })),
-    );
     const status = dto.status ?? 'unpaid';
+    const totals = this.calculateLines(dto.lines);
+    const revenueClassification = dto.accountId
+      ? await this.revenueAccountAgent.selected(ctx, dto.accountId)
+      : await this.revenueAccountAgent.classify(ctx, totals.lines);
+    const accountId = revenueClassification.accountId;
+    const relatedAccountId = dto.relatedAccountId
+      ? await this.ensureDocumentAccount(ctx, dto.relatedAccountId, 'Asset')
+      : await this.salesInvoiceAssetAccount(ctx, status, dto.paymentMethod);
 
     if (existing.journal_entry_id) {
       await this.db.$executeRawUnsafe(
@@ -478,7 +540,9 @@ export class AccountingService {
   async listUnpaidInvoices(ctx: TenantContext) {
     const schema = this.tenant.quote(ctx.schemaName);
     return this.db.$queryRawUnsafe(
-      `SELECT i.*, c.name AS customer_name
+      `SELECT i.*, c.name AS customer_name,
+        COALESCE((SELECT SUM(cp.amount) FROM ${schema}.customer_payments cp WHERE cp.invoice_id = i.id), 0) AS paid_amount,
+        i.total - COALESCE((SELECT SUM(cp.amount) FROM ${schema}.customer_payments cp WHERE cp.invoice_id = i.id), 0) AS remaining_amount
        FROM ${schema}.invoices i
        LEFT JOIN ${schema}.customers c ON c.id = i.customer_id
        WHERE i.status IN ('unpaid', 'partial')
@@ -503,16 +567,23 @@ export class AccountingService {
     if (type === 'purchase' && !vendorId) {
       throw new BadRequestException('A vendor is required for purchase bills');
     }
-    const accountId = await this.ensureDocumentAccount(ctx, dto.accountId, 'Expense');
     const status = dto.status ?? 'received';
-    const relatedAccountId = await this.ensureDocumentAccount(
-      ctx,
-      dto.relatedAccountId,
-      status === 'paid' ? 'Asset' : 'Liability',
-    );
-    const totals = this.calculateLines(
-      dto.lines.map((line) => ({ ...line, accountId })),
-    );
+    const totals = this.calculateLines(dto.lines);
+    const expenseClassification = dto.accountId
+      ? await this.expenseAccountAgent.selected(ctx, dto.accountId)
+      : await this.expenseAccountAgent.classify(
+          ctx,
+          dto.vendorInfo?.name ?? null,
+          totals.lines.map((line) => line.description),
+        );
+    const accountId = expenseClassification.accountId;
+    const relatedAccountId = dto.relatedAccountId
+      ? await this.ensureDocumentAccount(
+          ctx,
+          dto.relatedAccountId,
+          status === 'paid' ? 'Asset' : 'Liability',
+        )
+      : await this.purchaseBillRelatedAccount(ctx, status, dto.paymentMethod);
     const number = await this.nextNumber(ctx, 'vendor_bills', 'BILL');
     const billRows = await this.db.$queryRawUnsafe<(IdRow & { total: string })[]>(
       `INSERT INTO ${schema}.vendor_bills
@@ -540,7 +611,7 @@ export class AccountingService {
         { accountId, debit: totals.subtotal, credit: 0 },
       ];
       if (totals.taxAmount > 0) {
-        const inputTax = await this.ensureSystemAccount(ctx, '1200', 'Input Tax Receivable', 'Asset');
+        const inputTax = await this.ensureSystemAccount(ctx, '1170', 'Recoverable VAT', 'Asset');
         journalLines.push({ accountId: inputTax, debit: totals.taxAmount, credit: 0 });
       }
       journalLines.push({ accountId: relatedAccountId, debit: 0, credit: totals.total });
@@ -565,14 +636,22 @@ export class AccountingService {
     }
 
     await this.createAlert(ctx, 'due_date', 'info', 'Vendor bill due date scheduled', `Bill ${number} is due on ${dto.dueDate}`, 'vendor_bill', bill.id);
-    return { id: bill.id, billNumber: number, total: bill.total, status, type };
+    return {
+      id: bill.id,
+      billNumber: number,
+      total: bill.total,
+      status,
+      type,
+      expenseAccount: expenseClassification,
+    };
   }
 
   async listVendorBills(ctx: TenantContext, type?: 'purchase' | 'expense') {
     const schema = this.tenant.quote(ctx.schemaName);
     return this.db.$queryRawUnsafe(
       `SELECT b.*, v.name AS vendor_name,
-        COALESCE((SELECT SUM(vp.amount) FROM ${schema}.vendor_payments vp WHERE vp.vendor_bill_id = b.id), 0) AS paid_amount
+        COALESCE((SELECT SUM(vp.amount) FROM ${schema}.vendor_payments vp WHERE vp.vendor_bill_id = b.id), 0) AS paid_amount,
+        b.total - COALESCE((SELECT SUM(vp.amount) FROM ${schema}.vendor_payments vp WHERE vp.vendor_bill_id = b.id), 0) AS remaining_amount
        FROM ${schema}.vendor_bills b
        LEFT JOIN ${schema}.vendors v ON v.id = b.vendor_id
        WHERE ($1::text IS NULL OR b.type = $1)
@@ -627,16 +706,23 @@ export class AccountingService {
     if (type === 'purchase' && !vendorId) {
       throw new BadRequestException('A vendor is required for purchase bills');
     }
-    const accountId = await this.ensureDocumentAccount(ctx, dto.accountId, 'Expense');
-    const totals = this.calculateLines(
-      dto.lines.map((line) => ({ ...line, accountId })),
-    );
     const status = dto.status ?? 'received';
-    const relatedAccountId = await this.ensureDocumentAccount(
-      ctx,
-      dto.relatedAccountId,
-      status === 'paid' ? 'Asset' : 'Liability',
-    );
+    const totals = this.calculateLines(dto.lines);
+    const expenseClassification = dto.accountId
+      ? await this.expenseAccountAgent.selected(ctx, dto.accountId)
+      : await this.expenseAccountAgent.classify(
+          ctx,
+          dto.vendorInfo?.name ?? null,
+          totals.lines.map((line) => line.description),
+        );
+    const accountId = expenseClassification.accountId;
+    const relatedAccountId = dto.relatedAccountId
+      ? await this.ensureDocumentAccount(
+          ctx,
+          dto.relatedAccountId,
+          status === 'paid' ? 'Asset' : 'Liability',
+        )
+      : await this.purchaseBillRelatedAccount(ctx, status, dto.paymentMethod);
 
     if (existing.journal_entry_id) {
       await this.db.$executeRawUnsafe(
@@ -674,7 +760,7 @@ export class AccountingService {
       ];
       if (totals.taxAmount > 0) {
         journalLines.push({
-          accountId: await this.ensureSystemAccount(ctx, '1200', 'Input Tax Receivable', 'Asset'),
+          accountId: await this.ensureSystemAccount(ctx, '1170', 'Recoverable VAT', 'Asset'),
           debit: totals.taxAmount, credit: 0,
         });
       }
@@ -715,7 +801,9 @@ export class AccountingService {
   async listUnpaidBills(ctx: TenantContext, type: 'purchase' | 'expense' = 'purchase') {
     const schema = this.tenant.quote(ctx.schemaName);
     return this.db.$queryRawUnsafe(
-      `SELECT b.*, v.name AS vendor_name
+      `SELECT b.*, v.name AS vendor_name,
+        COALESCE((SELECT SUM(vp.amount) FROM ${schema}.vendor_payments vp WHERE vp.vendor_bill_id = b.id), 0) AS paid_amount,
+        b.total - COALESCE((SELECT SUM(vp.amount) FROM ${schema}.vendor_payments vp WHERE vp.vendor_bill_id = b.id), 0) AS remaining_amount
        FROM ${schema}.vendor_bills b
        LEFT JOIN ${schema}.vendors v ON v.id = b.vendor_id
        WHERE b.status IN ('received', 'partial') AND b.type = $1
@@ -757,8 +845,8 @@ export class AccountingService {
       ? await this.ensureDocumentAccount(ctx, dto.accountId, 'Asset')
       : dto.bankAccountId
         ? await this.bankGlAccount(ctx, dto.bankAccountId)
-        : await this.accountId(ctx, '1000');
-    const ar = invoiceRows[0].related_account_id ?? await this.accountId(ctx, '1100');
+        : await this.accountId(ctx, '1130');
+    const ar = invoiceRows[0].related_account_id ?? await this.accountId(ctx, '1110');
     const je = await this.createJournalEntry(ctx, userId, {
       date: dto.paymentDate, description: `Customer payment for invoice ${invoiceId}`,
       lines: [
@@ -825,8 +913,8 @@ export class AccountingService {
       ? await this.ensureDocumentAccount(ctx, dto.accountId, 'Asset')
       : dto.bankAccountId
         ? await this.bankGlAccount(ctx, dto.bankAccountId)
-        : await this.accountId(ctx, '1000');
-    const ap = billRows[0].related_account_id ?? await this.accountId(ctx, '2000');
+        : await this.accountId(ctx, '1130');
+    const ap = billRows[0].related_account_id ?? await this.accountId(ctx, '2110');
     const je = await this.createJournalEntry(ctx, userId, {
       date: dto.paymentDate, description: `Vendor payment for bill ${billId}`,
       lines: [
@@ -874,7 +962,7 @@ export class AccountingService {
     const totals = this.calculateReturnLines(dto.lines);
     const number = await this.nextNumber(ctx, 'sales_returns', 'SR');
     const revenue = await this.accountId(ctx, '4000');
-    const ar = await this.accountId(ctx, '1100');
+    const ar = await this.accountId(ctx, '1110');
 
     const je = await this.createJournalEntry(ctx, userId, {
       date: dto.returnDate, description: `Sales return ${number}: ${dto.reason}`,
@@ -924,7 +1012,7 @@ export class AccountingService {
     const totals = this.calculateReturnLines(dto.lines);
     const number = await this.nextNumber(ctx, 'purchase_returns', 'PR');
     const expense = await this.accountId(ctx, '5000');
-    const ap = await this.accountId(ctx, '2000');
+    const ap = await this.accountId(ctx, '2110');
 
     const je = await this.createJournalEntry(ctx, userId, {
       date: dto.returnDate, description: `Purchase return ${number}: ${dto.reason}`,
@@ -1057,6 +1145,73 @@ export class AccountingService {
     return rows[0].id;
   }
 
+  private async salesInvoiceAssetAccount(
+    ctx: TenantContext,
+    status: 'unpaid' | 'paid' | 'draft',
+    paymentMethod?: string,
+  ): Promise<string> {
+    if (status !== 'paid') {
+      return this.ensureSystemAccount(
+        ctx,
+        '1110',
+        'Trade Receivables',
+        'Asset',
+      );
+    }
+
+    const method = paymentMethod?.toLowerCase();
+    if (!method) {
+      throw new BadRequestException(
+        'Payment method is required for a paid invoice',
+      );
+    }
+    if (method === 'cash') {
+      return this.ensureSystemAccount(ctx, '1130', 'Cash on Hand', 'Asset');
+    }
+    if (method === 'bank' || method === 'transfer' || method === 'bank_transfer') {
+      return this.ensureSystemAccount(ctx, '1140', 'Bank Accounts', 'Asset');
+    }
+    if (method === 'card') {
+      return this.ensureSystemAccount(ctx, '1150', 'Payment Processors', 'Asset');
+    }
+    throw new BadRequestException(
+      'Paid sales invoices support cash, bank transfer, or card payments',
+    );
+  }
+
+  private async purchaseBillRelatedAccount(
+    ctx: TenantContext,
+    status: 'received' | 'paid' | 'draft',
+    paymentMethod?: string,
+  ): Promise<string> {
+    if (status !== 'paid') {
+      return this.ensureSystemAccount(
+        ctx,
+        '2110',
+        'Suppliers and Accounts Payable',
+        'Liability',
+      );
+    }
+    const method = paymentMethod?.toLowerCase();
+    if (!method) {
+      throw new BadRequestException(
+        'Payment method is required for a paid purchase bill',
+      );
+    }
+    if (method === 'cash') {
+      return this.ensureSystemAccount(ctx, '1130', 'Cash on Hand', 'Asset');
+    }
+    if (method === 'bank' || method === 'transfer' || method === 'bank_transfer') {
+      return this.ensureSystemAccount(ctx, '1140', 'Bank Accounts', 'Asset');
+    }
+    if (method === 'card') {
+      return this.ensureSystemAccount(ctx, '1150', 'Payment Processors', 'Asset');
+    }
+    throw new BadRequestException(
+      'Paid purchase bills support cash, bank transfer, or card payments',
+    );
+  }
+
   private async ensureDocumentAccount(
     ctx: TenantContext,
     accountId: string | undefined,
@@ -1136,7 +1291,10 @@ export class AccountingService {
     const rows = await this.db.$queryRawUnsafe<IdRow[]>(
       `INSERT INTO ${schema}.accounts (code, name, type)
        VALUES ($1, $2, $3)
-       ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name
+       ON CONFLICT (code) DO UPDATE SET
+         name = EXCLUDED.name,
+         type = EXCLUDED.type,
+         is_active = true
        RETURNING id`,
       code, name, type,
     );

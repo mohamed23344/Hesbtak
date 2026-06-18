@@ -50,38 +50,28 @@ export const DEFAULT_COA: COANode[] = [
     id: "1", code: "1000", name: "Assets", type: "Asset",
     children: [
       {
-        id: "11", code: "1100", name: "Accounts Receivable", type: "Asset",
+        id: "11", code: "1100", name: "Current Assets", type: "Asset",
         children: [
           { id: "111", code: "1110", name: "Trade Receivables", type: "Asset" },
           { id: "112", code: "1120", name: "Accrued Revenues", type: "Asset" },
+          { id: "113", code: "1130", name: "Cash on Hand", type: "Asset" },
+          { id: "114", code: "1140", name: "Bank Accounts", type: "Asset" },
+          { id: "115", code: "1150", name: "Payment Processors", type: "Asset" },
+          { id: "116", code: "1160", name: "Prepaid Expenses", type: "Asset" },
+          { id: "117", code: "1170", name: "Recoverable VAT", type: "Asset" },
+          { id: "118", code: "1180", name: "Withholding Tax Receivable", type: "Asset" },
+          { id: "119", code: "1190", name: "Deposits with Others", type: "Asset" },
         ],
       },
       {
-        id: "12", code: "1200", name: "Cash and Bank", type: "Asset",
+        id: "12", code: "1200", name: "Fixed Assets", type: "Asset",
         children: [
-          { id: "121", code: "1210", name: "Cash on Hand", type: "Asset" },
-          { id: "122", code: "1220", name: "Bank Accounts", type: "Asset" },
-          { id: "123", code: "1230", name: "Payment Processors", type: "Asset" },
-        ],
-      },
-      {
-        id: "13", code: "1300", name: "Current Assets", type: "Asset",
-        children: [
-          { id: "131", code: "1310", name: "Prepaid Expenses", type: "Asset" },
-          { id: "132", code: "1320", name: "Recoverable VAT", type: "Asset" },
-          { id: "133", code: "1330", name: "Withholding Tax Receivable", type: "Asset" },
-          { id: "134", code: "1340", name: "Deposits with Others", type: "Asset" },
-        ],
-      },
-      {
-        id: "14", code: "1400", name: "Fixed Assets", type: "Asset",
-        children: [
-          { id: "141", code: "1410", name: "Furniture and Fixtures", type: "Asset" },
-          { id: "142", code: "1420", name: "Machinery and Equipment", type: "Asset" },
-          { id: "143", code: "1430", name: "Software and Systems", type: "Asset" },
-          { id: "144", code: "1440", name: "Vehicles and Transportation", type: "Asset" },
-          { id: "145", code: "1450", name: "Computers and Accessories", type: "Asset" },
-          { id: "146", code: "1460", name: "Accumulated Depreciation", type: "Asset" },
+          { id: "121", code: "1210", name: "Furniture and Fixtures", type: "Asset" },
+          { id: "122", code: "1220", name: "Machinery and Equipment", type: "Asset" },
+          { id: "123", code: "1230", name: "Software and Systems", type: "Asset" },
+          { id: "124", code: "1240", name: "Vehicles and Transportation", type: "Asset" },
+          { id: "125", code: "1250", name: "Computers and Accessories", type: "Asset" },
+          { id: "126", code: "1260", name: "Accumulated Depreciation", type: "Asset" },
         ],
       },
     ],

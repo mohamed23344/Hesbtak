@@ -32,6 +32,20 @@ type ExtractionResponse = {
   model: string;
   fileName: string;
   section: Props["type"];
+  revenueAccount?: {
+    accountId: string;
+    code: string;
+    name: string;
+    confidence: number;
+    reason: string;
+  };
+  expenseAccount?: {
+    accountId: string;
+    code: string;
+    name: string;
+    confidence: number;
+    reason: string;
+  };
   draft: {
     party: {
       id: string | null;
@@ -113,7 +127,9 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
   }, [partyEndpoint]);
 
   const accountOptions = useMemo(() => accounts.filter((account) =>
-    account.is_active !== false && account.type === (isSales ? "Revenue" : "Expense"),
+    account.is_active !== false
+    && account.is_leaf !== false
+    && account.type === (isSales ? "Revenue" : "Expense"),
   ), [accounts, isSales]);
   const relatedAccountType = isSales || status === "paid" ? "Asset" : "Liability";
   const relatedAccountOptions = useMemo(() => accounts.filter((account) =>
@@ -126,7 +142,22 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
     : isSales
       ? "Receivable asset account"
       : "Payable liability account";
-  const preferredRelatedAccountCode = status === "paid" ? "1000" : isSales ? "1100" : "2000";
+  const preferredRelatedAccountCode = isSales
+    ? status === "paid"
+      ? paymentMethod === "cash"
+        ? "1130"
+        : paymentMethod === "card"
+          ? "1150"
+          : "1140"
+      : "1110"
+    : status === "paid"
+      ? paymentMethod === "cash"
+        ? "1130"
+        : paymentMethod === "card"
+          ? "1150"
+          : "1140"
+      : "2110";
+  const dueDateLocked = status === "paid";
 
   useEffect(() => {
     if (!documentId) return;
@@ -160,20 +191,25 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
   }, [documentId, invoiceEndpoint, isSales, title]);
 
   useEffect(() => {
-    if (documentId || isAiDraft || !accountOptions[0]) return;
-    setAccountId((current) => current || accountOptions[0].id);
-  }, [accountOptions, documentId, isAiDraft]);
-
-  useEffect(() => {
-    if (documentId && relatedAccountOptions.some((account) => account.id === relatedAccountId)) return;
+    const preferred = relatedAccountOptions.find(
+      (account) => account.code === preferredRelatedAccountCode,
+    );
+    if (preferred) {
+      setRelatedAccountId(preferred.id);
+      return;
+    }
     setRelatedAccountId((current) =>
       relatedAccountOptions.some((account) => account.id === current)
         ? current
-        : relatedAccountOptions.find((account) => account.code === preferredRelatedAccountCode)?.id
-          ?? relatedAccountOptions[0]?.id
-          ?? ""
+        : preferred?.id ?? relatedAccountOptions[0]?.id ?? ""
     );
-  }, [documentId, preferredRelatedAccountCode, relatedAccountId, relatedAccountOptions]);
+  }, [isExpense, isSales, preferredRelatedAccountCode, relatedAccountOptions]);
+
+  useEffect(() => {
+    if (dueDateLocked && issueDate && dueDate !== issueDate) {
+      setDueDate(issueDate);
+    }
+  }, [dueDate, dueDateLocked, issueDate]);
 
   const selectedParty = parties.find((party) => party.id === partyId);
   const hasParty = Boolean(selectedParty || draftParty?.name);
@@ -248,10 +284,6 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
       toast.error(`Select a ${partyKind}`);
       return;
     }
-    if (!accountId) {
-      toast.error(`Select one ${isSales ? "revenue" : "expense"} account`);
-      return;
-    }
     if (!relatedAccountId) {
       toast.error(`Select a ${relatedAccountType.toLowerCase()} account`);
       return;
@@ -281,7 +313,7 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
         type: isSales ? undefined : isExpense ? "expense" : "purchase",
         issueDate,
         dueDate,
-        accountId,
+        accountId: accountId || undefined,
         relatedAccountId,
         status: apiStatus,
         paymentMethod: status === "paid" ? paymentMethod : undefined,
@@ -302,7 +334,7 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
             : draftParty,
           issueDate,
           dueDate,
-          accountId,
+          accountId: accountId || undefined,
           relatedAccountId,
           status,
           paymentMethod: status === "paid" ? paymentMethod : undefined,
@@ -338,6 +370,11 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
         body,
       });
       const draft = result.draft;
+      setAccountId(
+        result.revenueAccount?.accountId
+        ?? result.expenseAccount?.accountId
+        ?? "",
+      );
       setRelatedAccountId("");
       setPartyId(draft.party.id ?? "");
       setDraftParty(draft.party.id || !draft.party.name ? null : {
@@ -466,7 +503,17 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
             </div>
             <div className="space-y-1.5">
               <Label>{t("dueDate")}</Label>
-              <Input value={dueDate} onChange={(event) => setDueDate(event.target.value)} type="date" />
+              <Input
+                value={dueDate}
+                onChange={(event) => setDueDate(event.target.value)}
+                type="date"
+                disabled={dueDateLocked}
+              />
+              {dueDateLocked && (
+                <p className="text-xs text-on-surface-variant">
+                  Paid documents are due on the issue date.
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>Document status</Label>
@@ -488,15 +535,25 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
                   <option key={account.id} value={account.id}>{account.code} - {account.name}</option>
                 ))}
               </select>
+              <p className="text-xs text-on-surface-variant">
+                Suggested automatically from status and payment method. You can change it.
+              </p>
             </div>
             <div className="space-y-1.5">
-              <Label>{isSales ? "Revenue" : "Expense"} account</Label>
+              <Label>{isSales ? "Revenue account" : "Expense account"}</Label>
               <select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
-                <option value="">Select account</option>
+                <option value="">
+                  Let AI select on save
+                </option>
                 {accountOptions.map((account) => (
                   <option key={account.id} value={account.id}>{account.code} - {account.name}</option>
                 ))}
               </select>
+              {isAiDraft && accountId && (
+                <p className="text-xs text-primary">
+                  Closest {isSales ? "Revenue" : "Expense"} account selected from the uploaded invoice. You can change it.
+                </p>
+              )}
             </div>
           </div>
 
@@ -504,15 +561,16 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
             <div className="rounded-xl border border-status-success/30 bg-status-success/5 p-4 grid sm:grid-cols-2 gap-4">
               <div>
                 <p className="text-sm font-semibold text-status-success">Automatic settlement</p>
-                <p className="text-xs text-on-surface-variant mt-1">The payment is recorded against the selected asset account in the document journal.</p>
+                <p className="text-xs text-on-surface-variant mt-1">
+                  The selected payment asset account will be used in the {isSales ? "invoice" : isExpense ? "expense" : "bill"} journal.
+                </p>
               </div>
               <div className="space-y-1.5">
                 <Label>Payment method</Label>
                 <select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
                   <option value="cash">Cash</option>
-                  <option value="bank">Bank</option>
+                  <option value="bank">Bank transfer</option>
                   <option value="card">Card</option>
-                  <option value="transfer">Transfer</option>
                 </select>
               </div>
             </div>
@@ -522,7 +580,11 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
             <div className="flex items-center justify-between">
               <div>
                 <Label>Invoice lines</Label>
-                <p className="text-xs text-on-surface-variant mt-1">All lines post to the single document account selected above.</p>
+                <p className="text-xs text-on-surface-variant mt-1">
+                  {isSales
+                    ? "The AI agent analyzes these descriptions and selects the best available Revenue account."
+                    : `The AI agent analyzes these descriptions and selects the closest available Expense account for ${isExpense ? "the expense" : "the bill"}.`}
+                </p>
               </div>
               <Button type="button" variant="outline" size="sm" onClick={() => setLines((current) => [...current, newLine()])} className="gap-1">
                 <Plus className="h-4 w-4" /> Add line
@@ -561,7 +623,7 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
           </div>
 
           <DialogFooter>
-            <Button className="bg-gradient-primary min-w-40" onClick={submitManual} disabled={submitting || lockedByPayment || (!isExpense && !hasParty) || !accountId || !relatedAccountId || !status || totals.total <= 0}>
+            <Button className="bg-gradient-primary min-w-40" onClick={submitManual} disabled={submitting || lockedByPayment || (!isExpense && !hasParty) || !relatedAccountId || !status || totals.total <= 0}>
               {submitting ? "Saving..." : documentId ? "Save Changes" : isAiDraft ? "Confirm Reviewed Invoice" : status === "draft" ? "Save Draft" : status === "paid" ? "Create & Record Payment" : `Create ${isSales ? "Invoice" : isExpense ? "Expense" : "Bill"}`}
             </Button>
           </DialogFooter>

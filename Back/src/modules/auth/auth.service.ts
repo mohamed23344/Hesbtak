@@ -664,6 +664,14 @@ export class AuthService {
     });
   }
 
+  async markUserNotificationsRead(userId: string) {
+    const result = await this.db.userNotification.updateMany({
+      where: { userId, isRead: false },
+      data: { isRead: true },
+    });
+    return { updated: result.count };
+  }
+
   async updateMember(
     organizationId: string,
     memberId: string,

@@ -20,6 +20,7 @@ type Bill = {
   issue_date: string;
   due_date: string;
   total: string;
+  remaining_amount?: string;
   status: string;
 };
 
@@ -176,7 +177,14 @@ function ManagePurchases() {
                   <td className="p-3 text-on-surface-variant">{String(b.issue_date).slice(0, 10)}</td>
                   <td className="p-3 text-on-surface-variant">{String(b.due_date).slice(0, 10)}</td>
                   <td className="p-3"><StatusBadge status={b.status} /></td>
-                  <td className="p-3 text-end font-semibold">{money(b.total)}</td>
+                  <td className="p-3 text-end">
+                    <div className="font-semibold">{money(b.total)}</div>
+                    {b.status === "partial" && (
+                      <div className="text-xs text-status-warning font-medium">
+                        Remaining: {money(b.remaining_amount ?? b.total)}
+                      </div>
+                    )}
+                  </td>
                   <td className="p-3">
                     <button onClick={(event) => { event.stopPropagation(); void handleDelete(b.id); }} className="p-1 rounded text-on-surface-variant hover:text-status-error hover:bg-status-error/10 transition" title="Delete">
                       <Trash2 className="h-4 w-4" />

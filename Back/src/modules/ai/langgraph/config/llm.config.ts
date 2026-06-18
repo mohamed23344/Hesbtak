@@ -10,6 +10,8 @@ const MODEL_ROLES = {
   DATABASE_SEARCH_AGENT: 'hesbetak:database-search',
   FINANCIAL_REASONING_AGENT: 'hesbetak:financial-reasoning',
   REPORT_GENERATION_AGENT: 'hesbetak:report-generation',
+  REVENUE_ACCOUNT_AGENT: 'hesbetak:revenue-account',
+  EXPENSE_ACCOUNT_AGENT: 'hesbetak:expense-account',
 } as const;
 
 export const LLM_MODELS = MODEL_ROLES;
@@ -117,6 +119,8 @@ function roleEnvironmentVariable(model: string) {
     [MODEL_ROLES.DATABASE_SEARCH_AGENT]: 'DATABASE_SEARCH_MODEL',
     [MODEL_ROLES.FINANCIAL_REASONING_AGENT]: 'FINANCIAL_REASONING_MODEL',
     [MODEL_ROLES.REPORT_GENERATION_AGENT]: 'REPORT_GENERATION_MODEL',
+    [MODEL_ROLES.REVENUE_ACCOUNT_AGENT]: 'REVENUE_ACCOUNT_MODEL',
+    [MODEL_ROLES.EXPENSE_ACCOUNT_AGENT]: 'EXPENSE_ACCOUNT_MODEL',
   };
   return roles[model];
 }

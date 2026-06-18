@@ -58,6 +58,11 @@ export class AutomationController {
     return this.automation.listAlerts(await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'notifications'));
   }
 
+  @Post('alerts/read')
+  async markAlertsRead(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser) {
+    return this.automation.markAlertsRead(await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'notifications'));
+  }
+
   @Post('alerts/evaluate')
   async evaluateAlerts(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser) {
     return this.automation.evaluateAlerts(await this.tenant.fromOrganizationId(orgId, user.sub, ['owner', 'accountant']));

@@ -25,7 +25,16 @@ type Payment = {
 };
 
 type Vendor = { id: string; name: string; email?: string };
-type Bill = { id: string; bill_number: string; total: string; vendor_name?: string; status: string; vendor_id: string };
+type Bill = {
+  id: string;
+  bill_number: string;
+  total: string;
+  paid_amount?: string;
+  remaining_amount?: string;
+  vendor_name?: string;
+  status: string;
+  vendor_id: string;
+};
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -83,6 +92,8 @@ function PurchasePayments() {
   );
 
   const vendorBills = bills.filter((b) => !form.vendorId || b.vendor_id === form.vendorId);
+  const selectedBill = bills.find((bill) => bill.id === form.billId);
+  const selectedBillRemaining = Number(selectedBill?.remaining_amount ?? selectedBill?.total ?? 0);
 
   const submit = async () => {
     try {
@@ -146,10 +157,18 @@ function PurchasePayments() {
                       <option value="">Auto-pay oldest unpaid bill</option>
                       {vendorBills.map((b) => (
                         <option key={b.id} value={b.id}>
-                          {b.bill_number} - {money(b.total)} ({b.status})
+                          {b.bill_number} - {money(b.remaining_amount ?? b.total)} left ({b.status})
                         </option>
                       ))}
                     </select>
+                    {selectedBill && (
+                      <p className="text-xs text-on-surface-variant">
+                        Left amount: <span className="font-semibold text-on-surface">{money(selectedBillRemaining)}</span>
+                        {selectedBill.status === "partial" && selectedBill.paid_amount
+                          ? ` after ${money(selectedBill.paid_amount)} already paid`
+                          : ""}
+                      </p>
+                    )}
                   </div>
                 )}
 

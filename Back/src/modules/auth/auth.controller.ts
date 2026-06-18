@@ -130,6 +130,12 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Post('auth/notifications/read')
+  markNotificationsRead(@CurrentUser() user: JwtUser) {
+    return this.auth.markUserNotificationsRead(user.sub);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Post('organizations')
   createOrganization(@CurrentUser() user: JwtUser, @Body() dto: CreateOrganizationDto) {
     return this.auth.createOrganization(user.sub, dto);

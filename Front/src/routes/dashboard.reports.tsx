@@ -13,7 +13,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { Header } from "./dashboard.transactions";
-import { api, apiBlob, getSession } from "@/lib/api";
+import { api, apiBlob, getSession, money } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -668,7 +668,6 @@ function FieldLabel({ label: text, children }: { label: string; children: React.
 function NativeSelect({ value, onChange, children }: { value: string; onChange: (value: string) => void; children: React.ReactNode }) { return <select value={value} onChange={(event) => onChange(event.target.value)} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm">{children}</select>; }
 function updateConfig(setBuilder: (value: Builder) => void, builder: Builder, key: keyof Configuration, value: unknown) { setBuilder({ ...builder, configuration: { ...builder.configuration, [key]: value } }); }
 function display(value: unknown) { if (typeof value === "number") return value.toLocaleString(undefined, { maximumFractionDigits: 2 }); return String(value ?? ""); }
-function money(value: unknown) { return Number(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function groupLabel(value: string) { return ({ customer_name: "Customer", vendor_name: "Vendor", bill_type: "Bill Type", account_name: "Expense Account", month: "Month", quarter: "Quarter", year: "Year", department: "Department" } as Record<string, string>)[value] ?? label(value); }
 function label(value: string) { return value.replaceAll("_", " ").replace(/\b\w/g, (character) => character.toUpperCase()); }
 function formatDate(value?: string) { return value ? new Date(value).toLocaleString() : "Not run"; }

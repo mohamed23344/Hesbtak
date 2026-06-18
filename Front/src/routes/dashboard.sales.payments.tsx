@@ -25,7 +25,16 @@ type Payment = {
 };
 
 type Customer = { id: string; name: string; email?: string };
-type Invoice = { id: string; invoice_number: string; customer_id: string; total: string; customer_name?: string; status: string };
+type Invoice = {
+  id: string;
+  invoice_number: string;
+  customer_id: string;
+  total: string;
+  paid_amount?: string;
+  remaining_amount?: string;
+  customer_name?: string;
+  status: string;
+};
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -83,6 +92,8 @@ function SalesPayments() {
   );
 
   const customerInvoices = invoices.filter((inv) => !form.customerId || inv.customer_id === form.customerId);
+  const selectedInvoice = invoices.find((invoice) => invoice.id === form.invoiceId);
+  const selectedInvoiceRemaining = Number(selectedInvoice?.remaining_amount ?? selectedInvoice?.total ?? 0);
 
   const submit = async () => {
     try {
@@ -146,10 +157,18 @@ function SalesPayments() {
                       <option value="">Auto-pay oldest unpaid invoice</option>
                       {customerInvoices.map((inv) => (
                         <option key={inv.id} value={inv.id}>
-                          {inv.invoice_number} - {money(inv.total)} ({inv.status})
+                          {inv.invoice_number} - {money(inv.remaining_amount ?? inv.total)} left ({inv.status})
                         </option>
                       ))}
                     </select>
+                    {selectedInvoice && (
+                      <p className="text-xs text-on-surface-variant">
+                        Left amount: <span className="font-semibold text-on-surface">{money(selectedInvoiceRemaining)}</span>
+                        {selectedInvoice.status === "partial" && selectedInvoice.paid_amount
+                          ? ` after ${money(selectedInvoice.paid_amount)} already paid`
+                          : ""}
+                      </p>
+                    )}
                   </div>
                 )}
 

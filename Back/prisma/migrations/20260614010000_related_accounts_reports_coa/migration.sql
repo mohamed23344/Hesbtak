@@ -20,7 +20,7 @@ BEGIN
 
     EXECUTE format(
       'INSERT INTO %I.accounts (code, name, type, level, is_leaf)
-       VALUES (''100'', ''Assets'', ''Asset'', 1, false)
+       VALUES (''1000'', ''Assets'', ''Asset'', 1, false)
        ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, type = EXCLUDED.type,
          parent_id = NULL, level = 1, is_leaf = false',
       tenant_schema
@@ -28,8 +28,8 @@ BEGIN
     EXECUTE format(
       'INSERT INTO %I.accounts (code, name, type, parent_id, level, is_leaf)
        VALUES
-         (''110'', ''Current Assets'', ''Asset'', (SELECT id FROM %I.accounts WHERE code = ''100''), 2, false),
-         (''150'', ''Fixed Assets'', ''Asset'', (SELECT id FROM %I.accounts WHERE code = ''100''), 2, false)
+         (''1100'', ''Current Assets'', ''Asset'', (SELECT id FROM %I.accounts WHERE code = ''1000''), 2, false),
+         (''1200'', ''Fixed Assets'', ''Asset'', (SELECT id FROM %I.accounts WHERE code = ''1000''), 2, false)
        ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, type = EXCLUDED.type,
          parent_id = EXCLUDED.parent_id, level = EXCLUDED.level, is_leaf = EXCLUDED.is_leaf',
       tenant_schema, tenant_schema, tenant_schema
@@ -37,19 +37,20 @@ BEGIN
     EXECUTE format(
       'INSERT INTO %I.accounts (code, name, type, parent_id, level, is_leaf)
        VALUES
-         (''1000'', ''Cash and Bank'', ''Asset'', (SELECT id FROM %I.accounts WHERE code = ''110''), 3, true),
-         (''1100'', ''Accounts Receivable'', ''Asset'', (SELECT id FROM %I.accounts WHERE code = ''110''), 3, true),
-         (''1200'', ''Input Tax Receivable'', ''Asset'', (SELECT id FROM %I.accounts WHERE code = ''110''), 3, true),
-         (''1300'', ''Inventory'', ''Asset'', (SELECT id FROM %I.accounts WHERE code = ''110''), 3, true),
-         (''1500'', ''Property and Equipment'', ''Asset'', (SELECT id FROM %I.accounts WHERE code = ''150''), 3, true)
+         (''1110'', ''Trade Receivables'', ''Asset'', (SELECT id FROM %I.accounts WHERE code = ''1100''), 3, true),
+         (''1130'', ''Cash on Hand'', ''Asset'', (SELECT id FROM %I.accounts WHERE code = ''1100''), 3, true),
+         (''1140'', ''Bank Accounts'', ''Asset'', (SELECT id FROM %I.accounts WHERE code = ''1100''), 3, true),
+         (''1150'', ''Payment Processors'', ''Asset'', (SELECT id FROM %I.accounts WHERE code = ''1100''), 3, true),
+         (''1170'', ''Recoverable VAT'', ''Asset'', (SELECT id FROM %I.accounts WHERE code = ''1100''), 3, true),
+         (''1210'', ''Furniture and Fixtures'', ''Asset'', (SELECT id FROM %I.accounts WHERE code = ''1200''), 3, true)
        ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, type = EXCLUDED.type,
          parent_id = EXCLUDED.parent_id, level = EXCLUDED.level, is_leaf = EXCLUDED.is_leaf',
-      tenant_schema, tenant_schema, tenant_schema, tenant_schema, tenant_schema, tenant_schema
+      tenant_schema, tenant_schema, tenant_schema, tenant_schema, tenant_schema, tenant_schema, tenant_schema
     );
 
     EXECUTE format(
       'UPDATE %I.invoices
-          SET related_account_id = (SELECT id FROM %I.accounts WHERE code = ''1100'')
+          SET related_account_id = (SELECT id FROM %I.accounts WHERE code = ''1110'')
         WHERE related_account_id IS NULL',
       tenant_schema, tenant_schema
     );

@@ -76,10 +76,12 @@ export class ConfirmInvoiceExtractionDto {
   dueDate!: string;
 
   @IsString()
-  accountId!: string;
+  @IsOptional()
+  accountId?: string;
 
   @IsString()
-  relatedAccountId!: string;
+  @IsOptional()
+  relatedAccountId?: string;
 
   @IsIn(['draft', 'open', 'paid'])
   status!: 'draft' | 'open' | 'paid';

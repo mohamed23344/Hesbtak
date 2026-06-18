@@ -7,6 +7,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InferenceClient } from '@huggingface/inference';
 import { AccountingService } from '../accounting/accounting.service';
+import { ExpenseAccountAgent } from '../accounting/expense-account.agent';
+import { RevenueAccountAgent } from '../accounting/revenue-account.agent';
 import { TenantContext } from '../tenant/tenant.service';
 import {
   ConfirmInvoiceExtractionDto,
@@ -60,6 +62,8 @@ export class AiInvoiceExtractionService {
   constructor(
     private readonly config: ConfigService,
     private readonly accounting: AccountingService,
+    private readonly revenueAccountAgent: RevenueAccountAgent,
+    private readonly expenseAccountAgent: ExpenseAccountAgent,
   ) {}
 
   async extract(
@@ -119,12 +123,37 @@ export class AiInvoiceExtractionService {
 
       const draft = this.normalizeDraft(this.parseJson(content));
       draft.party.id = await this.matchParty(ctx, section, draft.party.name);
+      const revenueAccount =
+        section === 'sales'
+          ? await this.revenueAccountAgent.classify(
+              ctx,
+              draft.lines
+                .filter((line) => Boolean(line.description?.trim()))
+                .map((line) => ({
+                  description: line.description!,
+                  quantity: line.quantity ?? 1,
+                  unitPrice: line.unitPrice ?? 0,
+                })),
+            )
+          : undefined;
+      const expenseAccount =
+        section === 'purchases' || section === 'expenses'
+          ? await this.expenseAccountAgent.classify(
+              ctx,
+              draft.party.name,
+              draft.lines
+                .map((line) => line.description?.trim())
+                .filter((description): description is string => Boolean(description)),
+            )
+          : undefined;
 
       return {
         model: `${MODEL}:${PROVIDER}`,
         fileName: file!.originalname,
         section,
         draft,
+        revenueAccount,
+        expenseAccount,
       };
     } catch (error) {
       console.log(error)
