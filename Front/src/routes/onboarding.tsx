@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { useEffect, useMemo, useState, type ElementType, type ReactNode } from "react";
 import {
-  Building2, Briefcase, Coins, Wallet, ArrowRight, ArrowLeft,
+  Building2, Briefcase, Coins, CreditCard, Wallet, ArrowRight, ArrowLeft,
   Check, Info, ChevronRight, Folder, FileText, Plus, Trash2, LoaderCircle, Pencil
 } from "lucide-react";
 import { BrandMark, LangToggle, ThemeToggle } from "@/components/Brand";
@@ -28,6 +28,15 @@ export const Route = createFileRoute("/onboarding")({
 type IndustryCategory = "Commercial" | "Industrial" | "Services" | "Others";
 type COAOption = COANode & { depth: number };
 type COAAddition = COANode & { parentId: string };
+type SubscriptionPlan = {
+  id: string;
+  code: "regular" | "plus" | "pro";
+  name: string;
+  price: string | number;
+  currency: string;
+  billingCycle: string;
+  features: Record<string, boolean>;
+};
 
 const INDUSTRY_GROUPS: Record<IndustryCategory, string[]> = {
   Commercial: ["Retail", "E-commerce", "Wholesale", "Distribution", "Restaurant / Food & Beverage", "Import / Export"],
@@ -275,8 +284,7 @@ const buildCOA = (enabledQuestionKeys: Set<string>) => {
 
 function Onboarding() {
   const { newOrganization: createNew } = Route.useSearch();
-  const { dir, t } = useI18n();
-  const nav = useNavigate();
+  const { dir, t, l } = useI18n();
   const { saveCOA } = useCOA();
   const [step, setStep] = useState(0);
   const [company, setCompany] = useState("");
@@ -290,6 +298,8 @@ function Onboarding() {
     Object.fromEntries(COA_QUESTIONS.map((question) => [question.key, !!question.defaultOn])),
   );
   const [customCOA, setCustomCOA] = useState<COANode[]>(DEFAULT_COA);
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [selectedPlanId, setSelectedPlanId] = useState("");
 
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
@@ -298,7 +308,7 @@ function Onboarding() {
   const [newAccParent, setNewAccParent] = useState("5");
   const [saving, setSaving] = useState(false);
 
-  const STEPS = [t("stepCompany"), t("stepIndustry"), t("stepCurrency"), t("stepAccounts")];
+  const STEPS = [t("stepCompany"), t("stepIndustry"), t("stepCurrency"), l("Subscription"), t("stepAccounts")];
 
   const industry = industryCategory === "Others"
     ? otherBusiness.trim()
@@ -316,6 +326,15 @@ function Onboarding() {
   useEffect(() => {
     setCustomCOA(buildCOA(enabledQuestionKeys));
   }, [enabledQuestionKeys]);
+
+  useEffect(() => {
+    api<SubscriptionPlan[]>("/plans")
+      .then((availablePlans) => {
+        setPlans(availablePlans);
+        setSelectedPlanId((current) => current || availablePlans.find((plan) => plan.code === "regular")?.id || availablePlans[0]?.id || "");
+      })
+      .catch((error) => toast.error(error instanceof Error ? error.message : l("Could not load plans")));
+  }, []);
 
   const toggleCurrency = (code: string) => {
     setSelectedCurrencies((prev) => {
@@ -405,6 +424,16 @@ function Onboarding() {
       });
       createdIds.set(account.id, created.id);
     }
+    return createdTenant;
+  };
+
+  const openSubscriptionCheckout = async () => {
+    if (!selectedPlanId) throw new Error(l("Choose a subscription plan to continue"));
+    const checkout = await api<{ checkoutUrl: string }>("/subscriptions/checkout", {
+      method: "POST",
+      body: JSON.stringify({ planId: selectedPlanId }),
+    });
+    window.location.assign(checkout.checkoutUrl);
   };
 
   const handleNext = async () => {
@@ -416,6 +445,10 @@ function Onboarding() {
       toast.error("Business type is required");
       return;
     }
+    if (step === 3 && !selectedPlanId) {
+      toast.error(l("Choose a subscription plan to continue"));
+      return;
+    }
     if (step < STEPS.length - 1) {
       setStep(step + 1);
       return;
@@ -425,8 +458,7 @@ function Onboarding() {
     try {
       await finishOnboarding(customCOA);
       saveCOA(customCOA);
-      toast.success("Workspace created!");
-      nav({ to: "/dashboard" });
+      await openSubscriptionCheckout();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not complete onboarding");
     } finally {
@@ -439,8 +471,7 @@ function Onboarding() {
     try {
       await finishOnboarding(DEFAULT_COA);
       saveCOA(DEFAULT_COA);
-      toast.success(t("skipCOAMsg"));
-      nav({ to: "/dashboard" });
+      await openSubscriptionCheckout();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not complete onboarding");
     } finally {
@@ -669,6 +700,40 @@ function Onboarding() {
           )}
 
           {step === 3 && (
+            <StepWrap icon={CreditCard} title={l("Choose your subscription")} desc={l("Select a plan before we create your workspace and chart of accounts.")}>
+              <div className="grid gap-4 md:grid-cols-3">
+                {plans.map((plan) => {
+                  const selected = selectedPlanId === plan.id;
+                  const featureLines = plan.code === "regular"
+                    ? [l("All core accounting features"), l("No AI, scheduled reports, or forecasting")]
+                    : plan.code === "plus"
+                      ? [l("Everything in Regular"), l("Scheduled reports and forecasting"), l("No AI features")]
+                      : [l("Everything in Plus"), l("AI chat assistant"), l("Automatic invoice extraction")];
+                  return (
+                    <button
+                      key={plan.id}
+                      type="button"
+                      onClick={() => setSelectedPlanId(plan.id)}
+                      className={`rounded-2xl border p-5 text-start shadow-soft transition ${selected ? "border-primary bg-primary/8 ring-2 ring-primary/20" : "border-border-default bg-background/30 hover:border-primary/40"}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h3 className="text-lg font-bold">{l(plan.name)}</h3>
+                          <p className="mt-2 text-2xl font-bold">{Number(plan.price).toLocaleString()} <span className="text-sm font-normal">{plan.currency}/{l("month")}</span></p>
+                        </div>
+                        {selected && <Check className="h-5 w-5 text-primary" />}
+                      </div>
+                      <ul className="mt-4 space-y-2 text-sm text-on-surface-variant">
+                        {featureLines.map((feature) => <li key={feature}>• {feature}</li>)}
+                      </ul>
+                    </button>
+                  );
+                })}
+              </div>
+            </StepWrap>
+          )}
+
+          {step === 4 && (
             <StepWrap icon={Wallet} title={t("setupAccountsTitle")} desc="Toggle the accounts your business needs. You can still add and remove accounts manually.">
               <div className="space-y-4">
                 <TooltipProvider>
@@ -734,7 +799,7 @@ function Onboarding() {
           )}
 
           <div className="mt-8 flex items-center justify-between">
-            {step === 3 ? (
+            {step === 4 ? (
               <Button variant="ghost" onClick={handleSkipCOA} className="text-on-surface-variant cursor-pointer hover:bg-surface-container" disabled={saving}>
                 {t("skipCOA")}
               </Button>

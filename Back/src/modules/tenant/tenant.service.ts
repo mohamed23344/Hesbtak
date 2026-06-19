@@ -12,6 +12,8 @@ export interface TenantContext {
   permissions?: string[];
 }
 
+type SubscriptionFeature = 'chatbot' | 'invoiceAiExtraction' | 'scheduledReports' | 'forecasting';
+
 @Injectable()
 export class TenantService {
   constructor(private readonly db: DataBaseService) {}
@@ -32,7 +34,7 @@ export class TenantService {
     userId: string,
     allowedRoles: string[] = ['owner', 'accountant', 'viewer'],
     requiredPermission?: string,
-    requiredFeature?: 'chatbot' | 'invoiceAiExtraction',
+    requiredFeature?: SubscriptionFeature,
   ): Promise<TenantContext> {
     await this.ensureAccessControlSchema();
     const membership = await this.db.organizationUser.findFirst({
@@ -68,11 +70,13 @@ export class TenantService {
       const subscription = await this.subscriptionForOrganization(organizationId);
       const features = this.featureMap(subscription?.plan.features);
       if (!features[requiredFeature]) {
-        throw new ForbiddenException(
-          requiredFeature === 'chatbot'
-            ? 'The AI chatbot requires the AI Pro subscription'
-            : 'AI invoice extraction requires the AI Pro subscription',
-        );
+        const messages: Record<SubscriptionFeature, string> = {
+          chatbot: 'The AI chatbot requires the Pro subscription',
+          invoiceAiExtraction: 'AI invoice extraction requires the Pro subscription',
+          scheduledReports: 'Scheduled reports require the Plus or Pro subscription',
+          forecasting: 'Forecasting requires the Plus or Pro subscription',
+        };
+        throw new ForbiddenException(messages[requiredFeature]);
       }
     }
 

@@ -317,27 +317,43 @@ private async syncFromPaymob(subscriptionId: string, _intentionId: string) {
   private async ensurePlans() {
     const plans = [
       {
-        code: 'core',
-        name: 'Core',
+        code: 'regular',
+        name: 'Regular',
         price: 299,
         currency: 'EGP',
         billingCycle: 'monthly',
         features: {
           chatbot: false,
           invoiceAiExtraction: false,
+          scheduledReports: false,
+          forecasting: false,
+          reports: true,
+        },
+      },
+      {
+        code: 'plus',
+        name: 'Plus',
+        price: 399,
+        currency: 'EGP',
+        billingCycle: 'monthly',
+        features: {
+          chatbot: false,
+          invoiceAiExtraction: false,
+          scheduledReports: true,
           forecasting: true,
           reports: true,
         },
       },
       {
-        code: 'ai_pro',
-        name: 'AI Pro',
+        code: 'pro',
+        name: 'Pro',
         price: 499,
         currency: 'EGP',
         billingCycle: 'monthly',
         features: {
           chatbot: true,
           invoiceAiExtraction: true,
+          scheduledReports: true,
           forecasting: true,
           reports: true,
         },
@@ -349,6 +365,21 @@ private async syncFromPaymob(subscriptionId: string, _intentionId: string) {
         create: plan,
         update: { ...plan, isActive: true },
       });
+    }
+
+    const [regular, pro, legacyPlans] = await Promise.all([
+      this.db.plan.findUniqueOrThrow({ where: { code: 'regular' } }),
+      this.db.plan.findUniqueOrThrow({ where: { code: 'pro' } }),
+      this.db.plan.findMany({ where: { code: { notIn: plans.map((plan) => plan.code) } } }),
+    ]);
+    for (const legacyPlan of legacyPlans) {
+      await this.db.subscription.updateMany({
+        where: { planId: legacyPlan.id },
+        data: { planId: legacyPlan.code === 'ai_pro' ? pro.id : regular.id },
+      });
+    }
+    if (legacyPlans.length) {
+      await this.db.plan.deleteMany({ where: { id: { in: legacyPlans.map((plan) => plan.id) } } });
     }
   }
 

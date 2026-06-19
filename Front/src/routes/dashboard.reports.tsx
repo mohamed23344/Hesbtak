@@ -139,6 +139,9 @@ const INVOICE_SORT_FIELDS: Field[] = [
 
 function Page() {
   const { t, l } = useI18n();
+  const session = getSession();
+  const activeTenant = session?.tenants.find((tenant) => tenant.organizationId === session.activeTenantId);
+  const canSchedule = activeTenant?.subscription?.plan.features.scheduledReports === true;
   const [templates, setTemplates] = useState<Template[]>([]);
   const [customFields, setCustomFields] = useState<Record<string, Field[]>>({});
   const [groupFields, setGroupFields] = useState<Partial<Record<ReportType, string[]>>>({});
@@ -170,8 +173,8 @@ function Page() {
         }>("/tenant/reports/templates"),
         api<Dashboard>("/tenant/reports/dashboard"),
         api<SavedReport[]>("/tenant/reports"),
-        api<Schedule[]>("/tenant/reports/schedules/list"),
-        api<Execution[]>("/tenant/reports/executions/list"),
+        canSchedule ? api<Schedule[]>("/tenant/reports/schedules/list") : Promise.resolve([] as Schedule[]),
+        canSchedule ? api<Execution[]>("/tenant/reports/executions/list") : Promise.resolve([] as Execution[]),
       ]);
       setTemplates(templateData.templates);
       setCustomFields(templateData.customFields);
@@ -339,8 +342,8 @@ function Page() {
           <TabsTrigger value="dashboard">{t("dashboard")}</TabsTrigger>
           <TabsTrigger value="create">{l("Create Report")}</TabsTrigger>
           <TabsTrigger value="saved">{l("Saved Reports")}</TabsTrigger>
-          <TabsTrigger value="scheduled">{l("Scheduled Reports")}</TabsTrigger>
-          <TabsTrigger value="generated">{l("Generated Scheduled Reports")}</TabsTrigger>
+          {canSchedule && <TabsTrigger value="scheduled">{l("Scheduled Reports")}</TabsTrigger>}
+          {canSchedule && <TabsTrigger value="generated">{l("Generated Scheduled Reports")}</TabsTrigger>}
           <TabsTrigger value="templates">{l("Templates")}</TabsTrigger>
         </TabsList>
 
@@ -348,7 +351,7 @@ function Page() {
           <div className="grid sm:grid-cols-3 gap-4">
             <Metric title={l("Reports generated")} value={dashboard?.totalGenerated ?? 0} icon={FileBarChart} />
             <Metric title={l("Saved reports")} value={dashboard?.savedCount ?? 0} icon={Save} />
-            <Metric title={l("Active schedules")} value={dashboard?.scheduledCount ?? 0} icon={CalendarClock} />
+            {canSchedule && <Metric title={l("Active schedules")} value={dashboard?.scheduledCount ?? 0} icon={CalendarClock} />}
           </div>
           <div className="grid lg:grid-cols-2 gap-4">
             <Panel title={l("Recently generated")}>
@@ -357,12 +360,12 @@ function Page() {
                 detail: `${l(item.status)} · ${formatDate(item.completed_at, l)}`,
               }))} />
             </Panel>
-            <Panel title={l("Upcoming scheduled reports")}>
+            {canSchedule && <Panel title={l("Upcoming scheduled reports")}>
               <SimpleList items={(dashboard?.upcoming ?? []).map((item) => ({
                 title: item.name,
                 detail: `${l(item.frequency)} · ${formatDate(item.next_run_at, l)}`,
               }))} />
-            </Panel>
+            </Panel>}
             <Panel title={l("Most used templates")}>
               <SimpleList items={(dashboard?.mostUsedTemplates ?? []).map((item) => ({
                 title: item.report_type,

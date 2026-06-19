@@ -18,7 +18,7 @@ type Alert = {
 };
 
 function Page() {
-  const { t } = useI18n();
+  const { t, l, lang } = useI18n();
   const [alerts, setAlerts] = useState<Alert[]>([]);
 
   useEffect(() => {
@@ -43,7 +43,7 @@ function Page() {
         : [];
       setAlerts([...userAlerts, ...tenantAlerts]);
       if (results.every((result) => result.status === "rejected")) {
-        toast.error("Could not load notifications");
+        toast.error(l("Could not load notifications"));
       }
       const readRequests = [];
       if (userAlerts.some((alert) => !alert.is_read)) {
@@ -65,6 +65,8 @@ function Page() {
       <div className="bg-card border border-border-default rounded-2xl divide-y divide-border-default shadow-soft">
         {(alerts.length ? alerts : [{ id: "empty", title: "No notifications", message: "You are all caught up.", severity: "info", is_read: true, created_at: "" } as Alert]).map((alert) => {
           const Icon = alert.severity === "info" ? Bell : alert.is_read ? CheckCircle2 : AlertTriangle;
+          const title = localizeNotification(alert.title, l);
+          const message = localizeNotification(alert.message, l);
           return (
             <div key={alert.id} className="flex items-start gap-4 p-4 hover:bg-surface-subtle">
               <div className={`h-10 w-10 rounded-xl grid place-items-center shrink-0 ${
@@ -75,14 +77,35 @@ function Page() {
                 <Icon className="h-5 w-5" />
               </div>
               <div className="flex-1">
-                <p className="font-medium text-sm">{alert.title}</p>
-                <p className="text-sm text-on-surface-variant mt-0.5">{alert.message}</p>
+                <p className="font-medium text-sm">{title}</p>
+                <p className="text-sm text-on-surface-variant mt-0.5">{message}</p>
               </div>
-              <span className="text-xs text-on-surface-variant whitespace-nowrap">{alert.created_at ? String(alert.created_at).slice(0, 10) : ""}</span>
+              <span className="text-xs text-on-surface-variant whitespace-nowrap">
+                {alert.created_at ? new Date(alert.created_at).toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US") : ""}
+              </span>
             </div>
           );
         })}
       </div>
     </div>
   );
+}
+
+function localizeNotification(text: string, localize: (value: string) => string) {
+  const exact = localize(text);
+  if (exact !== text) return exact;
+
+  let match = text.match(/^Invoice (.+) is due by (.+)$/);
+  if (match) return `${localize("Invoice")} ${match[1]} ${localize("is due by")} ${match[2]}`;
+
+  match = text.match(/^You were added to (.+) as (.+)\.$/);
+  if (match) return `${localize("You were added to")} ${match[1]} ${localize("as")} ${localize(match[2])}.`;
+
+  match = text.match(/^Your access to (.+) was (deactivated|removed)\.$/);
+  if (match) return `${localize("Your access to")} ${match[1]} ${localize(`was ${match[2]}`)}.`;
+
+  match = text.match(/^(.+) was (deactivated|removed) by a platform administrator\.$/);
+  if (match) return `${match[1]} ${localize(`was ${match[2]} by a platform administrator`)}.`;
+
+  return text;
 }

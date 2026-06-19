@@ -483,6 +483,8 @@ export class ReportsService {
       select: { id: true, schemaName: true },
     });
     for (const organization of organizations) {
+      const subscription = await this.tenant.subscriptionForOrganization(organization.id);
+      if (!this.tenant.featureMap(subscription?.plan.features).scheduledReports) continue;
       const ctx: TenantContext = {
         organizationId: organization.id,
         schemaName: organization.schemaName,

@@ -48,7 +48,7 @@ export class AutomationController {
     @Query('months') months?: string,
   ) {
     return this.automation.forecast(
-      await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'forecasting'),
+      await this.tenant.fromOrganizationId(orgId, user.sub, undefined, 'forecasting', 'forecasting'),
       months ? Number(months) : 12,
     );
   }

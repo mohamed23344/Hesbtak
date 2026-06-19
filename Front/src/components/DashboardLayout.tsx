@@ -134,6 +134,7 @@ export default function DashboardLayout() {
     { to: "/dashboard/reports", label: t("reports"), permission: "reports" },
   ].filter((item) => {
     if (item.permission === "assistant" && !features.chatbot) return false;
+    if (item.permission === "forecasting" && !features.forecasting) return false;
     return !item.permission || activeTenant?.role !== "viewer" || activeTenant.permissions?.includes(item.permission);
   });
 

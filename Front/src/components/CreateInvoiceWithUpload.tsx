@@ -7,7 +7,7 @@ import { DialogFooter, Dialog, DialogContent, DialogHeader, DialogTitle } from "
 import { UploadCloud, CheckCircle2, Plus, Search, Trash2, LoaderCircle, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/lib/i18n";
-import { api, money } from "@/lib/api";
+import { api, getSession, money } from "@/lib/api";
 
 type Props = {
   title: string;
@@ -88,6 +88,8 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
   const partyLabel = isSales ? "Customer" : "Vendor";
   const partyEndpoint = isSales ? "/tenant/customers" : "/tenant/vendors";
   const invoiceEndpoint = isSales ? "/tenant/invoices" : "/tenant/vendor-bills";
+  const activeTenant = getSession()?.tenants.find((tenant) => tenant.organizationId === getSession()?.activeTenantId);
+  const canExtractInvoices = activeTenant?.subscription?.plan.features.invoiceAiExtraction === true;
 
   const [tab, setTab] = useState("manual");
   const [submitting, setSubmitting] = useState(false);
@@ -424,7 +426,7 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
       ) : <Tabs value={tab} onValueChange={setTab} className="w-full">
         <TabsList dir="ltr" className={`w-full sm:w-auto ${isArabic ? "flex-row-reverse" : "flex-row"}`}>
           <TabsTrigger value="manual">{t("manualEntry")}</TabsTrigger>
-          {!documentId && <TabsTrigger value="upload">{t("uploadDocument")}</TabsTrigger>}
+          {!documentId && canExtractInvoices && <TabsTrigger value="upload">{t("uploadDocument")}</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="manual" className={`mt-5 space-y-5 ${directionAlignment}`}>
@@ -480,7 +482,14 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
               <div className="space-y-2">
                 <div className="relative">
                   <Search className={`h-4 w-4 absolute top-1/2 -translate-y-1/2 text-on-surface-variant ${isArabic ? "right-3" : "left-3"}`} />
-                  <Input className={isArabic ? "pr-9" : "pl-9"} placeholder={l(`Search ${partyLabel.toLowerCase()} by name or email`)} value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} />
+                  <Input
+                    dir={dir}
+                    className={isArabic ? "pr-9 text-right placeholder:text-right" : "pl-9 text-left placeholder:text-left"}
+                    style={{ textAlign: isArabic ? "right" : "left" }}
+                    placeholder={l(`Search ${partyLabel.toLowerCase()} by name or email`)}
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                  />
                 </div>
                 <div className="max-h-44 overflow-y-auto rounded-lg border border-border-default divide-y divide-border-default">
                   {filteredParties.length ? filteredParties.map((party) => (
@@ -584,8 +593,8 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
                 <Label>{l("Invoice lines")}</Label>
                 <p className="text-xs text-on-surface-variant mt-1">
                   {isSales
-                    ? "The AI agent analyzes these descriptions and selects the best available Revenue account."
-                    : `The AI agent analyzes these descriptions and selects the closest available Expense account for ${isExpense ? "the expense" : "the bill"}.`}
+                    ? l("The AI agent analyzes these descriptions and selects the best available Revenue account.")
+                    : l(`The AI agent analyzes these descriptions and selects the closest available Expense account.`)}
                 </p>
               </div>
               <Button type="button" variant="outline" size="sm" onClick={() => setLines((current) => [...current, newLine()])} className={`row-start-1 gap-1 ${isArabic ? "col-start-1 justify-self-start" : "col-start-2 justify-self-end"}`}>
@@ -604,7 +613,8 @@ export default function CreateInvoiceWithUpload({ title, type, documentId, onDon
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
-                    <Input value={line.description} onChange={(event) => updateLine(line.id, "description", event.target.value)} placeholder={l("Item or service description")} />
+                    <Input value={line.description} onChange={(event) => updateLine(line.id, "description", event.target.value)} className={isArabic ? "pr-9 text-right placeholder:text-right" : "pl-9 text-left placeholder:text-left"}
+ placeholder={l("Item or service description")} />
                     <div dir={dir} className="grid grid-cols-2 md:grid-cols-5 gap-3">
                       <div className="space-y-1"><Label className="text-xs">{l("Quantity")}</Label><Input min="0.0001" step="0.01" type="number" value={line.quantity} onChange={(event) => updateLine(line.id, "quantity", event.target.value)} /></div>
                       <div className="space-y-1"><Label className="text-xs">{l("Unit price")}</Label><Input min="0" step="0.01" type="number" value={line.unitPrice} onChange={(event) => updateLine(line.id, "unitPrice", event.target.value)} /></div>

@@ -41,6 +41,16 @@ export class ReportsController {
     );
   }
 
+  private scheduleContext(orgId: string, user: JwtUser, write = false) {
+    return this.tenant.fromOrganizationId(
+      orgId,
+      user.sub,
+      write ? ['owner', 'accountant'] : undefined,
+      write ? undefined : 'reports',
+      'scheduledReports',
+    );
+  }
+
   @Get('dashboard')
   async dashboard(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser) {
     return this.reports.dashboard(await this.context(orgId, user));
@@ -123,7 +133,7 @@ export class ReportsController {
 
   @Get('schedules/list')
   async schedules(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser) {
-    return this.reports.listSchedules(await this.context(orgId, user));
+    return this.reports.listSchedules(await this.scheduleContext(orgId, user));
   }
 
   @Post('schedules')
@@ -132,7 +142,7 @@ export class ReportsController {
     @CurrentUser() user: JwtUser,
     @Body() dto: CreateScheduleDto,
   ) {
-    return this.reports.createSchedule(await this.context(orgId, user, true), user.sub, dto);
+    return this.reports.createSchedule(await this.scheduleContext(orgId, user, true), user.sub, dto);
   }
 
   @Patch('schedules/:id')
@@ -142,7 +152,7 @@ export class ReportsController {
     @Param('id') id: string,
     @Body() dto: UpdateScheduleDto,
   ) {
-    return this.reports.updateSchedule(await this.context(orgId, user, true), user.sub, id, dto);
+    return this.reports.updateSchedule(await this.scheduleContext(orgId, user, true), user.sub, id, dto);
   }
 
   @Delete('schedules/:id')
@@ -151,7 +161,7 @@ export class ReportsController {
     @CurrentUser() user: JwtUser,
     @Param('id') id: string,
   ) {
-    return this.reports.removeSchedule(await this.context(orgId, user, true), user.sub, id);
+    return this.reports.removeSchedule(await this.scheduleContext(orgId, user, true), user.sub, id);
   }
 
   @Post('schedules/:id/run')
@@ -160,12 +170,12 @@ export class ReportsController {
     @CurrentUser() user: JwtUser,
     @Param('id') id: string,
   ) {
-    return this.reports.runSchedule(await this.context(orgId, user, true), id);
+    return this.reports.runSchedule(await this.scheduleContext(orgId, user, true), id);
   }
 
   @Get('executions/list')
   async executions(@Headers('x-tenant-id') orgId: string, @CurrentUser() user: JwtUser) {
-    return this.reports.executions(await this.context(orgId, user));
+    return this.reports.executions(await this.scheduleContext(orgId, user));
   }
 
   @Get('executions/:id/download')
@@ -175,7 +185,7 @@ export class ReportsController {
     @Param('id') id: string,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const file = await this.reports.executionFile(await this.context(orgId, user), id);
+    const file = await this.reports.executionFile(await this.scheduleContext(orgId, user), id);
     response.setHeader('Content-Type', file.contentType);
     response.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
     return new StreamableFile(file.buffer);

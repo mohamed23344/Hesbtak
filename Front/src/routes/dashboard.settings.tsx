@@ -367,9 +367,11 @@ function Page() {
                   <span className="text-sm font-normal">{plan.currency}/{l("month")}</span>
                 </p>
                 <div className="mt-4 space-y-2 text-sm">
-                  <p>{l("Accounting, journals, reports, and forecasting")}</p>
-                  <p>{l(plan.features.chatbot ? "AI financial chatbot included" : "AI financial chatbot not included")}</p>
-                  <p>{l(plan.features.invoiceAiExtraction ? "AI invoice extraction included" : "AI invoice extraction not included")}</p>
+                  <p>✓ {l("Core accounting and reports")}</p>
+                  <p>{plan.features.scheduledReports ? "✓" : "—"} {l(plan.features.scheduledReports ? "Scheduled reports included" : "Scheduled reports not included")}</p>
+                  <p>{plan.features.forecasting ? "✓" : "—"} {l(plan.features.forecasting ? "Forecasting included" : "Forecasting not included")}</p>
+                  <p>{plan.features.chatbot ? "✓" : "—"} {l(plan.features.chatbot ? "AI financial chatbot included" : "AI financial chatbot not included")}</p>
+                  <p>{plan.features.invoiceAiExtraction ? "✓" : "—"} {l(plan.features.invoiceAiExtraction ? "Automatic invoice extraction included" : "Automatic invoice extraction not included")}</p>
                 </div>
                 {isOwner && (
                   <Button
