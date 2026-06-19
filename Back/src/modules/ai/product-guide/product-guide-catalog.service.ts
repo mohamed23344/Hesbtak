@@ -10,6 +10,7 @@ export type ProductGuidePage = {
   aliases: string[];
   description: string;
   capabilities: string[];
+  controls: string[];
   prerequisites: string[];
   keywords: string[];
 };
@@ -77,6 +78,9 @@ export class ProductGuideCatalogService implements OnModuleInit {
         lines.push(`  ${page.description}${keywordHint}`);
         if (page.capabilities.length) {
           lines.push(`  capabilities: ${page.capabilities.join('; ')}`);
+        }
+        if (page.controls.length) {
+          lines.push(`  controls: ${page.controls.join('; ')}`);
         }
         if (page.prerequisites.length) {
           lines.push(`  prerequisites: ${page.prerequisites.join('; ')}`);

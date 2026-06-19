@@ -15,6 +15,7 @@ type ProductPage = {
   aliases: string[];
   description: string;
   capabilities: string[];
+  controls: string[];
   prerequisites: string[];
   steps: string[];
   permissions: string[];
@@ -38,6 +39,7 @@ function productChunks(pages: ProductPage[]): KnowledgeChunkInput[] {
       page.description,
       `Aliases: ${page.aliases.join(', ')}`,
       `Capabilities:\n- ${page.capabilities.join('\n- ')}`,
+      `Buttons and controls:\n- ${page.controls.join('\n- ')}`,
       `Prerequisites:\n- ${page.prerequisites.join('\n- ')}`,
       `Steps:\n${page.steps.map((step, index) => `${index + 1}. ${step}`).join('\n')}`,
       `Related routes: ${page.relatedRoutes.join(', ')}`,
@@ -74,7 +76,9 @@ async function main() {
     );
     const products = await loadJson<ProductPage[]>(productPath);
     const workbook = await loadJson<KnowledgeChunkInput[]>(workbookPath);
-    const productResult = await knowledge.upsert(productChunks(products));
+    const productResult = await knowledge.upsert(productChunks(products), {
+      replaceCorpus: 'product_guide',
+    });
     const workbookResult = await knowledge.upsert(workbook, {
       replaceCorpus: 'accounting_workbook',
     });
