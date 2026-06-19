@@ -847,6 +847,7 @@ type TreeRowProps = {
 };
 
 function TreeRow({ node, depth, onAdd, onEdit, onRemove }: TreeRowProps) {
+  const { l } = useI18n();
   const [open, setOpen] = useState(depth < 2);
   const hasChildren = !!node.children?.length;
   return (
@@ -871,7 +872,7 @@ function TreeRow({ node, depth, onAdd, onEdit, onRemove }: TreeRowProps) {
         </button>
         {hasChildren ? <Folder className="h-4 w-4 text-primary" /> : <FileText className="h-4 w-4 text-on-surface-variant" />}
         <span className="text-xs text-on-surface-variant font-mono w-12 shrink-0">{node.code}</span>
-        <span className={`text-sm min-w-0 flex-1 truncate ${hasChildren ? "font-bold text-on-surface" : ""}`}>{node.name}</span>
+        <span className={`text-sm min-w-0 flex-1 truncate ${hasChildren ? "font-bold text-on-surface" : ""}`}>{l(node.name)}</span>
         {depth < 3 && (
           <button
             type="button"

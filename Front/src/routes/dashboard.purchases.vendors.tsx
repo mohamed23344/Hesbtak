@@ -16,7 +16,7 @@ type Activity = {
 };
 
 function VendorsPage() {
-  const { t } = useI18n();
+  const { t , l} = useI18n();
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [selected, setSelected] = useState<Vendor | null>(null);
   const [activity, setActivity] = useState<Activity | null>(null);
@@ -46,13 +46,13 @@ function VendorsPage() {
             <tr>
               <th className="text-start p-3 font-medium">{t("fullName")}</th>
               <th className="text-start p-3 font-medium">{t("email")}</th>
-              <th className="text-start p-3 font-medium">Phone</th>
+              <th className="text-start p-3 font-medium">{l("phone")}</th>
               <th className="w-20" />
             </tr>
           </thead>
           <tbody className="divide-y divide-border-default">
             {vendors.length === 0 ? (
-              <tr><td colSpan={4} className="p-8 text-center text-on-surface-variant text-sm">No vendors yet.</td></tr>
+              <tr><td colSpan={4} className="p-8 text-center text-on-surface-variant text-sm">{l("No vendors yet.")}</td></tr>
             ) : vendors.map((vendor) => (
               <tr key={vendor.id} className="hover:bg-surface-subtle">
                 <td className="p-3 font-medium">{vendor.name}</td>

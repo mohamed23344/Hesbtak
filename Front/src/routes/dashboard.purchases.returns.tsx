@@ -18,7 +18,7 @@ type Return = {
 };
 
 function PurchaseReturns() {
-  const { t } = useI18n();
+  const { t, l } = useI18n();
   const [returns, setReturns] = useState<Return[]>([]);
 
   const load = async () => {
@@ -50,7 +50,7 @@ function PurchaseReturns() {
           </thead>
           <tbody className="divide-y divide-border-default">
             {returns.length === 0 ? (
-              <tr><td colSpan={5} className="p-8 text-center text-on-surface-variant text-sm">No purchase returns yet.</td></tr>
+              <tr><td colSpan={5} className="p-8 text-center text-on-surface-variant text-sm">{l("No purchase returns yet.")}</td></tr>
             ) : (
               returns.map((r) => (
                 <tr key={r.id} className="hover:bg-surface-subtle">

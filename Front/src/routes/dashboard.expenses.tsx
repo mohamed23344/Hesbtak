@@ -27,7 +27,7 @@ type Expense = {
 };
 
 function ExpensesPage() {
-  const { t } = useI18n();
+  const { t, l } = useI18n();
   const navigate = useNavigate();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [search, setSearch] = useState("");
@@ -121,7 +121,7 @@ function ExpensesPage() {
       <div className="flex flex-wrap gap-2 items-center">
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search className="h-4 w-4 absolute start-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
-          <Input className="ps-9 bg-card" placeholder="Search expenses..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input className="ps-9 bg-card" placeholder={l("Search expenses...")} value={search} onChange={(e) => setSearch(e.target.value)} />
           {search && (
             <button onClick={() => setSearch("")} className="absolute end-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface">
               <X className="h-4 w-4" />
@@ -186,7 +186,7 @@ function ExpensesPage() {
           </thead>
           <tbody className="divide-y divide-border-default">
             {filtered.length === 0 ? (
-              <tr><td colSpan={6} className="p-8 text-center text-on-surface-variant text-sm">No expenses found.</td></tr>
+              <tr><td colSpan={6} className="p-8 text-center text-on-surface-variant text-sm">{l("No expenses found.")}</td></tr>
             ) : (
               filtered.map((e) => (
                 <tr key={e.id} className="hover:bg-surface-subtle">

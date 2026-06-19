@@ -119,6 +119,42 @@
   [dir="rtl"] {
     font-family: "IBM Plex Sans Arabic", "Inter", system-ui, sans-serif;
   }
+
+  /* Form controls follow the active language direction consistently. */
+  input,
+  textarea,
+  select,
+  [role="combobox"] {
+    direction: inherit;
+    text-align: start;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    text-align: start;
+  }
+
+  /* Keep inherently directional values readable without changing alignment. */
+  input[type="number"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="url"] {
+    unicode-bidi: plaintext;
+  }
+
+  html[dir="rtl"] .localized-entry-form {
+    direction: rtl;
+    text-align: right;
+  }
+
+  html[dir="ltr"] .localized-entry-form {
+    direction: ltr;
+    text-align: left;
+  }
+
+  .localized-entry-form :where(label, input, textarea, select, [role="combobox"], [role="tab"]) {
+    text-align: start;
+  }
 }
 
 @layer utilities {

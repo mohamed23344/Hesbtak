@@ -27,7 +27,6 @@ import { Route as DashboardSettingsRouteImport } from './routes/dashboard.settin
 import { Route as DashboardSalesRouteImport } from './routes/dashboard.sales'
 import { Route as DashboardReportsRouteImport } from './routes/dashboard.reports'
 import { Route as DashboardPurchasesRouteImport } from './routes/dashboard.purchases'
-import { Route as DashboardOcrRouteImport } from './routes/dashboard.ocr'
 import { Route as DashboardNotificationsRouteImport } from './routes/dashboard.notifications'
 import { Route as DashboardJournalRouteImport } from './routes/dashboard.journal'
 import { Route as DashboardInvoicesRouteImport } from './routes/dashboard.invoices'
@@ -139,11 +138,6 @@ const DashboardReportsRoute = DashboardReportsRouteImport.update({
 const DashboardPurchasesRoute = DashboardPurchasesRouteImport.update({
   id: '/purchases',
   path: '/purchases',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardOcrRoute = DashboardOcrRouteImport.update({
-  id: '/ocr',
-  path: '/ocr',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardNotificationsRoute = DashboardNotificationsRouteImport.update({
@@ -283,7 +277,6 @@ export interface FileRoutesByFullPath {
   '/dashboard/invoices': typeof DashboardInvoicesRoute
   '/dashboard/journal': typeof DashboardJournalRoute
   '/dashboard/notifications': typeof DashboardNotificationsRoute
-  '/dashboard/ocr': typeof DashboardOcrRoute
   '/dashboard/purchases': typeof DashboardPurchasesRouteWithChildren
   '/dashboard/reports': typeof DashboardReportsRoute
   '/dashboard/sales': typeof DashboardSalesRouteWithChildren
@@ -324,7 +317,6 @@ export interface FileRoutesByTo {
   '/dashboard/invoices': typeof DashboardInvoicesRoute
   '/dashboard/journal': typeof DashboardJournalRoute
   '/dashboard/notifications': typeof DashboardNotificationsRoute
-  '/dashboard/ocr': typeof DashboardOcrRoute
   '/dashboard/purchases': typeof DashboardPurchasesRouteWithChildren
   '/dashboard/reports': typeof DashboardReportsRoute
   '/dashboard/sales': typeof DashboardSalesRouteWithChildren
@@ -368,7 +360,6 @@ export interface FileRoutesById {
   '/dashboard/invoices': typeof DashboardInvoicesRoute
   '/dashboard/journal': typeof DashboardJournalRoute
   '/dashboard/notifications': typeof DashboardNotificationsRoute
-  '/dashboard/ocr': typeof DashboardOcrRoute
   '/dashboard/purchases': typeof DashboardPurchasesRouteWithChildren
   '/dashboard/reports': typeof DashboardReportsRoute
   '/dashboard/sales': typeof DashboardSalesRouteWithChildren
@@ -413,7 +404,6 @@ export interface FileRouteTypes {
     | '/dashboard/invoices'
     | '/dashboard/journal'
     | '/dashboard/notifications'
-    | '/dashboard/ocr'
     | '/dashboard/purchases'
     | '/dashboard/reports'
     | '/dashboard/sales'
@@ -454,7 +444,6 @@ export interface FileRouteTypes {
     | '/dashboard/invoices'
     | '/dashboard/journal'
     | '/dashboard/notifications'
-    | '/dashboard/ocr'
     | '/dashboard/purchases'
     | '/dashboard/reports'
     | '/dashboard/sales'
@@ -497,7 +486,6 @@ export interface FileRouteTypes {
     | '/dashboard/invoices'
     | '/dashboard/journal'
     | '/dashboard/notifications'
-    | '/dashboard/ocr'
     | '/dashboard/purchases'
     | '/dashboard/reports'
     | '/dashboard/sales'
@@ -662,13 +650,6 @@ declare module '@tanstack/react-router' {
       path: '/purchases'
       fullPath: '/dashboard/purchases'
       preLoaderRoute: typeof DashboardPurchasesRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/ocr': {
-      id: '/dashboard/ocr'
-      path: '/ocr'
-      fullPath: '/dashboard/ocr'
-      preLoaderRoute: typeof DashboardOcrRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/dashboard/notifications': {
@@ -904,7 +885,6 @@ interface DashboardRouteChildren {
   DashboardInvoicesRoute: typeof DashboardInvoicesRoute
   DashboardJournalRoute: typeof DashboardJournalRoute
   DashboardNotificationsRoute: typeof DashboardNotificationsRoute
-  DashboardOcrRoute: typeof DashboardOcrRoute
   DashboardPurchasesRoute: typeof DashboardPurchasesRouteWithChildren
   DashboardReportsRoute: typeof DashboardReportsRoute
   DashboardSalesRoute: typeof DashboardSalesRouteWithChildren
@@ -922,7 +902,6 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardInvoicesRoute: DashboardInvoicesRoute,
   DashboardJournalRoute: DashboardJournalRoute,
   DashboardNotificationsRoute: DashboardNotificationsRoute,
-  DashboardOcrRoute: DashboardOcrRoute,
   DashboardPurchasesRoute: DashboardPurchasesRouteWithChildren,
   DashboardReportsRoute: DashboardReportsRoute,
   DashboardSalesRoute: DashboardSalesRouteWithChildren,

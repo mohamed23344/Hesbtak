@@ -41,7 +41,7 @@ function today() {
 }
 
 function SalesPayments() {
-  const { t } = useI18n();
+  const { t, l } = useI18n();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -126,16 +126,16 @@ function SalesPayments() {
         action={
           <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (v) loadCustomersAndInvoices(); }}>
             <DialogTrigger asChild>
-              <Button className="bg-gradient-primary gap-1.5"><Plus className="h-4 w-4" /> Record Payment</Button>
+              <Button className="bg-gradient-primary gap-1.5"><Plus className="h-4 w-4" /> {l("Record Payment")}</Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg">
-              <DialogHeader><DialogTitle>Record Customer Payment</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>{l("Record Customer Payment")}</DialogTitle></DialogHeader>
               <div className="space-y-3">
                 <div className="space-y-1.5">
-                  <Label>Customer</Label>
+                  <Label>{l("Customer")}</Label>
                   <div className="relative">
                     <Search className="h-4 w-4 absolute start-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
-                    <Input className="ps-9" placeholder="Search customer..." value={partySearch} onChange={(e) => setPartySearch(e.target.value)} />
+                    <Input className="ps-9" placeholder={l("Search customer...")} value={partySearch} onChange={(e) => setPartySearch(e.target.value)} />
                   </div>
                   <div className="max-h-32 overflow-y-auto border border-border-default rounded-lg divide-y">
                     {filteredCustomers.map((c) => (
@@ -152,9 +152,9 @@ function SalesPayments() {
 
                 {form.customerId && (
                   <div className="space-y-1.5">
-                    <Label>Invoice (optional - select to pay specific invoice)</Label>
+                    <Label>{l("Invoice (optional - select to pay specific invoice)")}</Label>
                     <select value={form.invoiceId} onChange={update("invoiceId")} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-                      <option value="">Auto-pay oldest unpaid invoice</option>
+                      <option value="">{t("autoPayOldest")}</option>
                       {customerInvoices.map((inv) => (
                         <option key={inv.id} value={inv.id}>
                           {inv.invoice_number} - {money(inv.remaining_amount ?? inv.total)} left ({inv.status})
@@ -163,7 +163,7 @@ function SalesPayments() {
                     </select>
                     {selectedInvoice && (
                       <p className="text-xs text-on-surface-variant">
-                        Left amount: <span className="font-semibold text-on-surface">{money(selectedInvoiceRemaining)}</span>
+                        {l("Left amount")}: <span className="font-semibold text-on-surface">{money(selectedInvoiceRemaining)}</span>
                         {selectedInvoice.status === "partial" && selectedInvoice.paid_amount
                           ? ` after ${money(selectedInvoice.paid_amount)} already paid`
                           : ""}
@@ -182,19 +182,19 @@ function SalesPayments() {
                     <Input value={form.paymentDate} onChange={update("paymentDate")} type="date" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Method</Label>
+                    <Label>{t("paymentMethod")}</Label>
                     <select value={form.paymentMethod} onChange={update("paymentMethod")} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-                      <option value="cash">Cash</option>
-                      <option value="bank">Bank</option>
-                      <option value="card">Card</option>
-                      <option value="transfer">Transfer</option>
+                      <option value="cash">{l("Cash")}</option>
+                      <option value="bank">{l("Bank")}</option>
+                      <option value="card">{l("Card")}</option>
+                      <option value="transfer">{l("Transfer")}</option>
                     </select>
                   </div>
                 </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setOpen(false)}>{t("cancel")}</Button>
-                <Button className="bg-gradient-primary" onClick={submit} disabled={!form.customerId || !form.amount}>Record</Button>
+                <Button className="bg-gradient-primary" onClick={submit} disabled={!form.customerId || !form.amount}>{l("Record")}</Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -203,7 +203,7 @@ function SalesPayments() {
 
       <div className="relative max-w-md">
         <Search className="h-4 w-4 absolute start-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
-        <Input className="ps-9 bg-card" placeholder="Filter by customer name..." value={paymentSearch} onChange={(event) => setPaymentSearch(event.target.value)} />
+        <Input className="ps-9 bg-card" placeholder={l("Filter by customer name...")} value={paymentSearch} onChange={(event) => setPaymentSearch(event.target.value)} />
       </div>
 
       <div className="bg-card border border-border-default rounded-2xl overflow-hidden shadow-soft">
@@ -211,15 +211,15 @@ function SalesPayments() {
           <thead className="bg-surface-container text-on-surface-variant text-xs uppercase">
             <tr>
               <th className="text-start p-3 font-medium">{t("date")}</th>
-              <th className="text-start p-3 font-medium">Invoice</th>
-              <th className="text-start p-3 font-medium">Customer</th>
-              <th className="text-start p-3 font-medium">Method</th>
+              <th className="text-start p-3 font-medium">{t("invoices")}</th>
+              <th className="text-start p-3 font-medium">{l("Customer")}</th>
+              <th className="text-start p-3 font-medium">{t("paymentMethod")}</th>
               <th className="text-end p-3 font-medium">{t("amount")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border-default">
             {filteredPayments.length === 0 ? (
-              <tr><td colSpan={5} className="p-8 text-center text-on-surface-variant text-sm">No payments found.</td></tr>
+              <tr><td colSpan={5} className="p-8 text-center text-on-surface-variant text-sm">{l("No payments found.")}</td></tr>
             ) : (
               filteredPayments.map((p) => (
                 <tr key={p.id} className="hover:bg-surface-subtle">

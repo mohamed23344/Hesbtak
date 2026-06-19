@@ -42,6 +42,7 @@ function AccountCombobox({
   onChange: (id: string, name: string) => void;
   onQuickAdd: (typedName: string) => void;
 }) {
+  const { t, l } = useI18n();
   const [query, setQuery] = useState(value);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -75,7 +76,7 @@ function AccountCombobox({
           value={query}
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
-          placeholder="Search accounts…"
+          placeholder={t("searchAccount")}
           className="ps-7 h-8 text-xs"
         />
         {query && (
@@ -96,20 +97,20 @@ function AccountCombobox({
                   className="px-3 py-2 text-xs hover:bg-surface-container cursor-pointer flex items-center gap-2"
                 >
                   <span className="text-on-surface-variant font-mono w-12 shrink-0">{a.code}</span>
-                  <span>{a.name}</span>
-                  <span className="ms-auto text-on-surface-variant text-[10px] bg-surface-container px-1.5 py-0.5 rounded">{a.type}</span>
+                  <span>{l(a.name)}</span>
+                  <span className="ms-auto text-on-surface-variant text-[10px] bg-surface-container px-1.5 py-0.5 rounded">{l(a.type)}</span>
                 </li>
               ))}
             </ul>
           ) : (
             <div className="p-3 text-xs text-on-surface-variant flex flex-col gap-2">
-              <span className="flex items-center gap-1"><AlertCircle className="h-3.5 w-3.5" /> No account found</span>
+              <span className="flex items-center gap-1"><AlertCircle className="h-3.5 w-3.5" /> {t("noAccountFound")}</span>
               {query && (
                 <button
                   onMouseDown={() => { setOpen(false); onQuickAdd(query); }}
                   className="text-primary font-medium hover:underline text-start"
                 >
-                  + Quick add "{query}"
+                  + {t("quickAddAccount")} “{query}”
                 </button>
               )}
             </div>
@@ -422,7 +423,7 @@ function AddJournalEntryModal({
   accounts: Account[];
   onCreated: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, l } = useI18n();
   const [date, setDate] = useState(today());
   const [desc, setDesc] = useState("");
   const [status, setStatus] = useState<"draft" | "posted">("posted");
@@ -511,11 +512,11 @@ function AddJournalEntryModal({
             </div>
             <div className="sm:col-span-2 space-y-1.5">
               <Label>{t("description")}</Label>
-              <Input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="e.g. Monthly wages" />
+              <Input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder={l("e.g. Monthly wages")} />
             </div>
           </div>
           <div className="flex items-center gap-3 mt-1">
-            <Label className="text-sm">Status</Label>
+            <Label className="text-sm">{t("status")}</Label>
             {(["draft", "posted"] as const).map((s) => (
               <button
                 key={s}
@@ -526,7 +527,7 @@ function AddJournalEntryModal({
                     : "border-border-default text-on-surface-variant hover:bg-surface-container"
                 }`}
               >
-                {s}
+                {l(s)}
               </button>
             ))}
           </div>
@@ -537,7 +538,7 @@ function AddJournalEntryModal({
               <span>{t("account")}</span>
               <span className="text-end">{t("debit")}</span>
               <span className="text-end">{t("credit")}</span>
-              <span>Note</span>
+              <span>{t("notes")}</span>
               <span />
             </div>
             {lines.map((line) => (
@@ -565,7 +566,7 @@ function AddJournalEntryModal({
                 <Input
                   value={line.description}
                   onChange={(e) => updateLine(line._id, { description: e.target.value })}
-                  placeholder="optional"
+                  placeholder={t("optional")}
                   className="h-8 text-xs"
                 />
                 <button
@@ -606,7 +607,7 @@ function AddJournalEntryModal({
           <DialogFooter className="mt-4">
             <Button variant="outline" onClick={onClose}>{t("cancel")}</Button>
             <Button className="bg-gradient-primary" onClick={submit} disabled={saving || !isBalanced}>
-              {saving ? "Saving…" : "Save Journal Entry"}
+              {saving ? l("Saving...") : l("Save Journal Entry")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -654,7 +655,7 @@ function DeleteConfirmDialog({
 
 /* ─── Main Page ─────────────────────────────────────────────── */
 function Page() {
-  const { t } = useI18n();
+  const { t, l } = useI18n();
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [jeOpen, setJeOpen] = useState(false);
@@ -738,7 +739,7 @@ function Page() {
         {entries.length === 0 && (
           <div className="bg-card border border-border-default rounded-2xl p-12 text-center text-on-surface-variant shadow-soft">
             <FileText className="h-8 w-8 mx-auto mb-3 opacity-40" />
-            <p className="text-sm">No journal entries yet. Create one to get started.</p>
+            <p className="text-sm">{l("No journal entries yet. Create one to get started.")}</p>
           </div>
         )}
 
@@ -759,12 +760,12 @@ function Page() {
                   <p className="text-xs text-on-surface-variant">
                     {String(entry.date).slice(0, 10)}
                     <span className="mx-1.5">·</span>
-                    <span className="capitalize">{(entry.reference_type ?? "manual").replace("_", " ")}</span>
+                    <span>{l(entry.reference_type ?? "manual")}</span>
                     {entry.status && (
                       <>
                         <span className="mx-1.5">·</span>
                         <span className={`font-medium ${entry.status === "posted" ? "text-status-success" : "text-on-surface-variant"}`}>
-                          {entry.status}
+                          {l(entry.status)}
                         </span>
                       </>
                     )}
@@ -817,7 +818,7 @@ function Page() {
                     {/* Totals row */}
                     <tfoot className="bg-surface-container/60">
                       <tr>
-                        <td colSpan={2} className="p-2 ps-4 text-xs font-semibold text-on-surface-variant uppercase">Totals</td>
+                        <td colSpan={2} className="p-2 ps-4 text-xs font-semibold text-on-surface-variant uppercase">{l("Totals")}</td>
                         <td className="p-2 text-end font-bold text-status-success text-sm">
                           {money(entry.lines.reduce((s, l) => s + Number(l.debit), 0))}
                         </td>

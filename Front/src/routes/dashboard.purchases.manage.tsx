@@ -25,7 +25,7 @@ type Bill = {
 };
 
 function ManagePurchases() {
-  const { t } = useI18n();
+  const { t, l } = useI18n();
   const [bills, setBills] = useState<Bill[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -95,7 +95,7 @@ function ManagePurchases() {
       <div className="flex flex-wrap gap-2 items-center">
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search className="h-4 w-4 absolute start-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
-          <Input className="ps-9 bg-card" placeholder="Search bills..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input className="ps-9 bg-card" placeholder={l("Search bills...")} value={search} onChange={(e) => setSearch(e.target.value)} />
           {search && (
             <button onClick={() => setSearch("")} className="absolute end-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface">
               <X className="h-4 w-4" />
@@ -121,18 +121,18 @@ function ManagePurchases() {
           <div className="space-y-1.5">
             <Label className="text-xs">{t("status")}</Label>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm">
-              <option value="">All statuses</option>
-              <option value="draft">Draft</option>
-              <option value="received">Received</option>
-              <option value="paid">Paid</option>
-              <option value="partial">Partial</option>
-              <option value="overdue">Overdue</option>
+              <option value="">{l("All statuses")}</option>
+              <option value="draft">{l("Draft")}</option>
+              <option value="received">{l("Received")}</option>
+              <option value="paid">{l("Paid")}</option>
+              <option value="partial">{l("Partial")}</option>
+              <option value="overdue">{t("overdue")}</option>
             </select>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Vendor</Label>
+            <Label className="text-xs">{l("Vendor")}</Label>
             <select value={vendorFilter} onChange={(e) => setVendorFilter(e.target.value)} className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm">
-              <option value="">All vendors</option>
+              <option value="">{l("All vendors")}</option>
               {vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}
             </select>
           </div>
@@ -158,7 +158,7 @@ function ManagePurchases() {
           <thead className="bg-surface-container text-on-surface-variant text-xs uppercase">
             <tr>
               <th className="text-start p-3 font-medium">{t("number")}</th>
-              <th className="text-start p-3 font-medium">Vendor</th>
+              <th className="text-start p-3 font-medium">{l("Vendor")}</th>
               <th className="text-start p-3 font-medium">{t("issued")}</th>
               <th className="text-start p-3 font-medium">{t("dueDate")}</th>
               <th className="text-start p-3 font-medium">{t("status")}</th>
@@ -168,7 +168,7 @@ function ManagePurchases() {
           </thead>
           <tbody className="divide-y divide-border-default">
             {filtered.length === 0 ? (
-              <tr><td colSpan={7} className="p-8 text-center text-on-surface-variant text-sm">No bills found.</td></tr>
+              <tr><td colSpan={7} className="p-8 text-center text-on-surface-variant text-sm">{l("No bills found.")}</td></tr>
             ) : (
               filtered.map((b) => (
                 <tr key={b.id} className="hover:bg-surface-subtle cursor-pointer" onClick={() => setEditingId(b.id)}>
@@ -181,7 +181,7 @@ function ManagePurchases() {
                     <div className="font-semibold">{money(b.total)}</div>
                     {b.status === "partial" && (
                       <div className="text-xs text-status-warning font-medium">
-                        Remaining: {money(b.remaining_amount ?? b.total)}
+                        {l("Remaining")}: {money(b.remaining_amount ?? b.total)}
                       </div>
                     )}
                   </td>

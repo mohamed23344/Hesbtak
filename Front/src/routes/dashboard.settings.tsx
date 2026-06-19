@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { api, getSession, updateSession } from "@/lib/api";
 import { toast } from "sonner";
 import { ExternalLink, Mail, MessageCircle } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/dashboard/settings")({
   validateSearch: (search: Record<string, unknown>): { reference?: string; payment?: string } => ({
@@ -80,6 +81,7 @@ const VIEW_PERMISSIONS = [
 ] as const;
 
 function Page() {
+  const { t, l, lang } = useI18n();
   const nav = useNavigate();
   const { reference, payment } = Route.useSearch();
   const session = getSession();
@@ -115,7 +117,7 @@ function Page() {
     try {
       setMembers(await api<Member[]>(`/org/${tenant?.organizationId}/members`));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not load members");
+      toast.error(error instanceof Error ? error.message : l("Could not load members"));
     }
   };
 
@@ -130,7 +132,7 @@ function Page() {
   const loadTickets = () =>
     api<Ticket[]>("/support/tickets")
       .then(setTickets)
-      .catch((error) => toast.error(error instanceof Error ? error.message : "Could not load support tickets"));
+      .catch((error) => toast.error(error instanceof Error ? error.message : l("Could not load support tickets")));
 
   useEffect(() => { void loadMembers(); }, [tenant?.organizationId, isOwner]);
   useEffect(() => { void loadNotificationReports(); }, [tenant?.organizationId]);
@@ -139,7 +141,7 @@ function Page() {
   useEffect(() => {
     api<Plan[]>("/plans")
       .then(setPlans)
-      .catch((error) => toast.error(error instanceof Error ? error.message : "Could not load plans"));
+      .catch((error) => toast.error(error instanceof Error ? error.message : l("Could not load plans")));
     if (tenant?.organizationId) {
       api<CurrentSubscription>("/subscriptions/current")
         .then((result) => {
@@ -165,7 +167,7 @@ function Page() {
             });
           }
         })
-        .catch((error) => toast.error(error instanceof Error ? error.message : "Could not load subscription"));
+        .catch((error) => toast.error(error instanceof Error ? error.message : l("Could not load subscription")));
     }
   }, [tenant?.organizationId]);
 
@@ -196,10 +198,10 @@ function Page() {
           ),
         });
       }
-      if (result?.status === "active") toast.success("Subscription activated");
-      else if (payment === "failed") toast.error("Payment was not completed");
-      else toast.info("Payment is still being confirmed. Refresh in a few seconds.");
-    }).catch((error) => toast.error(error instanceof Error ? error.message : "Could not verify payment"));
+      if (result?.status === "active") toast.success(l("Subscription activated"));
+      else if (payment === "failed") toast.error(l("Payment was not completed"));
+      else toast.info(l("Payment is still being confirmed. Refresh in a few seconds."));
+    }).catch((error) => toast.error(error instanceof Error ? error.message : l("Could not verify payment")));
   }, [tenant?.organizationId, reference, payment]);
 
   const saveOrganization = async () => {
@@ -212,9 +214,9 @@ function Page() {
             : item),
         });
       }
-      toast.success("Organization settings updated");
+      toast.success(l("Organization settings updated"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not update organization");
+      toast.error(error instanceof Error ? error.message : l("Could not update organization"));
     }
   };
 
@@ -233,10 +235,10 @@ function Page() {
           permissions: invite.role === "viewer" ? invite.permissions : undefined,
         }),
       });
-      toast.success(result.joinedExistingUser ? "Existing user added to the organization" : "Invitation email sent");
+      toast.success(l(result.joinedExistingUser ? "Existing user added to the organization" : "Invitation email sent"));
       setInvite({ ...invite, fullName: "", email: "", password: "" });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not send invitation");
+      toast.error(error instanceof Error ? error.message : l("Could not send invitation"));
     }
   };
 
@@ -249,7 +251,7 @@ function Page() {
       });
       window.location.assign(result.checkoutUrl);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not start checkout");
+      toast.error(error instanceof Error ? error.message : l("Could not start checkout"));
       setCheckoutPlanId("");
     }
   };
@@ -258,9 +260,9 @@ function Page() {
     try {
       await api(`/org/${tenant?.organizationId}/members/${id}`, { method: "DELETE" });
       await loadMembers();
-      toast.success("Access removed");
+      toast.success(l("Access removed"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not remove member");
+      toast.error(error instanceof Error ? error.message : l("Could not remove member"));
     }
   };
 
@@ -271,21 +273,21 @@ function Page() {
         body: JSON.stringify({ isActive }),
       });
       await loadMembers();
-      toast.success(isActive ? "Member access reactivated" : "Member access deactivated and notification sent");
+      toast.success(l(isActive ? "Member access reactivated" : "Member access deactivated and notification sent"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not update member access");
+      toast.error(error instanceof Error ? error.message : l("Could not update member access"));
     }
   };
 
   const deleteOrganization = async () => {
-    if (!confirm(`Delete ${tenant?.organizationName}? This permanently deletes its financial data.`)) return;
+    if (!confirm(`${l("Delete")} ${tenant?.organizationName}? ${l("This permanently deletes its financial data.")}`)) return;
     try {
       await api(`/org/${tenant?.organizationId}`, { method: "DELETE" });
       const tenants = session?.tenants.filter((item) => item.organizationId !== tenant?.organizationId) ?? [];
       updateSession({ tenants, activeTenantId: tenants.length === 1 ? tenants[0].organizationId : undefined });
       nav({ to: tenants.length ? "/select-organization" : "/onboarding" });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not delete organization");
+      toast.error(error instanceof Error ? error.message : l("Could not delete organization"));
     }
   };
 
@@ -296,16 +298,16 @@ function Page() {
         body: JSON.stringify({ isActive: !report.isActive }),
       });
       await loadNotificationReports();
-      toast.success(report.isActive ? "Report disabled" : "Report enabled");
+      toast.success(l(report.isActive ? "Report disabled" : "Report enabled"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not update notification report");
+      toast.error(error instanceof Error ? error.message : l("Could not update notification report"));
     }
   };
 
   // Support ticket submission
   const submitTicket = async () => {
     if (!ticketForm.subject.trim() || !ticketForm.message.trim()) {
-      toast.error("Subject and message are required");
+      toast.error(l("Subject and message are required"));
       return;
     }
     setSending(true);
@@ -316,9 +318,9 @@ function Page() {
       });
       setTicketForm({ subject: "", category: "technical", message: "" });
       await loadTickets();
-      toast.success("Support ticket submitted");
+      toast.success(l("Support ticket submitted"));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not submit support ticket");
+      toast.error(error instanceof Error ? error.message : l("Could not submit support ticket"));
     } finally {
       setSending(false);
     }
@@ -326,27 +328,27 @@ function Page() {
 
   return (
     <div className="space-y-5">
-      <Header title="Settings" desc="Manage your profile, organization, access, and security." />
+      <Header title={t("settings")} desc={l("Manage your profile, organization, access, and security.")} />
 
-      <Section title="Profile and security">
+      <Section title={l("Profile and security")}>
         <div className="grid sm:grid-cols-2 gap-4">
-          <ReadField label="Full name" value={session?.user.fullName ?? ""} />
-          <ReadField label="Email" value={session?.user.email ?? ""} />
-          <ReadField label="Organization role" value={tenant?.role ?? ""} />
+          <ReadField label={t("fullName")} value={session?.user.fullName ?? ""} />
+          <ReadField label={t("email")} value={session?.user.email ?? ""} />
+          <ReadField label={l("Organization role")} value={l(tenant?.role ?? "")} />
           <div className="space-y-1.5">
-            <Label>Password</Label>
+            <Label>{t("password")}</Label>
             <Button asChild variant="outline" className="w-full">
-              <Link to="/forgot-password">Change password with OTP</Link>
+              <Link to="/forgot-password">{l("Change password with OTP")}</Link>
             </Button>
           </div>
         </div>
       </Section>
 
-      <Section title="Subscription plans">
+      <Section title={l("Subscription plans")}>
         <div className="mb-4 rounded-lg bg-surface-container px-4 py-3 text-sm">
           {subscription?.status === "active"
-            ? <>Current plan: <strong>{subscription.plan.name}</strong> until {new Date(subscription.currentPeriodEnd).toLocaleDateString()}</>
-            : "No active paid plan. Core accounting remains available, while AI features require AI Pro."}
+            ? <>{l("Current plan")}: <strong>{l(subscription.plan.name)}</strong> {l("until")} {new Date(subscription.currentPeriodEnd).toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US")}</>
+            : l("No active paid plan. Core accounting remains available, while AI features require AI Pro.")}
         </div>
         <div className="grid md:grid-cols-2 gap-4">
           {plans.map((plan) => {
@@ -355,19 +357,19 @@ function Page() {
               <div key={plan.id} className={`rounded-xl border p-5 ${active ? "border-primary bg-primary/5" : "border-border-default"}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h4 className="font-semibold">{plan.name}</h4>
-                    <p className="text-xs text-on-surface-variant mt-1">{plan.billingCycle} billing</p>
+                    <h4 className="font-semibold">{l(plan.name)}</h4>
+                    <p className="text-xs text-on-surface-variant mt-1">{l(plan.billingCycle)} {l("billing")}</p>
                   </div>
-                  {active && <Badge>Current</Badge>}
+                  {active && <Badge>{l("Current")}</Badge>}
                 </div>
                 <p className="text-3xl font-semibold mt-4">
                   {Number(plan.price).toLocaleString()}{" "}
-                  <span className="text-sm font-normal">{plan.currency}/month</span>
+                  <span className="text-sm font-normal">{plan.currency}/{l("month")}</span>
                 </p>
                 <div className="mt-4 space-y-2 text-sm">
-                  <p>Accounting, journals, reports, and forecasting</p>
-                  <p>{plan.features.chatbot ? "AI financial chatbot included" : "AI financial chatbot not included"}</p>
-                  <p>{plan.features.invoiceAiExtraction ? "AI invoice extraction included" : "AI invoice extraction not included"}</p>
+                  <p>{l("Accounting, journals, reports, and forecasting")}</p>
+                  <p>{l(plan.features.chatbot ? "AI financial chatbot included" : "AI financial chatbot not included")}</p>
+                  <p>{l(plan.features.invoiceAiExtraction ? "AI invoice extraction included" : "AI invoice extraction not included")}</p>
                 </div>
                 {isOwner && (
                   <Button
@@ -376,7 +378,7 @@ function Page() {
                     disabled={active || checkoutPlanId === plan.id}
                     onClick={() => void subscribe(plan.id)}
                   >
-                    {active ? "Active plan" : checkoutPlanId === plan.id ? "Opening Paymob..." : "Subscribe with Paymob"}
+                    {l(active ? "Active plan" : checkoutPlanId === plan.id ? "Opening Paymob..." : "Subscribe with Paymob")}
                   </Button>
                 )}
               </div>
@@ -386,19 +388,19 @@ function Page() {
       </Section>
 
       {canEdit && (
-        <Section title="Organization settings">
+        <Section title={l("Organization settings")}>
           <div className="grid sm:grid-cols-3 gap-4">
-            <EditField label="Name" value={organization.name} onChange={(name) => setOrganization({ ...organization, name })} />
-            <EditField label="Industry" value={organization.industry} onChange={(industry) => setOrganization({ ...organization, industry })} />
-            <EditField label="Currency" value={organization.currency} onChange={(currency) => setOrganization({ ...organization, currency })} />
+            <EditField label={l("Name")} value={organization.name} onChange={(name) => setOrganization({ ...organization, name })} />
+            <EditField label={l("Industry")} value={organization.industry} onChange={(industry) => setOrganization({ ...organization, industry })} />
+            <EditField label={l("Currency")} value={organization.currency} onChange={(currency) => setOrganization({ ...organization, currency })} />
           </div>
-          <Button className="mt-4" onClick={saveOrganization}>Save organization settings</Button>
+          <Button className="mt-4" onClick={saveOrganization}>{l("Save organization settings")}</Button>
         </Section>
       )}
 
-      <Section title="Notification reports">
+      <Section title={l("Notification reports")}>
         {notificationReports.length === 0 ? (
-          <p className="text-sm text-on-surface-variant">No scheduled notification reports configured.</p>
+          <p className="text-sm text-on-surface-variant">{l("No scheduled notification reports configured.")}</p>
         ) : (
           <div className="space-y-2">
             {notificationReports.map((report) => (
@@ -407,18 +409,18 @@ function Page() {
                 className="flex flex-wrap items-center justify-between gap-3 border border-border-default rounded-xl p-3"
               >
                 <div>
-                  <p className="font-medium text-sm capitalize">{report.type.replace(/_/g, " ")}</p>
+                  <p className="font-medium text-sm">{l(report.type)}</p>
                   <p className="text-xs text-on-surface-variant">
-                    {report.frequency} · {report.recipients.join(", ")}
-                    {report.nextSendAt && ` · Next: ${new Date(report.nextSendAt).toLocaleDateString()}`}
+                    {l(report.frequency)} · {report.recipients.join(", ")}
+                    {report.nextSendAt && <> · {l("Next")}: {new Date(report.nextSendAt).toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US")}</>}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant={report.isActive ? "default" : "secondary"}>
-                    {report.isActive ? "Active" : "Paused"}
+                    {l(report.isActive ? "Active" : "Paused")}
                   </Badge>
                   <Button size="sm" variant="outline" onClick={() => void toggleNotificationReport(report)}>
-                    {report.isActive ? "Pause" : "Enable"}
+                    {l(report.isActive ? "Pause" : "Enable")}
                   </Button>
                 </div>
               </div>
@@ -428,26 +430,26 @@ function Page() {
       </Section>
 
       {isOwner && (
-        <Section title="Invite external users and staff">
+        <Section title={l("Invite external users and staff")}>
           <div className="grid md:grid-cols-4 gap-3">
-            <EditField label="Full name" value={invite.fullName} onChange={(fullName) => setInvite({ ...invite, fullName })} />
-            <EditField label="Email" value={invite.email} onChange={(email) => setInvite({ ...invite, email })} type="email" />
-            <EditField label="Temporary password (new users only)" value={invite.password} onChange={(password) => setInvite({ ...invite, password })} type="password" />
+            <EditField label={t("fullName")} value={invite.fullName} onChange={(fullName) => setInvite({ ...invite, fullName })} />
+            <EditField label={t("email")} value={invite.email} onChange={(email) => setInvite({ ...invite, email })} type="email" />
+            <EditField label={l("Temporary password (new users only)")} value={invite.password} onChange={(password) => setInvite({ ...invite, password })} type="password" />
             <div className="space-y-1.5">
-              <Label>Role</Label>
+              <Label>{l("Role")}</Label>
               <select
                 value={invite.role}
                 onChange={(event) => setInvite({ ...invite, role: event.target.value })}
                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
-                <option value="accountant">Accountant / staff</option>
-                <option value="viewer">Viewer</option>
-                <option value="owner">Owner</option>
+                <option value="accountant">{l("Accountant / staff")}</option>
+                <option value="viewer">{l("Viewer")}</option>
+                <option value="owner">{l("Owner")}</option>
               </select>
             </div>
             {invite.role === "viewer" && (
               <EditField
-                label="Access end date (optional)"
+                label={l("Access end date (optional)")}
                 value={invite.accessExpiresAt}
                 onChange={(accessExpiresAt) => setInvite({ ...invite, accessExpiresAt })}
                 type="date"
@@ -469,7 +471,7 @@ function Page() {
                       })
                     }
                   />
-                  {text}
+                  {l(text)}
                 </label>
               ))}
             </div>
@@ -479,13 +481,13 @@ function Page() {
             onClick={sendInvitation}
             disabled={!invite.email || Boolean(invite.password && invite.password.length < 8)}
           >
-            Add member or send invitation
+            {l("Add member or send invitation")}
           </Button>
         </Section>
       )}
 
       {isOwner && (
-        <Section title="Organization members">
+        <Section title={l("Organization members")}>
           <div className="space-y-2">
             {members.map((member) => (
               <div
@@ -498,18 +500,18 @@ function Page() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant={member.isActive ? "default" : "secondary"} className="capitalize">
-                    {member.isActive ? member.role : "Deactivated"}
+                    {l(member.isActive ? member.role : "Deactivated")}
                   </Badge>
                   {member.accessExpiresAt && (
-                    <span className="text-xs">Until {new Date(member.accessExpiresAt).toLocaleDateString()}</span>
+                    <span className="text-xs">{l("Until")} {new Date(member.accessExpiresAt).toLocaleDateString(lang === "ar" ? "ar-EG" : "en-US")}</span>
                   )}
                   {member.user.id !== session?.user.id && (
                     <>
                       <Button size="sm" variant="outline" onClick={() => void setMemberActive(member, !member.isActive)}>
-                        {member.isActive ? "Deactivate" : "Reactivate"}
+                        {l(member.isActive ? "Deactivate" : "Reactivate")}
                       </Button>
                       <Button size="sm" variant="destructive" onClick={() => void removeMember(member.id)}>
-                        Remove
+                        {l("Remove")}
                       </Button>
                     </>
                   )}
@@ -521,24 +523,24 @@ function Page() {
       )}
 
       {isOwner && (
-        <Section title="Owner actions">
+        <Section title={l("Owner actions")}>
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline">
-              <Link to="/onboarding" search={{ newOrganization: true }}>Create another organization</Link>
+              <Link to="/onboarding" search={{ newOrganization: true }}>{l("Create another organization")}</Link>
             </Button>
-            <Button variant="destructive" onClick={deleteOrganization}>Delete organization</Button>
+            <Button variant="destructive" onClick={deleteOrganization}>{l("Delete organization")}</Button>
           </div>
         </Section>
       )}
 
       {/* Help & Support section with integrated ticket form */}
-      <Section title="Help and support">
+      <Section title={l("Help and support")}>
         {/* Support ticket form */}
         <div className="mb-6">
-          <h4 className="font-medium mb-2">Contact support</h4>
+          <h4 className="font-medium mb-2">{l("Contact support")}</h4>
           <div className="grid md:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Subject</Label>
+              <Label>{l("Subject")}</Label>
               <Input
                 value={ticketForm.subject}
                 maxLength={160}
@@ -546,21 +548,21 @@ function Page() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Category</Label>
+              <Label>{l("Category")}</Label>
               <select
                 value={ticketForm.category}
                 onChange={(e) => setTicketForm({ ...ticketForm, category: e.target.value })}
                 className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
-                <option value="technical">Technical issue</option>
-                <option value="account">Account and access</option>
-                <option value="billing">Billing</option>
-                <option value="feature_request">Feature request</option>
-                <option value="other">Other</option>
+                <option value="technical">{l("Technical issue")}</option>
+                <option value="account">{l("Account and access")}</option>
+                <option value="billing">{l("Billing")}</option>
+                <option value="feature_request">{l("Feature request")}</option>
+                <option value="other">{l("Other")}</option>
               </select>
             </div>
             <div className="md:col-span-2 space-y-1.5">
-              <Label>How can we help?</Label>
+              <Label>{l("How can we help?")}</Label>
               <Textarea
                 value={ticketForm.message}
                 maxLength={5000}
@@ -570,13 +572,13 @@ function Page() {
             </div>
           </div>
           <Button className="mt-3" onClick={submitTicket} disabled={sending}>
-            {sending ? "Sending..." : "Submit ticket"}
+            {l(sending ? "Sending..." : "Submit ticket")}
           </Button>
         </div>
 
         {/* Existing support channels */}
         <div className="border-t border-border-default pt-6 mb-6">
-          <h4 className="font-medium mb-3">Other ways to get help</h4>
+          <h4 className="font-medium mb-3">{l("Other ways to get help")}</h4>
           <div className="grid sm:grid-cols-3 gap-3">
             <a
               href="mailto:support@hesbetak.ai"
@@ -586,7 +588,7 @@ function Page() {
                 <Mail className="h-4 w-4 text-primary" />
               </div>
               <div>
-                <p className="text-sm font-medium">Email support</p>
+                <p className="text-sm font-medium">{l("Email support")}</p>
                 <p className="text-xs text-on-surface-variant">support@hesbetak.ai</p>
               </div>
             </a>
@@ -601,7 +603,7 @@ function Page() {
               </div>
               <div>
                 <p className="text-sm font-medium">WhatsApp</p>
-                <p className="text-xs text-on-surface-variant">Chat with our team</p>
+                <p className="text-xs text-on-surface-variant">{l("Chat with our team")}</p>
               </div>
             </a>
             <a
@@ -614,7 +616,7 @@ function Page() {
                 <ExternalLink className="h-4 w-4 text-primary" />
               </div>
               <div>
-                <p className="text-sm font-medium">Documentation</p>
+                <p className="text-sm font-medium">{l("Documentation")}</p>
                 <p className="text-xs text-on-surface-variant">docs.hesbetak.ai</p>
               </div>
             </a>
@@ -623,7 +625,7 @@ function Page() {
 
         {/* List of user's tickets */}
         <div>
-          <h4 className="font-medium mb-3">Your support tickets</h4>
+          <h4 className="font-medium mb-3">{l("Your support tickets")}</h4>
           <div className="divide-y divide-border-default border border-border-default rounded-xl overflow-hidden">
             {tickets.length ? (
               tickets.map((ticket) => (
@@ -632,27 +634,27 @@ function Page() {
                     <div>
                       <h3 className="font-medium">{ticket.subject}</h3>
                       <p className="text-xs text-on-surface-variant mt-1 capitalize">
-                        {ticket.category.replace("_", " ")} · {String(ticket.createdAt).slice(0, 10)}
+                        {l(ticket.category)} · {String(ticket.createdAt).slice(0, 10)}
                       </p>
                     </div>
                     <Badge
                       variant={ticket.status === "resolved" || ticket.status === "closed" ? "secondary" : "default"}
                       className="capitalize"
                     >
-                      {ticket.status.replace("_", " ")}
+                      {l(ticket.status)}
                     </Badge>
                   </div>
                   <p className="text-sm mt-3 whitespace-pre-wrap">{ticket.message}</p>
                   {ticket.adminReply && (
                     <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
-                      <p className="text-xs font-semibold text-primary">SUPPORT REPLY</p>
+                      <p className="text-xs font-semibold text-primary">{l("SUPPORT REPLY")}</p>
                       <p className="text-sm mt-2 whitespace-pre-wrap">{ticket.adminReply}</p>
                     </div>
                   )}
                 </article>
               ))
             ) : (
-              <p className="p-8 text-center text-sm text-on-surface-variant">No support tickets yet.</p>
+              <p className="p-8 text-center text-sm text-on-surface-variant">{l("No support tickets yet.")}</p>
             )}
           </div>
         </div>

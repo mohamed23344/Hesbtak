@@ -24,7 +24,7 @@ type Expense = {
 };
 
 function ManageExpenses() {
-  const { t } = useI18n();
+  const { t, l } = useI18n();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -95,7 +95,7 @@ function ManageExpenses() {
       <div className="flex flex-wrap gap-2 items-center">
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <Search className="h-4 w-4 absolute start-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
-          <Input className="ps-9 bg-card" placeholder="Search expenses..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input className="ps-9 bg-card" placeholder={l("Search expenses...")} value={search} onChange={(e) => setSearch(e.target.value)} />
           {search && (
             <button onClick={() => setSearch("")} className="absolute end-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface">
               <X className="h-4 w-4" />
@@ -111,7 +111,7 @@ function ManageExpenses() {
         </Button>
         {activeFilterCount > 0 && (
           <Button variant="ghost" size="sm" onClick={clearFilters} className="text-on-surface-variant gap-1">
-            <X className="h-3 w-3" /> Clear filters
+            <X className="h-3 w-3" /> {l("Clear filters")}
           </Button>
         )}
       </div>
@@ -121,18 +121,18 @@ function ManageExpenses() {
           <div className="space-y-1.5">
             <Label className="text-xs">{t("status")}</Label>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm">
-              <option value="">All statuses</option>
-              <option value="draft">Draft</option>
-              <option value="received">Received</option>
-              <option value="paid">Paid</option>
-              <option value="partial">Partial</option>
-              <option value="overdue">Overdue</option>
+              <option value="">{l("All statuses")}</option>
+              <option value="draft">{l("Draft")}</option>
+              <option value="received">{l("Received")}</option>
+              <option value="paid">{l("Paid")}</option>
+              <option value="partial">{l("Partial")}</option>
+              <option value="overdue">{t("overdue")}</option>
             </select>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">Vendor</Label>
+            <Label className="text-xs">{l("Vendor")}</Label>
             <select value={vendorFilter} onChange={(e) => setVendorFilter(e.target.value)} className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm">
-              <option value="">All vendors</option>
+              <option value="">{l("All vendors")}</option>
               {vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}
             </select>
           </div>
@@ -158,7 +158,7 @@ function ManageExpenses() {
           <thead className="bg-surface-container text-on-surface-variant text-xs uppercase">
             <tr>
               <th className="text-start p-3 font-medium">{t("number")}</th>
-              <th className="text-start p-3 font-medium">Vendor</th>
+              <th className="text-start p-3 font-medium">{l("Vendor")}</th>
               <th className="text-start p-3 font-medium">{t("issued")}</th>
               <th className="text-start p-3 font-medium">{t("dueDate")}</th>
               <th className="text-start p-3 font-medium">{t("status")}</th>
@@ -168,12 +168,12 @@ function ManageExpenses() {
           </thead>
           <tbody className="divide-y divide-border-default">
             {filtered.length === 0 ? (
-              <tr><td colSpan={7} className="p-8 text-center text-on-surface-variant text-sm">No expenses found.</td></tr>
+              <tr><td colSpan={7} className="p-8 text-center text-on-surface-variant text-sm">{l("No expenses found.")}</td></tr>
             ) : (
               filtered.map((e) => (
                 <tr key={e.id} className="hover:bg-surface-subtle cursor-pointer" onClick={() => setEditingId(e.id)}>
                   <td className="p-3 font-medium text-primary">{e.bill_number}</td>
-                  <td className="p-3">{e.vendor_name || "No vendor"}</td>
+                  <td className="p-3">{e.vendor_name || l("No vendor")}</td>
                   <td className="p-3 text-on-surface-variant">{String(e.issue_date).slice(0, 10)}</td>
                   <td className="p-3 text-on-surface-variant">{String(e.due_date).slice(0, 10)}</td>
                   <td className="p-3"><StatusBadge status={e.status} /></td>

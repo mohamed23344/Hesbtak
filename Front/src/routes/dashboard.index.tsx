@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useI18n } from "@/lib/i18n";
 import { TrendingUp, TrendingDown, DollarSign, Wallet, AlertTriangle, Sparkles, Lightbulb } from "lucide-react";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { api, money, getSession } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -18,7 +18,7 @@ type Kpis = {
 };
 
 function DashboardHome() {
-  const { t, lang, dir } = useI18n();
+  const { t, l, lang } = useI18n();
   const session = getSession();
   const firstName = session?.user.fullName?.split(" ")[0] ?? "";
   const greeting =
@@ -45,17 +45,18 @@ function DashboardHome() {
   }, []);
 
   const cashflow = [
-    { m: "AR", in: kpis.accountsReceivable, out: 0 },
-    { m: "AP", in: 0, out: kpis.accountsPayable },
-    { m: "Rev", in: kpis.revenue, out: 0 },
-    { m: "Exp", in: 0, out: kpis.expenses },
-    { m: "Cash", in: Math.max(kpis.cash, 0), out: Math.max(-kpis.cash, 0) },
+    { m: l("Receivables"), in: kpis.accountsReceivable, out: 0 },
+    { m: l("Payables"), in: 0, out: kpis.accountsPayable },
+    { m: t("revenue"), in: kpis.revenue, out: 0 },
+    { m: t("expenses"), in: 0, out: kpis.expenses },
+    { m: t("cashOnHand"), in: Math.max(kpis.cash, 0), out: Math.max(-kpis.cash, 0) },
   ];
   const categories = [
-    { c: "Expenses", v: kpis.expenses },
-    { c: "Payables", v: kpis.accountsPayable },
-    { c: "Receivables", v: kpis.accountsReceivable },
+    { c: t("expenses"), v: kpis.expenses },
+    { c: l("Payables"), v: kpis.accountsPayable },
+    { c: l("Receivables"), v: kpis.accountsReceivable },
   ];
+  const categoryMax = Math.max(0, ...categories.map((category) => category.v));
 
   return (
     <div className="space-y-6">
@@ -67,16 +68,16 @@ function DashboardHome() {
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Kpi label={t("revenue")} value={money(kpis.revenue)} delta="Live" up icon={DollarSign} />
-        <Kpi label={t("expenses")} value={money(kpis.expenses)} delta="Live" icon={Wallet} />
-        <Kpi label={t("netProfit")} value={money(kpis.netIncome)} delta="Live" up={kpis.netIncome >= 0} down={kpis.netIncome < 0} icon={TrendingUp} />
-        <Kpi label={t("cashOnHand")} value={money(kpis.cash)} delta="Live" down={kpis.cash < 0} icon={Wallet} />
+        <Kpi label={t("revenue")} value={money(kpis.revenue)} delta={l("Live")} up icon={DollarSign} />
+        <Kpi label={t("expenses")} value={money(kpis.expenses)} delta={l("Live")} icon={Wallet} />
+        <Kpi label={t("netProfit")} value={money(kpis.netIncome)} delta={l("Live")} up={kpis.netIncome >= 0} down={kpis.netIncome < 0} icon={TrendingUp} />
+        <Kpi label={t("cashOnHand")} value={money(kpis.cash)} delta={l("Live")} down={kpis.cash < 0} icon={Wallet} />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 bg-card/80 glass-panel rounded-2xl p-5 shadow-soft hover-glow">
           <h3 className="font-semibold text-lg mb-0.5">{t("cashflow")}</h3>
-          <p className="text-xs text-on-surface-variant mb-4">Tenant ledger snapshot</p>
+          <p className="text-xs text-on-surface-variant mb-4">{l("Tenant ledger snapshot")}</p>
           <div className="h-64">
             <ResponsiveContainer>
               <AreaChart data={cashflow}>
@@ -93,17 +94,27 @@ function DashboardHome() {
 
         <div className="bg-card/80 glass-panel rounded-2xl p-5 shadow-soft hover-glow">
           <h3 className="font-semibold text-lg mb-0.5">{t("topExpenseCategories")}</h3>
-          <p className="text-xs text-on-surface-variant mb-3">Current balances</p>
-          <div className="h-64">
-            <ResponsiveContainer>
-              <BarChart data={categories} layout="vertical">
-                <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" hide />
-                <YAxis dataKey="c" type="category" stroke="var(--on-surface-variant)" fontSize={12} tickLine={false} axisLine={false} width={86} />
-                <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.05)" }} />
-                <Bar dataKey="v" fill="var(--accent)" radius={dir === "rtl" ? [8, 0, 0, 8] : [0, 8, 8, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <p className="text-xs text-on-surface-variant mb-3">{l("Current balances")}</p>
+          <div className="h-64 grid content-center gap-5" role="img" aria-label={t("topExpenseCategories")}>
+            {categories.map((category) => {
+              const width = categoryMax > 0 && category.v > 0
+                ? Math.max(4, (category.v / categoryMax) * 100)
+                : 0;
+              return (
+                <div key={category.c} className="min-w-0">
+                  <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
+                    <span className="truncate font-medium text-on-surface-variant">{category.c}</span>
+                    <span className="shrink-0 font-semibold text-on-surface">{money(category.v)}</span>
+                  </div>
+                  <div className="flex h-8 overflow-hidden rounded-lg bg-surface-container" title={`${category.c}: ${money(category.v)}`}>
+                    <div
+                      className="h-full rounded-lg bg-accent transition-[width] duration-300"
+                      style={{ width: `${width}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -114,7 +125,7 @@ function DashboardHome() {
           <div className="relative z-10 flex items-center gap-2 text-sm opacity-90"><Sparkles className="h-4 w-4" /> {t("aiInsights")}</div>
           <h3 className="relative z-10 mt-1 text-lg font-semibold">{t("thingsToKnow")}</h3>
           <ul className="relative z-10 mt-4 space-y-3 text-sm">
-            {(suggestions.length ? suggestions : [{ id: "empty", title: "Add transactions", description: "Suggestions appear after invoices, bills, or expenses are posted." }]).map((item) => (
+            {(suggestions.length ? suggestions : [{ id: "empty", title: l("Add transactions"), description: l("Suggestions appear after invoices, bills, or expenses are posted.") }]).map((item) => (
               <li key={item.id} className="flex gap-2 bg-white/10 backdrop-blur-xs rounded-lg p-3">
                 <Lightbulb className="h-4 w-4 shrink-0 mt-0.5 text-accent" /> {item.title}: {item.description}
               </li>
@@ -128,7 +139,7 @@ function DashboardHome() {
           </div>
           <h3 className="mt-1 text-lg font-semibold">{t("thingsAttention")}</h3>
           <ul className="mt-4 divide-y divide-border-default/60">
-            {(alerts.length ? alerts.slice(0, 5) : [{ id: "none", title: "No alerts", message: "Due date and threshold alerts will show here.", severity: "info" }]).map((alert) => (
+            {(alerts.length ? alerts.slice(0, 5) : [{ id: "none", title: l("No alerts"), message: l("Due date and threshold alerts will show here."), severity: "info" }]).map((alert) => (
               <li key={alert.id} className="py-3 flex items-start gap-3">
                 <span className={`mt-1.5 h-2 w-2 rounded-full ${alert.severity === "critical" ? "bg-status-error animate-pulse" : "bg-status-warning"}`} />
                 <div>

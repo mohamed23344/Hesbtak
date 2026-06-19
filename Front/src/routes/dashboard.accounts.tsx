@@ -86,7 +86,7 @@ function suggestChildAccountCode(parentCode: string, usedCodes: string[]) {
 }
 
 function Page() {
-  const { t } = useI18n();
+  const { t, l } = useI18n();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -190,7 +190,7 @@ function Page() {
       />
       <div className="bg-card border border-border-default rounded-2xl p-4 shadow-soft">
         {loading ? (
-          <p className="text-sm text-on-surface-variant">Loading accounts...</p>
+          <p className="text-sm text-on-surface-variant">{l("Loading accounts...")}</p>
         ) : (
           <div className="space-y-5">
             {accountTree.map((account) => (
@@ -214,7 +214,7 @@ function Page() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-1.5">
-              <Label>Parent account</Label>
+              <Label>{l("Parent account")}</Label>
               <select
                 value={parentId}
                 onChange={(e) => {
@@ -230,21 +230,21 @@ function Page() {
                 }}
                 className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
               >
-                <option value="">No parent (Level 1)</option>
+                <option value="">{l("No parent (Level 1)")}</option>
                 {parentOptions.map((account) => (
                   <option key={account.id} value={account.id}>
-                    {"--".repeat(account.depth)} {account.code} - {account.name}
+                    {"--".repeat(account.depth)} {account.code} - {l(account.name)}
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-on-surface-variant">Pick a level 2 or 3 parent when you need a level 3 or 4 account.</p>
+              <p className="text-xs text-on-surface-variant">{l("Pick a level 2 or 3 parent when you need a level 3 or 4 account.")}</p>
             </div>
             <div className="space-y-1.5">
               <Label>{t("accountCode")}</Label>
               <Input value={accCode} onChange={(e) => setAccCode(e.target.value)} placeholder="e.g. 5800" />
               {!editing && parentId && (
                 <p className="text-xs text-on-surface-variant">
-                  Suggested from the parent account. You can change it.
+                  {l("Suggested from the parent account. You can change it.")}
                 </p>
               )}
             </div>
@@ -253,14 +253,14 @@ function Page() {
               <Input value={accName} onChange={(e) => setAccName(e.target.value)} placeholder="e.g. Marketing" />
             </div>
             <div className="space-y-1.5">
-              <Label>Type</Label>
+              <Label>{l("Type")}</Label>
               <select
                 value={accType}
                 onChange={(e) => setAccType(e.target.value)}
                 disabled={!!parentId}
                 className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm disabled:opacity-70"
               >
-                {accountTypes.map((type) => <option key={type}>{type}</option>)}
+                {accountTypes.map((type) => <option key={type}>{l(type)}</option>)}
               </select>
             </div>
           </div>
@@ -268,7 +268,7 @@ function Page() {
             <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={savingAccount}>{t("cancel")}</Button>
             <Button className="bg-gradient-primary gap-1.5" onClick={handleSave} disabled={savingAccount}>
               {savingAccount && <LoaderCircle className="h-4 w-4 animate-spin" />}
-              {savingAccount ? "Saving..." : t("saveChanges")}
+              {savingAccount ? l("Saving...") : t("saveChanges")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -277,15 +277,15 @@ function Page() {
       <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete account?</AlertDialogTitle>
+            <AlertDialogTitle>{l("Delete account?")}</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes {deleteTarget?.code} - {deleteTarget?.name}. Accounts with child accounts or existing records cannot be deleted.
+              {l("This account cannot be deleted if it has child accounts or existing records.")} {deleteTarget?.code} - {deleteTarget ? l(deleteTarget.name) : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete
+              {l("Delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -307,6 +307,7 @@ function AccountRow({
   onEdit: (account: Account) => void;
   onDelete: (account: Account) => void;
 }) {
+  const { l } = useI18n();
   const [open, setOpen] = useState(depth < 1);
   const hasChildren = account.children.length > 0;
   const level = account.level ?? depth + 1;
@@ -330,8 +331,8 @@ function AccountRow({
         </button>
         {hasChildren ? <Folder className="h-4 w-4 text-primary" /> : <FileText className="h-4 w-4 text-on-surface-variant" />}
         <span className="text-xs text-on-surface-variant font-mono w-14">{account.code}</span>
-        <span className="text-sm font-medium min-w-0 flex-1">{account.name}</span>
-        <span className="text-xs text-on-surface-variant hidden sm:inline">{account.type}</span>
+        <span className="text-sm font-medium min-w-0 flex-1">{l(account.name)}</span>
+        <span className="text-xs text-on-surface-variant hidden sm:inline">{l(account.type)}</span>
         {level < 4 && (
           <button
             type="button"

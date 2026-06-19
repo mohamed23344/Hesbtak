@@ -1,5 +1,6 @@
 import CreateInvoiceWithUpload from "@/components/CreateInvoiceWithUpload";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useI18n } from "@/lib/i18n";
 
 type Props = {
   open: boolean;
@@ -18,9 +19,10 @@ export default function CreateInvoiceDialog({
   documentId,
   onCreated,
 }: Props) {
+  const { dir } = useI18n();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[92vh] overflow-y-auto">
+      <DialogContent dir={dir} className="localized-entry-form max-w-5xl max-h-[92vh] overflow-y-auto text-start">
         <DialogHeader>
           <DialogTitle>{documentId ? `Edit ${title}` : title}</DialogTitle>
         </DialogHeader>

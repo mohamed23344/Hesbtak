@@ -24,7 +24,7 @@ type Entry = {
 const REF_TYPES = ["manual", "invoice", "vendor_bill", "expense", "payment"];
 
 function Page() {
-  const { t } = useI18n();
+  const { t, l } = useI18n();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [search, setSearch] = useState("");
@@ -207,7 +207,7 @@ function Page() {
             {filtered.length === 0 ? (
               <tr>
                 <td colSpan={6} className="p-8 text-center text-on-surface-variant text-sm">
-                  No transactions match your filters.
+                  {l("No transactions match your filters.")}
                 </td>
               </tr>
             ) : (
@@ -229,7 +229,7 @@ function Page() {
                     </td>
                     <td className="p-3">
                       <span className="capitalize text-on-surface-variant text-xs">
-                        {(entry.reference_type ?? "manual").replace("_", " ")}
+                        {l(entry.reference_type ?? "manual")}
                       </span>
                     </td>
                     <td className="p-3">
@@ -248,6 +248,7 @@ function Page() {
 }
 
 export function StatusBadge({ status }: { status: string }) {
+  const { l } = useI18n();
   const map: Record<string, string> = {
     completed: "bg-status-success/10 text-status-success",
     posted: "bg-status-success/10 text-status-success",
@@ -262,7 +263,7 @@ export function StatusBadge({ status }: { status: string }) {
   };
   return (
     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium ${map[status] ?? "bg-surface-container"}`}>
-      {status}
+      {l(status)}
     </span>
   );
 }

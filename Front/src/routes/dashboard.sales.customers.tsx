@@ -16,7 +16,7 @@ type Activity = {
 };
 
 function CustomersPage() {
-  const { t } = useI18n();
+  const { t,l } = useI18n();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selected, setSelected] = useState<Customer | null>(null);
   const [activity, setActivity] = useState<Activity | null>(null);
@@ -46,13 +46,13 @@ function CustomersPage() {
             <tr>
               <th className="text-start p-3 font-medium">{t("fullName")}</th>
               <th className="text-start p-3 font-medium">{t("email")}</th>
-              <th className="text-start p-3 font-medium">Phone</th>
+              <th className="text-start p-3 font-medium">{l("phone")}</th>
               <th className="w-20" />
             </tr>
           </thead>
           <tbody className="divide-y divide-border-default">
             {customers.length === 0 ? (
-              <tr><td colSpan={4} className="p-8 text-center text-on-surface-variant text-sm">No customers yet.</td></tr>
+              <tr><td colSpan={4} className="p-8 text-center text-on-surface-variant text-sm">{l("No customers yet.")}</td></tr>
             ) : customers.map((customer) => (
               <tr key={customer.id} className="hover:bg-surface-subtle">
                 <td className="p-3 font-medium">{customer.name}</td>

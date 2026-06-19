@@ -36,7 +36,7 @@ type Notification = {
 };
 
 export default function DashboardLayout() {
-  const { t, dir } = useI18n();
+  const { t, l, dir } = useI18n();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const [open, setOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
@@ -92,8 +92,8 @@ export default function DashboardLayout() {
             && pathRef.current !== "/dashboard/notifications"
           ) {
             const newest = newUnread[0];
-            toast.info(newUnread.length === 1 ? (newest.title ?? "New notification") : `${newUnread.length} new notifications`, {
-              description: newest.message ?? "Open notifications to review it.",
+            toast.info(newUnread.length === 1 ? (newest.title ?? l("New notification")) : `${newUnread.length} ${l("new notifications")}`, {
+              description: newest.message ?? l("Open notifications to review it."),
               
             });
           }
@@ -311,7 +311,7 @@ export default function DashboardLayout() {
         {(session?.tenants.length ?? 0) > 1 && (
           <div className="border-t border-border-default p-3 lg:hidden">
             <div className="flex flex-col gap-2">
-              <span className="text-sm font-medium text-on-surface-variant">Organization:</span>
+              <span className="text-sm font-medium text-on-surface-variant">{l("Organization")}:</span>
               <select
                 aria-label="Switch organization"
                 value={session?.activeTenantId ?? ""}
@@ -358,7 +358,7 @@ export default function DashboardLayout() {
             {/* Organization selector - hidden on small screens */}
             {(session?.tenants.length ?? 0) > 1 && (
               <div className="hidden md:flex items-center gap-2">
-                <span className="text-sm font-medium text-on-surface-variant">Organization:</span>
+                <span className="text-sm font-medium text-on-surface-variant">{l("Organization")}:</span>
                 <select
                   aria-label="Switch organization"
                   value={session?.activeTenantId ?? ""}
@@ -378,7 +378,7 @@ export default function DashboardLayout() {
             )}
 
             {/* Right side group */}
-            <div className="flex items-center gap-4 ml-auto">
+            <div className="flex items-center gap-4 ms-auto">
               <div className="flex items-center gap-2">
                 <Button asChild variant="ghost" size="icon">
                   <Link to="/dashboard/notifications" aria-label={t("notifications")} className="relative">
@@ -397,27 +397,27 @@ export default function DashboardLayout() {
               <div className="relative" ref={userMenuRef}>
                 <button
                   onClick={() => setUserMenuOpen((prev) => !prev)}
-                  className="hidden sm:grid h-11 w-11 rounded-full bg-gradient-primary text-primary-foreground place-items-center text-base font-semibold focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  className="grid h-10 w-10 sm:h-11 sm:w-11 rounded-full bg-gradient-primary text-primary-foreground place-items-center text-sm sm:text-base font-semibold focus:outline-none focus:ring-2 focus:ring-primary/50"
                 >
                   {session?.user.fullName?.[0] ?? "A"}
                 </button>
 
                 {userMenuOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-64 rounded-lg border border-border-default bg-card shadow-lg p-2 z-50">
+                  <div className="absolute end-0 top-full mt-2 w-64 rounded-lg border border-border-default bg-card shadow-lg p-2 z-50">
                     <div className="px-3 py-2">
                       <p className="text-sm font-medium">{session?.user.fullName ?? "Account"}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{planName} Plan</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{l(planName)} {l("Plan")}</p>
                     </div>
                     <div className="my-1 border-t border-border-default" />
                     <div className="px-2 py-1">
                       <div className="flex items-center justify-between text-sm">
-                        <span>Appearances</span>
+                        <span>{l("Appearance")}</span>
                         <ThemeToggle />
                       </div>
                     </div>
                     <div className="px-2 py-1">
                       <div className="flex items-center justify-between text-sm">
-                        <span>Language</span>
+                        <span>{l("Language")}</span>
                         <LangToggle />
                       </div>
                     </div>
@@ -440,7 +440,7 @@ export default function DashboardLayout() {
                       className="w-full flex items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 rounded-md transition-colors"
                     >
                       <LogOut className="h-4 w-4" />
-                      Logout
+                      {t("logout")}
                     </button>
                   </div>
                 )}
