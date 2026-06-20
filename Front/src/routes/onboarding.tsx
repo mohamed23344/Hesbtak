@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { useEffect, useMemo, useState, type ElementType, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ElementType, type ReactNode } from "react";
 import {
   Building2, Briefcase, Coins, CreditCard, Wallet, ArrowRight, ArrowLeft,
   Check, Info, ChevronRight, Folder, FileText, Plus, Trash2, LoaderCircle, Pencil
@@ -19,8 +19,11 @@ import { useCOA, DEFAULT_COA, COANode } from "@/lib/useCOA";
 import { api, getSession, updateSession } from "@/lib/api";
 
 export const Route = createFileRoute("/onboarding")({
-  validateSearch: (search: Record<string, unknown>): { newOrganization?: boolean } => ({
-    newOrganization: search.new === "1" ? true : undefined,
+  validateSearch: (search: Record<string, unknown>): { newOrganization?: boolean; payment?: string; reference?: string; success?: string } => ({
+    newOrganization: search.new === "1" || search.newOrganization === true ? true : undefined,
+    payment: typeof search.payment === "string" ? search.payment : undefined,
+    reference: typeof search.reference === "string" ? search.reference : undefined,
+    success: typeof search.success === "string" ? search.success : undefined,
   }),
   component: Onboarding,
 });
@@ -36,6 +39,20 @@ type SubscriptionPlan = {
   currency: string;
   billingCycle: string;
   features: Record<string, boolean>;
+};
+
+const ONBOARDING_DRAFT_KEY = "hesbtak-onboarding-draft";
+
+type OnboardingDraft = {
+  company: string;
+  teamSize: string;
+  industryCategory: IndustryCategory;
+  businessType: string;
+  otherBusiness: string;
+  primaryCurrency: string;
+  selectedCurrencies: string[];
+  questionState: Record<string, boolean>;
+  selectedPlanId: string;
 };
 
 const INDUSTRY_GROUPS: Record<IndustryCategory, string[]> = {
@@ -283,7 +300,8 @@ const buildCOA = (enabledQuestionKeys: Set<string>) => {
 };
 
 function Onboarding() {
-  const { newOrganization: createNew } = Route.useSearch();
+  const { payment, reference, success } = Route.useSearch();
+  const navigate = useNavigate();
   const { dir, t, l } = useI18n();
   const { saveCOA } = useCOA();
   const [step, setStep] = useState(0);
@@ -307,6 +325,8 @@ function Onboarding() {
   const [newAccCode, setNewAccCode] = useState("");
   const [newAccParent, setNewAccParent] = useState("5");
   const [saving, setSaving] = useState(false);
+  const [processingPayment, setProcessingPayment] = useState(false);
+  const paymentHandled = useRef(false);
 
   const STEPS = [t("stepCompany"), t("stepIndustry"), t("stepCurrency"), l("Subscription"), t("stepAccounts")];
 
@@ -336,6 +356,71 @@ function Onboarding() {
       .catch((error) => toast.error(error instanceof Error ? error.message : l("Could not load plans")));
   }, []);
 
+  useEffect(() => {
+    if (payment !== "return" || !reference || paymentHandled.current) return;
+    paymentHandled.current = true;
+    const rawDraft = window.localStorage.getItem(ONBOARDING_DRAFT_KEY);
+    if (rawDraft) {
+      const draft = JSON.parse(rawDraft) as OnboardingDraft;
+      setCompany(draft.company);
+      setTeamSize(draft.teamSize);
+      setIndustryCategory(draft.industryCategory);
+      setBusinessType(draft.businessType);
+      setOtherBusiness(draft.otherBusiness);
+      setPrimaryCurrency(draft.primaryCurrency);
+      setSelectedCurrencies(draft.selectedCurrencies);
+      setQuestionState(draft.questionState);
+      setSelectedPlanId(draft.selectedPlanId);
+    }
+    if (success === "false") {
+      setStep(3);
+      toast.error(l("Payment was not completed"));
+      return;
+    }
+    setProcessingPayment(true);
+    api<{
+      status: string;
+      currentPeriodEnd: string;
+      plan: {
+        code: string;
+        name: string;
+        features: Record<string, boolean>;
+      };
+    }>("/subscriptions/verify", {
+      method: "POST",
+      body: JSON.stringify({ reference }),
+    })
+      .then((subscription) => {
+        if (subscription.status !== "active") {
+          throw new Error(l("Payment is still being confirmed. Refresh in a few seconds."));
+        }
+        const session = getSession();
+        if (session?.activeTenantId) {
+          updateSession({
+            tenants: session.tenants.map((tenant) =>
+              tenant.organizationId === session.activeTenantId
+                ? {
+                    ...tenant,
+                    subscription: {
+                      status: subscription.status,
+                      currentPeriodEnd: subscription.currentPeriodEnd,
+                      plan: subscription.plan,
+                    },
+                  }
+                : tenant,
+            ),
+          });
+        }
+        setStep(4);
+        toast.success(l("Subscription activated"));
+      })
+      .catch((error) => {
+        setStep(3);
+        toast.error(error instanceof Error ? error.message : l("Could not verify payment"));
+      })
+      .finally(() => setProcessingPayment(false));
+  }, [l, payment, reference, success]);
+
   const toggleCurrency = (code: string) => {
     setSelectedCurrencies((prev) => {
       if (prev.includes(code)) {
@@ -351,11 +436,12 @@ function Onboarding() {
   const finishOnboarding = async (coaToSave: COANode[]) => {
     const session = getSession();
     if (!session) {
-      throw new Error("Please login before onboarding");
+      throw new Error(l("Please login before onboarding"));
     }
-    const endpoint = session.activeTenantId && !createNew
-      ? `/onboarding/${session.activeTenantId}/complete`
-      : "/onboarding/complete";
+    if (!session.activeTenantId) {
+      throw new Error(l("Complete subscription payment before creating the workspace"));
+    }
+    const endpoint = `/onboarding/${session.activeTenantId}/complete`;
     const result = await api<{
       tenant?: {
         organizationId: string;
@@ -392,13 +478,17 @@ function Onboarding() {
       currency: result.organization.currency,
       role: "owner",
     } : undefined);
-    if (createdTenant && (!session.activeTenantId || createNew)) {
+    if (createdTenant) {
+      const previousTenant = session.tenants.find(
+        (item) => item.organizationId === createdTenant.organizationId,
+      );
       updateSession({
         tenants: [
           ...session.tenants.filter((item) => item.organizationId !== createdTenant.organizationId),
           {
             ...createdTenant,
             organizationName: createdTenant.organizationName ?? company,
+            subscription: previousTenant?.subscription,
           },
         ],
         activeTenantId: createdTenant.organizationId,
@@ -424,29 +514,77 @@ function Onboarding() {
       });
       createdIds.set(account.id, created.id);
     }
+    window.localStorage.removeItem(ONBOARDING_DRAFT_KEY);
     return createdTenant;
   };
 
   const openSubscriptionCheckout = async () => {
     if (!selectedPlanId) throw new Error(l("Choose a subscription plan to continue"));
-    const checkout = await api<{ checkoutUrl: string }>("/subscriptions/checkout", {
+    const draft: OnboardingDraft = {
+      company,
+      teamSize,
+      industryCategory,
+      businessType,
+      otherBusiness,
+      primaryCurrency,
+      selectedCurrencies,
+      questionState,
+      selectedPlanId,
+    };
+    window.localStorage.setItem(ONBOARDING_DRAFT_KEY, JSON.stringify(draft));
+    const checkout = await api<{
+      checkoutUrl: string;
+      organization: { id: string; name: string; industry: string; currency: string; schemaName?: string };
+    }>("/onboarding/subscription/checkout", {
       method: "POST",
-      body: JSON.stringify({ planId: selectedPlanId }),
+      body: JSON.stringify({
+        planId: selectedPlanId,
+        organizationName: company,
+        industry,
+        currency: primaryCurrency,
+      }),
+    });
+    const session = getSession();
+    if (!session) throw new Error(l("Please login before onboarding"));
+    const pendingTenant = {
+      organizationId: checkout.organization.id,
+      schemaName: checkout.organization.schemaName,
+      organizationName: checkout.organization.name,
+      industry: checkout.organization.industry,
+      currency: checkout.organization.currency,
+      role: "owner",
+    };
+    updateSession({
+      activeTenantId: checkout.organization.id,
+      tenants: [
+        ...session.tenants.filter((tenant) => tenant.organizationId !== checkout.organization.id),
+        pendingTenant,
+      ],
     });
     window.location.assign(checkout.checkoutUrl);
   };
 
   const handleNext = async () => {
     if (step === 0 && !company.trim()) {
-      toast.error("Organization name is required");
+      toast.error(l("Organization name is required"));
       return;
     }
     if (step === 1 && !industry.trim()) {
-      toast.error("Business type is required");
+      toast.error(l("Business type is required"));
       return;
     }
     if (step === 3 && !selectedPlanId) {
       toast.error(l("Choose a subscription plan to continue"));
+      return;
+    }
+    if (step === 3) {
+      setProcessingPayment(true);
+      try {
+        await openSubscriptionCheckout();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : l("Could not start checkout"));
+        setProcessingPayment(false);
+      }
       return;
     }
     if (step < STEPS.length - 1) {
@@ -458,9 +596,10 @@ function Onboarding() {
     try {
       await finishOnboarding(customCOA);
       saveCOA(customCOA);
-      await openSubscriptionCheckout();
+      toast.success(l("Workspace created successfully"));
+      await navigate({ to: "/dashboard", replace: true });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not complete onboarding");
+      toast.error(error instanceof Error ? error.message : l("Could not complete onboarding"));
     } finally {
       setSaving(false);
     }
@@ -471,9 +610,10 @@ function Onboarding() {
     try {
       await finishOnboarding(DEFAULT_COA);
       saveCOA(DEFAULT_COA);
-      await openSubscriptionCheckout();
+      toast.success(l("Workspace created successfully"));
+      await navigate({ to: "/dashboard", replace: true });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not complete onboarding");
+      toast.error(error instanceof Error ? error.message : l("Could not complete onboarding"));
     } finally {
       setSaving(false);
     }
@@ -483,12 +623,12 @@ function Onboarding() {
 
   const handleAddCustomAccount = () => {
     if (!newAccName.trim() || !newAccCode.trim()) {
-      toast.error("Account code and name are required");
+      toast.error(l("Account code and name are required"));
       return;
     }
     const duplicate = flattenCOA(customCOA).find((node) => node.code === newAccCode.trim());
     if (duplicate && duplicate.id !== editingAccountId) {
-      toast.error("Account code already exists");
+      toast.error(l("Account code already exists"));
       return;
     }
     if (editingAccountId) {
@@ -542,13 +682,17 @@ function Onboarding() {
 
   return (
     <div dir={dir} className="min-h-screen bg-gradient-hero">
-      {saving && (
+      {(saving || processingPayment) && (
         <div className="fixed inset-0 z-[100] grid place-items-center bg-surface/80 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl border border-border-default bg-card p-6 text-center shadow-card">
             <LoaderCircle className="mx-auto h-10 w-10 animate-spin text-primary" />
-            <h2 className="mt-4 text-lg font-bold">Creating chart of accounts</h2>
+            <h2 className="mt-4 text-lg font-bold">
+              {processingPayment ? l("Opening secure checkout") : l("Creating chart of accounts")}
+            </h2>
             <p className="mt-2 text-sm text-on-surface-variant">
-              We are creating your workspace accounts. This can take a moment.
+              {processingPayment
+                ? l("Your workspace and chart of accounts will be created only after payment is confirmed.")
+                : l("We are creating your workspace accounts. This can take a moment.")}
             </p>
           </div>
         </div>
@@ -590,7 +734,7 @@ function Onboarding() {
 
         <div className="bg-card/80 glass-panel shadow-card p-8 hover-glow rounded-2xl">
           {step === 0 && (
-            <StepWrap icon={Building2} title="Organization basics" desc="Only the essentials for now.">
+            <StepWrap icon={Building2} title={l("Organization basics")} desc={l("Only the essentials for now.")}>
               <div className="space-y-1.5">
                 <Label htmlFor="company" className="font-semibold">{t("companyNameLabel")}</Label>
                 <Input id="company" value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Acme LLC" className="bg-background/50" />
@@ -610,7 +754,7 @@ function Onboarding() {
           )}
 
           {step === 1 && (
-            <StepWrap icon={Briefcase} title={t("selectIndustryTitle")} desc="Choose a main category, then the closest business type.">
+            <StepWrap icon={Briefcase} title={t("selectIndustryTitle")} desc={l("Choose a main category, then the closest business type.")}>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                 {(Object.keys(INDUSTRY_GROUPS) as IndustryCategory[]).map((category) => (
                   <button
@@ -626,7 +770,7 @@ function Onboarding() {
                         : "border-border-default bg-background/30 hover:border-primary/40 hover:bg-background/60"
                     }`}
                   >
-                    {category}
+                    {l(category)}
                   </button>
                 ))}
               </div>
@@ -644,21 +788,21 @@ function Onboarding() {
                           : "border-border-default bg-background/30 hover:border-primary/40 hover:bg-background/60"
                       }`}
                     >
-                      {item}
+                      {l(item)}
                     </button>
                   ))}
                 </div>
               ) : (
                 <div className="space-y-1.5 mt-4">
-                  <Label htmlFor="otherBusiness" className="font-semibold">Your business</Label>
-                  <Input id="otherBusiness" value={otherBusiness} onChange={(e) => setOtherBusiness(e.target.value)} placeholder="Describe your business" className="bg-background/50" />
+                  <Label htmlFor="otherBusiness" className="font-semibold">{l("Your business")}</Label>
+                  <Input id="otherBusiness" value={otherBusiness} onChange={(e) => setOtherBusiness(e.target.value)} placeholder={l("Describe your business")} className="bg-background/50" />
                 </div>
               )}
             </StepWrap>
           )}
 
           {step === 2 && (
-            <StepWrap icon={Coins} title="Choose currencies" desc="Select every currency you use, then choose the main reporting currency.">
+            <StepWrap icon={Coins} title={l("Choose currencies")} desc={l("Select every currency you use, then choose the main reporting currency.")}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {CURRENCIES.map((c) => {
                   const selected = selectedCurrencies.includes(c.code);
@@ -677,7 +821,7 @@ function Onboarding() {
                         <span className="h-8 w-12 rounded-lg bg-primary/10 grid place-items-center font-bold text-primary text-xs">
                           {c.symbol}
                         </span>
-                        <span><strong>{c.code}</strong> - {c.name}</span>
+                        <span><strong>{c.code}</strong> - {l(c.name)}</span>
                       </span>
                       {selected && <Check className="h-4.5 w-4.5 text-primary shrink-0" />}
                     </button>
@@ -686,7 +830,7 @@ function Onboarding() {
               </div>
 
               <div className="space-y-1.5 mt-4">
-                <Label htmlFor="primaryCurrency" className="font-semibold">Main reporting currency</Label>
+                <Label htmlFor="primaryCurrency" className="font-semibold">{l("Main reporting currency")}</Label>
                 <select
                   id="primaryCurrency"
                   value={primaryCurrency}
@@ -734,7 +878,7 @@ function Onboarding() {
           )}
 
           {step === 4 && (
-            <StepWrap icon={Wallet} title={t("setupAccountsTitle")} desc="Toggle the accounts your business needs. You can still add and remove accounts manually.">
+            <StepWrap icon={Wallet} title={t("setupAccountsTitle")} desc={l("Toggle the accounts your business needs. You can still add and remove accounts manually.")}>
               <div className="space-y-4">
                 <TooltipProvider>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -747,18 +891,18 @@ function Onboarding() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                               <Label htmlFor={`coa-${q.key}`} className="text-sm cursor-pointer leading-snug font-medium">
-                                {q.label}
+                                {l(q.label)}
                               </Label>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Info className="h-4 w-4 shrink-0 text-on-surface-variant hover:text-primary cursor-help" />
                               </TooltipTrigger>
                               <TooltipContent className="max-w-xs text-sm">
-                                <p>{q.hint}</p>
+                                <p>{l(q.hint)}</p>
                               </TooltipContent>
                             </Tooltip>
                             </div>
-                            <p className="mt-1 text-xs leading-4 text-on-surface-variant">{q.hint}</p>
+                            <p className="mt-1 text-xs leading-4 text-on-surface-variant">{l(q.hint)}</p>
                           </div>
                           <Switch
                             id={`coa-${q.key}`}
@@ -800,19 +944,19 @@ function Onboarding() {
 
           <div className="mt-8 flex items-center justify-between">
             {step === 4 ? (
-              <Button variant="ghost" onClick={handleSkipCOA} className="text-on-surface-variant cursor-pointer hover:bg-surface-container" disabled={saving}>
+              <Button variant="ghost" onClick={handleSkipCOA} className="text-on-surface-variant cursor-pointer hover:bg-surface-container" disabled={saving || processingPayment}>
                 {t("skipCOA")}
               </Button>
             ) : (
-              <Button variant="ghost" onClick={back} disabled={step === 0 || saving} className="gap-1.5 cursor-pointer hover:bg-surface-container">
+              <Button variant="ghost" onClick={back} disabled={step === 0 || saving || processingPayment} className="gap-1.5 cursor-pointer hover:bg-surface-container">
                 <ArrowLeft className="h-4 w-4 rtl:rotate-180" /> {t("back")}
               </Button>
             )}
 
-            <Button onClick={handleNext} disabled={saving} className="bg-gradient-primary gap-1.5 cursor-pointer shadow-soft hover-glow">
-              {saving ? (
+            <Button onClick={handleNext} disabled={saving || processingPayment} className="bg-gradient-primary gap-1.5 cursor-pointer shadow-soft hover-glow">
+              {saving || processingPayment ? (
                 <>
-                  <LoaderCircle className="h-4 w-4 animate-spin" /> Creating...
+                  <LoaderCircle className="h-4 w-4 animate-spin" /> {processingPayment ? l("Opening checkout...") : l("Creating...")}
                 </>
               ) : (
                 <>
@@ -835,11 +979,11 @@ function Onboarding() {
       }}>
         <DialogContent className="rounded-2xl max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-lg font-bold">{editingAccountId ? "Edit account" : t("addCustomAccount")}</DialogTitle>
+            <DialogTitle className="text-lg font-bold">{editingAccountId ? l("Edit account") : t("addCustomAccount")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-3">
             {!editingAccountId && <div className="space-y-1.5">
-              <Label className="font-semibold">Parent account</Label>
+              <Label className="font-semibold">{l("Parent account")}</Label>
               <select
                 value={newAccParent}
                 onChange={(e) => {
@@ -854,18 +998,18 @@ function Onboarding() {
               >
                 {parentOptions.map((n) => (
                   <option key={n.id} value={n.id}>
-                    {"--".repeat(n.depth)} {n.code} - {n.name}
+                    {"--".repeat(n.depth)} {n.code} - {l(n.name)}
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-on-surface-variant">Choose a level 1, 2, or 3 parent to create a child account.</p>
+              <p className="text-xs text-on-surface-variant">{l("Choose a level 1, 2, or 3 parent to create a child account.")}</p>
             </div>}
             <div className="space-y-1.5">
               <Label className="font-semibold">{t("accountCode")}</Label>
               <Input value={newAccCode} onChange={(e) => setNewAccCode(e.target.value)} placeholder="e.g. 5800" />
               {!editingAccountId && (
                 <p className="text-xs text-on-surface-variant">
-                  Suggested from the parent account. You can change it.
+                  {l("Suggested from the parent account. You can change it.")}
                 </p>
               )}
             </div>

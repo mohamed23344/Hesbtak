@@ -7,6 +7,7 @@ import {
 import { createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import { DataBaseService } from '../../database/database.service';
 import { TenantService } from '../tenant/tenant.service';
+import { CreateOnboardingCheckoutDto } from './dto';
 
 type PaymobIntentionResponse = {
   id?: string;
@@ -34,8 +35,67 @@ export class BillingService {
     return this.tenant.subscriptionForOrganization(organizationId);
   }
 
-  async checkout(organizationId: string, userId: string, planId: string) {
+  async checkout(
+    organizationId: string,
+    userId: string,
+    planId: string,
+    frontendOrigin?: string,
+  ) {
     await this.tenant.fromOrganizationId(organizationId, userId, ['owner']);
+    return this.createCheckout(organizationId, userId, planId, frontendOrigin);
+  }
+
+  async onboardingCheckout(
+    userId: string,
+    dto: CreateOnboardingCheckoutDto,
+    frontendOrigin?: string,
+  ) {
+    const pendingMembership = await this.db.organizationUser.findFirst({
+      where: {
+        userId,
+        role: 'owner',
+        isActive: true,
+        organization: { isActive: false },
+      },
+      include: { organization: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const organization = pendingMembership
+      ? await this.db.organization.update({
+          where: { id: pendingMembership.organizationId },
+          data: {
+            name: dto.organizationName,
+            industry: dto.industry,
+            currency: dto.currency ?? 'USD',
+          },
+        })
+      : await this.createPendingOrganization(userId, dto);
+
+    const checkout = await this.createCheckout(
+      organization.id,
+      userId,
+      dto.planId,
+      frontendOrigin,
+    );
+    return {
+      ...checkout,
+      organization: {
+        id: organization.id,
+        name: organization.name,
+        industry: organization.industry,
+        currency: organization.currency,
+        schemaName: organization.schemaName,
+      },
+    };
+  }
+
+  private async createCheckout(
+    organizationId: string,
+    userId: string,
+    planId: string,
+    frontendOrigin?: string,
+  ) {
     this.assertPaymobConfigured();
     await this.ensurePlans();
 
@@ -108,7 +168,9 @@ export class BillingService {
           plan_code: plan.code,
         },
         notification_url: `${this.backendUrl()}/api/v1/subscriptions/paymob/webhook`,
-        redirection_url: `${this.backendUrl()}/api/v1/subscriptions/paymob/return`,
+        redirection_url:
+          `${this.backendUrl()}/api/v1/subscriptions/paymob/return` +
+          `?frontend_origin=${encodeURIComponent(this.frontendUrl(frontendOrigin))}`,
       }),
     });
 
@@ -140,7 +202,10 @@ export class BillingService {
   }
 
   async verify(organizationId: string, userId: string, reference: string) {
-    await this.tenant.fromOrganizationId(organizationId, userId);
+    const membership = await this.db.organizationUser.findFirst({
+      where: { organizationId, userId, isActive: true },
+    });
+    if (!membership) throw new NotFoundException('Subscription payment not found');
 
     const subscription = await this.db.subscription.findFirst({
       where: { organizationId, paymentReference: reference },
@@ -221,21 +286,67 @@ export class BillingService {
    * can call /verify and show the correct status.
    */
   async paymentReturn(query: Record<string, unknown>): Promise<string> {
-    const frontendUrl = (
-      process.env.FRONTEND_URL ?? 'http://localhost:8080'
-    ).replace(/\/+$/, '');
+    const frontendUrl = this.frontendUrl(this.string(query['frontend_origin']));
 
     // Paymob sends the reference as `merchant_order_id` or `special_reference` in the redirect
     const reference =
+      this.string(query['reference']) ??
       this.string(query['merchant_order_id']) ??
       this.string(query['special_reference']) ??
       this.string(query['order']) ??
       '';
 
     const success = query['success'] === 'true' || query['success'] === true;
+    const suppliedHmac = this.string(query['hmac']);
+
+    if (suppliedHmac && !this.validHmac(query, suppliedHmac)) {
+      return `${frontendUrl}/dashboard/settings?payment=failed&reason=invalid-signature`;
+    }
 
     if (!reference) {
       return `${frontendUrl}/dashboard/settings?payment=return`;
+    }
+
+    const subscription = await this.db.subscription.findUnique({
+      where: { paymentReference: reference },
+      include: { organization: true },
+    });
+    if (suppliedHmac && subscription) {
+      if (success) {
+        const now = new Date();
+        const periodEnd = new Date(now);
+        periodEnd.setUTCMonth(periodEnd.getUTCMonth() + 1);
+        await this.db.$transaction([
+          this.db.subscription.updateMany({
+            where: {
+              organizationId: subscription.organizationId,
+              status: 'active',
+              id: { not: subscription.id },
+            },
+            data: { status: 'replaced' },
+          }),
+          this.db.subscription.update({
+            where: { id: subscription.id },
+            data: {
+              status: 'active',
+              paymobTransactionId: this.string(query['id']),
+              currentPeriodStart: now,
+              currentPeriodEnd: periodEnd,
+            },
+          }),
+        ]);
+      }
+    }
+    if (subscription?.organization && !subscription.organization.isActive) {
+      return (
+        `${frontendUrl}/onboarding?payment=return` +
+        `&reference=${encodeURIComponent(reference)}` +
+        `&success=${success ? 'true' : 'false'}`
+      );
+    }
+
+    if (suppliedHmac) {
+      return `${frontendUrl}/dashboard/settings?payment=${success ? 'success' : 'failed'}&reference=${encodeURIComponent(reference)}`;
     }
 
     return (
@@ -383,6 +494,26 @@ private async syncFromPaymob(subscriptionId: string, _intentionId: string) {
     }
   }
 
+  private async createPendingOrganization(
+    userId: string,
+    dto: CreateOnboardingCheckoutDto,
+  ) {
+    const organizationId = randomUUID();
+    return this.db.organization.create({
+      data: {
+        id: organizationId,
+        name: dto.organizationName,
+        industry: dto.industry,
+        currency: dto.currency ?? 'USD',
+        schemaName: this.tenant.schemaNameForOrganization(organizationId),
+        isActive: false,
+        members: {
+          create: { userId, role: 'owner', joinedAt: new Date() },
+        },
+      },
+    });
+  }
+
   private assertPaymobConfigured() {
     const missing = [
       'PAYMOB_SECRET_KEY',
@@ -398,6 +529,27 @@ private async syncFromPaymob(subscriptionId: string, _intentionId: string) {
     return (
       process.env.BACKEND_URL ?? `http://localhost:${process.env.PORT ?? 3000}`
     ).replace(/\/+$/, '');
+  }
+
+  private frontendUrl(candidate?: string) {
+    const configured = (
+      process.env.FRONTEND_URL ?? 'http://localhost:8080'
+    ).replace(/\/+$/, '');
+    if (!candidate) return configured;
+    try {
+      const url = new URL(candidate);
+      const configuredOrigin = new URL(configured).origin;
+      const local = ['localhost', '127.0.0.1', '::1'].includes(url.hostname);
+      if (
+        ['http:', 'https:'].includes(url.protocol) &&
+        (local || url.origin === configuredOrigin)
+      ) {
+        return url.origin;
+      }
+    } catch {
+      // Ignore malformed or untrusted return origins.
+    }
+    return configured;
   }
 
   private serialize(subscription: {
@@ -449,12 +601,12 @@ private async syncFromPaymob(subscriptionId: string, _intentionId: string) {
       obj.is_refunded,
       obj.is_standalone_payment,
       obj.is_voided,
-      order?.id,
+      order?.id ?? obj.order,
       obj.owner,
       obj.pending,
-      source?.pan,
-      source?.sub_type,
-      source?.type,
+      source?.pan ?? obj['source_data.pan'],
+      source?.sub_type ?? obj['source_data.sub_type'],
+      source?.type ?? obj['source_data.type'],
       obj.success,
     ]
       .map((value) => String(value ?? ''))

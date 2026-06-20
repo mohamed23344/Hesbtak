@@ -249,21 +249,49 @@ export class AuthService {
     userId: string,
     dto: CompleteOnboardingDto,
   ) {
-    const organization =
-      organizationId
-        ? undefined
-        : await this.createOrganizationForUser(userId, {
-            organizationName: dto.organizationName,
-            industry: dto.industry,
-            currency: dto.currency,
-          });
-    const context = organization
+    if (!organizationId) {
+      throw new BadRequestException(
+        'Complete subscription payment before creating the workspace',
+      );
+    }
+
+    const pendingMembership = await this.db.organizationUser.findFirst({
+      where: { organizationId, userId, isActive: true },
+      include: { organization: true },
+    });
+    if (!pendingMembership) {
+      throw new NotFoundException('Pending onboarding workspace not found');
+    }
+
+    const pending = !pendingMembership.organization.isActive;
+    if (pending) {
+      if (pendingMembership.role !== 'owner') {
+        throw new UnauthorizedException('Only the workspace owner can finish onboarding');
+      }
+      const paidSubscription = await this.db.subscription.findFirst({
+        where: {
+          organizationId,
+          status: 'active',
+          currentPeriodEnd: { gt: new Date() },
+        },
+      });
+      if (!paidSubscription) {
+        throw new BadRequestException(
+          'An active paid subscription is required before workspace creation',
+        );
+      }
+      await this.tenant.provisionTenantSchema(
+        pendingMembership.organization.schemaName,
+      );
+    }
+
+    const context = pending
       ? {
-          organizationId: organization.id,
-          schemaName: organization.schemaName,
-          role: 'owner',
+          organizationId,
+          schemaName: pendingMembership.organization.schemaName,
+          role: pendingMembership.role,
         }
-      : await this.tenant.fromOrganizationId(organizationId!, userId, [
+      : await this.tenant.fromOrganizationId(organizationId, userId, [
           'owner',
           'accountant',
         ]);
@@ -277,9 +305,18 @@ export class AuthService {
       );
     }
 
+    if (pending) {
+      await this.db.organization.update({
+        where: { id: organizationId },
+        data: { isActive: true },
+      });
+    }
+
+    const organization = pendingMembership.organization;
+
     return {
       completed: true,
-      organization: organization
+      organization: pending
         ? {
             id: organization.id,
             name: organization.name,
@@ -291,9 +328,9 @@ export class AuthService {
       tenant: {
         organizationId: context.organizationId,
         schemaName: context.schemaName,
-        organizationName: organization?.name,
-        industry: organization?.industry,
-        currency: organization?.currency,
+        organizationName: organization.name,
+        industry: organization.industry,
+        currency: organization.currency,
         role: context.role,
       },
       nextQuestion: await this.getNextOnboardingQuestion(

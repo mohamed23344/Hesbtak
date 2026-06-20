@@ -138,7 +138,8 @@ const INVOICE_SORT_FIELDS: Field[] = [
 ];
 
 function Page() {
-  const { t, l } = useI18n();
+  const { t, l, dir } = useI18n();
+  const rtl = dir === "rtl";
   const session = getSession();
   const activeTenant = session?.tenants.find((tenant) => tenant.organizationId === session.activeTenantId);
   const canSchedule = activeTenant?.subscription?.plan.features.scheduledReports === true;
@@ -335,10 +336,13 @@ function Page() {
   );
 
   return (
-    <div className="space-y-5">
+    <div
+      dir={dir}
+      className={`space-y-5 [&_input]:text-start [&_select]:text-start ${rtl ? "text-right" : "text-left"}`}
+    >
       <Header title={t("reports")} desc={l("Generate, customize, export, save, and schedule financial reports.")} />
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="h-auto flex-wrap justify-start">
+      <Tabs dir={dir} value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className={`h-auto w-fit max-w-full flex-wrap ${rtl ? "ml-auto justify-end" : "mr-auto justify-start"}`}>
           <TabsTrigger value="dashboard">{t("dashboard")}</TabsTrigger>
           <TabsTrigger value="create">{l("Create Report")}</TabsTrigger>
           <TabsTrigger value="saved">{l("Saved Reports")}</TabsTrigger>
@@ -349,9 +353,9 @@ function Page() {
 
         <TabsContent value="dashboard" className="space-y-4">
           <div className="grid sm:grid-cols-3 gap-4">
-            <Metric title={l("Reports generated")} value={dashboard?.totalGenerated ?? 0} icon={FileBarChart} />
-            <Metric title={l("Saved reports")} value={dashboard?.savedCount ?? 0} icon={Save} />
-            {canSchedule && <Metric title={l("Active schedules")} value={dashboard?.scheduledCount ?? 0} icon={CalendarClock} />}
+            <Metric rtl={rtl} title={l("Reports generated")} value={dashboard?.totalGenerated ?? 0} icon={FileBarChart} />
+            <Metric rtl={rtl} title={l("Saved reports")} value={dashboard?.savedCount ?? 0} icon={Save} />
+            {canSchedule && <Metric rtl={rtl} title={l("Active schedules")} value={dashboard?.scheduledCount ?? 0} icon={CalendarClock} />}
           </div>
           <div className="grid lg:grid-cols-2 gap-4">
             <Panel title={l("Recently generated")}>
@@ -382,8 +386,14 @@ function Page() {
         </TabsContent>
 
         <TabsContent value="create" className="space-y-4">
-          <div className="grid xl:grid-cols-[380px_1fr] gap-4">
-            <div className="bg-card border border-border-default rounded-2xl p-5 space-y-4 h-fit">
+          <div
+            dir="ltr"
+            className={`grid gap-4 ${rtl ? "xl:grid-cols-[1fr_380px]" : "xl:grid-cols-[380px_1fr]"}`}
+          >
+            <div
+              dir={dir}
+              className={`bg-card border border-border-default rounded-2xl p-5 space-y-4 h-fit ${rtl ? "xl:col-start-2 xl:row-start-1" : "xl:col-start-1 xl:row-start-1"}`}
+            >
               <h3 className="font-semibold">{l("Report configuration")}</h3>
               <FieldLabel label={l("Report name")}>
                 <Input value={builder.name} onChange={(event) => setBuilder({ ...builder, name: event.target.value })} />
@@ -456,7 +466,12 @@ function Page() {
                 <Button variant="outline" onClick={save}><Save /> {l("Save")}</Button>
               </div>
             </div>
-            <ReportPreview report={preview} onExport={downloadPreview} />
+            <div
+              dir={dir}
+              className={rtl ? "xl:col-start-1 xl:row-start-1" : "xl:col-start-2 xl:row-start-1"}
+            >
+              <ReportPreview report={preview} onExport={downloadPreview} />
+            </div>
           </div>
         </TabsContent>
 
@@ -571,7 +586,7 @@ function Page() {
                 setBuilder({ ...emptyBuilder, name: template.name, reportType: template.type });
                 setActiveTab("create");
               }}>
-                <FileBarChart className="h-5 w-5 text-primary mb-3" />
+                <FileBarChart className="h-5 w-5 text-primary mb-3 me-auto" />
                 <h3 className="font-semibold">{l(template.name)}</h3>
                 <p className="text-sm text-on-surface-variant mt-1">{l(template.description)}</p>
               </button>
@@ -667,8 +682,8 @@ function BalanceSheetPreview({ report }: { report: Generated }) {
   </div>;
 }
 
-function Metric({ title, value, icon: Icon }: { title: string; value: number; icon: typeof FileBarChart }) {
-  return <div className="bg-card border border-border-default rounded-2xl p-5"><div className="flex justify-between"><div><p className="text-sm text-on-surface-variant">{title}</p><p className="text-3xl font-bold mt-2">{value}</p></div><Icon className="h-6 w-6 text-primary" /></div></div>;
+function Metric({ title, value, icon: Icon, rtl }: { title: string; value: number; icon: typeof FileBarChart; rtl: boolean }) {
+  return <div className={`bg-card border border-border-default rounded-2xl p-5 ${rtl ? "text-right" : "text-left"}`}><div dir="ltr" className={`flex justify-between ${rtl ? "flex-row-reverse" : "flex-row"}`}><div dir={rtl ? "rtl" : "ltr"}><p className="text-sm text-on-surface-variant">{title}</p><p className="text-3xl font-bold mt-2">{value}</p></div><Icon className="h-6 w-6 text-primary" /></div></div>;
 }
 function Panel({ title, children }: { title: string; children: React.ReactNode }) { return <div className="bg-card border border-border-default rounded-2xl p-5"><h3 className="font-semibold mb-3">{title}</h3>{children}</div>; }
 function SimpleList({ items }: { items: { title: string; detail: string }[] }) { const { l } = useI18n(); return <div className="space-y-3">{items.length ? items.map((item, index) => <div key={index} className="flex justify-between gap-3 text-sm border-b border-border-default pb-2 last:border-0"><span className="font-medium">{l(item.title)}</span><span className="text-on-surface-variant text-end">{item.detail}</span></div>) : <p className="text-sm text-on-surface-variant">{l("No data yet.")}</p>}</div>; }

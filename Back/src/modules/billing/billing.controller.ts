@@ -12,7 +12,11 @@ import type { Response } from 'express';
 import { CurrentUser, JwtUser } from '../../common/auth/current-user.decorator';
 import { JwtAuthGuard } from '../../common/auth/jwt-auth.guard';
 import { BillingService } from './billing.service';
-import { CreateCheckoutDto, VerifySubscriptionDto } from './dto';
+import {
+  CreateCheckoutDto,
+  CreateOnboardingCheckoutDto,
+  VerifySubscriptionDto,
+} from './dto';
 
 @Controller()
 export class BillingController {
@@ -36,10 +40,21 @@ export class BillingController {
   @Post('subscriptions/checkout')
   checkout(
     @Headers('x-tenant-id') organizationId: string,
+    @Headers('origin') frontendOrigin: string | undefined,
     @CurrentUser() user: JwtUser,
     @Body() dto: CreateCheckoutDto,
   ) {
-    return this.billing.checkout(organizationId, user.sub, dto.planId);
+    return this.billing.checkout(organizationId, user.sub, dto.planId, frontendOrigin);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('onboarding/subscription/checkout')
+  onboardingCheckout(
+    @Headers('origin') frontendOrigin: string | undefined,
+    @CurrentUser() user: JwtUser,
+    @Body() dto: CreateOnboardingCheckoutDto,
+  ) {
+    return this.billing.onboardingCheckout(user.sub, dto, frontendOrigin);
   }
 
   @UseGuards(JwtAuthGuard)
