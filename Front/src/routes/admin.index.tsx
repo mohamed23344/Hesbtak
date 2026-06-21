@@ -77,6 +77,8 @@ type OrganizationRow = {
   createdAt: string;
   _count?: { members: number; invitations: number; subscriptions: number };
   subscriptions?: Array<{ status: string; plan?: PlanRow }>;
+  members?: Array<{ role: string; isActive: boolean; user: UserRow }>;
+  invitations?: Array<{ email: string; role: string; createdAt: string }>;
 };
 
 type UserDetail = UserRow & {
@@ -84,10 +86,7 @@ type UserDetail = UserRow & {
   invitations?: Array<{ email: string; role: string; createdAt: string; organization: OrganizationRow }>;
 };
 
-type OrganizationDetail = OrganizationRow & {
-  members?: Array<{ role: string; isActive: boolean; user: UserRow }>;
-  invitations?: Array<{ email: string; role: string; createdAt: string }>;
-};
+type OrganizationDetail = OrganizationRow;
 
 type PlanRow = {
   id: string;
@@ -177,9 +176,15 @@ function AdminDashboard() {
     `${org.name} ${org.industry} ${org.currency}`.toLowerCase().includes(query.toLowerCase())
   ), [organizations, query]);
 
-  const subscriptionData = stats.subscriptionsByStatus.length
-    ? stats.subscriptionsByStatus
-    : [{ status: "none", count: 0 }];
+  const subscriptionPlanData = useMemo(() => {
+    if (!organizations.length) return [{ plan: "No organizations", count: 0 }];
+    const counts = new Map<string, number>();
+    organizations.forEach((org) => {
+      const plan = subscriptionPlanLabel(org);
+      counts.set(plan, (counts.get(plan) ?? 0) + 1);
+    });
+    return Array.from(counts, ([plan, count]) => ({ plan, count }));
+  }, [organizations]);
 
   return (
     <div className="space-y-5">
@@ -263,6 +268,8 @@ function AdminDashboard() {
                 <tr>
                   <th className="p-2 text-start">Organization</th>
                   <th className="p-2 text-start">Plan</th>
+                  <th className="p-2 text-start">Members</th>
+                  <th className="p-2 text-start">Invites</th>
                   <th className="p-2 text-start">Status</th>
                   <th className="p-2 text-end">Actions</th>
                 </tr>
@@ -274,7 +281,9 @@ function AdminDashboard() {
                       <p className="font-medium">{org.name}</p>
                       <p className="text-xs text-on-surface-variant">{org.industry} · {org.currency}</p>
                     </td>
-                    <td className="p-2">{org.subscriptions?.[0]?.plan?.name ?? "No plan"}</td>
+                    <td className="p-2">{subscriptionPlanLabel(org)}</td>
+                    <td className="p-2">{organizationMemberCount(org)}</td>
+                    <td className="p-2">{organizationInvitationCount(org)}</td>
                     <td className="p-2"><Status active={org.isActive} /></td>
                     <td className="p-2">
                       <RowActions
@@ -296,11 +305,11 @@ function AdminDashboard() {
               ["Industry", selectedOrganization.industry],
               ["Currency", selectedOrganization.currency],
               ["Status", selectedOrganization.isActive ? "Active" : "Inactive"],
-              ["Members", String(selectedOrganization._count?.members ?? 0)],
-              ["Subscriptions", String(selectedOrganization._count?.subscriptions ?? 0)],
+              ["Members", String(organizationMemberCount(selectedOrganization))],
+              ["Subscription plan", subscriptionPlanLabel(selectedOrganization)],
               ["Created", date(selectedOrganization.createdAt)],
               ["Users", selectedOrganization.members?.map((item) => item.user.fullName).join(", ") || "None"],
-              ["Invitations", String(selectedOrganization.invitations?.length ?? 0)],
+              ["Invitations", String(organizationInvitationCount(selectedOrganization))],
             ] : []}
           />
         </div>
@@ -326,12 +335,12 @@ function AdminDashboard() {
               </ResponsiveContainer>
             </div>
           </DataPanel>
-          <DataPanel title="Subscription status" icon={BadgeCheck}>
+          <DataPanel title="Organizations by subscription plan" icon={BadgeCheck}>
             <div className="h-72">
               <ResponsiveContainer>
-                <BarChart data={subscriptionData}>
+                <BarChart data={subscriptionPlanData}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="status" />
+                  <XAxis dataKey="plan" />
                   <YAxis allowDecimals={false} />
                   <Tooltip />
                   <Bar dataKey="count" fill="#2563eb" radius={[4, 4, 0, 0]} />
@@ -504,6 +513,18 @@ function BigNumber({ label, value }: { label: string; value: number }) {
       <p className="text-4xl font-bold mt-2">{value}</p>
     </div>
   );
+}
+
+function organizationMemberCount(org: OrganizationRow | OrganizationDetail) {
+  return org.members?.length ?? org._count?.members ?? 0;
+}
+
+function organizationInvitationCount(org: OrganizationRow | OrganizationDetail) {
+  return org.invitations?.length ?? org._count?.invitations ?? 0;
+}
+
+function subscriptionPlanLabel(org: OrganizationRow | OrganizationDetail) {
+  return org.subscriptions?.[0]?.plan?.name ?? "No plan";
 }
 
 function UserDialog({ user, onClose, onSaved }: { user: UserRow | null; onClose: () => void; onSaved: () => void }) {

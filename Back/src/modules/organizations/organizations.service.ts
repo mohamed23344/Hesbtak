@@ -252,6 +252,9 @@ export class OrganizationsService {
     const row = await this.db.organization.findUnique({
       where: { id },
       include: {
+        _count: {
+          select: { members: true, invitations: true, subscriptions: true },
+        },
         members: {
           include: { user: true },
           orderBy: { createdAt: 'desc' },
