@@ -303,6 +303,7 @@ function Onboarding() {
   const { payment, reference, success } = Route.useSearch();
   const navigate = useNavigate();
   const { dir, t, l } = useI18n();
+  const isRtl = dir === "rtl";
   const { saveCOA } = useCOA();
   const [step, setStep] = useState(0);
   const [company, setCompany] = useState("");
@@ -934,6 +935,7 @@ function Onboarding() {
                         }}
                         onEdit={handleEditAccount}
                         onRemove={handleRemoveAccount}
+                        rtl={isRtl}
                       />
                     ))}
                   </div>
@@ -949,7 +951,7 @@ function Onboarding() {
               </Button>
             ) : (
               <Button variant="ghost" onClick={back} disabled={step === 0 || saving || processingPayment} className="gap-1.5 cursor-pointer hover:bg-surface-container">
-                <ArrowLeft className="h-4 w-4 rtl:rotate-180" /> {t("back")}
+                <ArrowLeft className={`h-4 w-4 transition-transform ${isRtl ? "rotate-180" : ""}`} /> {t("back")}
               </Button>
             )}
 
@@ -961,7 +963,7 @@ function Onboarding() {
               ) : (
                 <>
                   {step === STEPS.length - 1 ? t("finish") : t("continue")}
-                  <ArrowRight className="h-4 w-4 rtl:rotate-180" />
+                  <ArrowRight className={`h-4 w-4 transition-transform ${isRtl ? "rotate-180" : ""}`} />
                 </>
               )}
             </Button>
@@ -1053,12 +1055,14 @@ type TreeRowProps = {
   onAdd: (id: string) => void;
   onEdit: (node: COANode) => void;
   onRemove: (id: string) => void;
+  rtl: boolean;
 };
 
-function TreeRow({ node, depth, onAdd, onEdit, onRemove }: TreeRowProps) {
+function TreeRow({ node, depth, onAdd, onEdit, onRemove, rtl }: TreeRowProps) {
   const { l } = useI18n();
   const [open, setOpen] = useState(depth < 2);
   const hasChildren = !!node.children?.length;
+  const chevronRotation = open ? "rotate-90" : rtl ? "rotate-180" : "";
   return (
     <>
       <div
@@ -1072,11 +1076,7 @@ function TreeRow({ node, depth, onAdd, onEdit, onRemove }: TreeRowProps) {
           aria-label={hasChildren ? "Toggle account branch" : "Account leaf"}
         >
           {hasChildren ? (
-            open ? (
-              <ChevronRight className="h-4 w-4 text-on-surface-variant transition-transform rotate-90" />
-            ) : (
-              <ChevronRight className="h-4 w-4 text-on-surface-variant transition-transform rtl:rotate-180" />
-            )
+            <ChevronRight className={`h-4 w-4 text-on-surface-variant transition-transform ${chevronRotation}`} />
           ) : <span className="w-4" />}
         </button>
         {hasChildren ? <Folder className="h-4 w-4 text-primary" /> : <FileText className="h-4 w-4 text-on-surface-variant" />}
@@ -1110,7 +1110,7 @@ function TreeRow({ node, depth, onAdd, onEdit, onRemove }: TreeRowProps) {
         </button>
       </div>
       {open && node.children?.map((c) => (
-        <TreeRow key={c.id} node={c} depth={depth + 1} onAdd={onAdd} onEdit={onEdit} onRemove={onRemove} />
+        <TreeRow key={c.id} node={c} depth={depth + 1} onAdd={onAdd} onEdit={onEdit} onRemove={onRemove} rtl={rtl} />
       ))}
     </>
   );

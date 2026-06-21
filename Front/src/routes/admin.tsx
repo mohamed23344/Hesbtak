@@ -1,6 +1,5 @@
 import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { useI18n } from "@/lib/i18n";
-import { BrandMark, LangToggle, ThemeToggle } from "@/components/Brand";
+import { BrandMark, ThemeToggle } from "@/components/Brand";
 import { BadgeCheck, BarChart3, Building, LifeBuoy, LogOut, Menu, ShieldAlert, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { clearSession, getSession } from "@/lib/api";
@@ -16,13 +15,23 @@ const ADMIN_SECTIONS = [
 ] as const;
 
 function AdminLayout() {
-  const { t, dir } = useI18n();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const [open, setOpen] = useState(false);
   const session = getSession();
   const [section, setSection] = useState(() =>
     typeof window === "undefined" ? "users" : window.location.hash.replace("#", "") || "users"
   );
+
+  useEffect(() => {
+    const previousDir = document.documentElement.dir;
+    const previousLang = document.documentElement.lang;
+    document.documentElement.dir = "ltr";
+    document.documentElement.lang = "en";
+    return () => {
+      document.documentElement.dir = previousDir;
+      document.documentElement.lang = previousLang;
+    };
+  }, []);
 
   useEffect(() => {
     if (!session) {
@@ -42,11 +51,11 @@ function AdminLayout() {
   }, []);
 
   return (
-    <div dir={dir} className="min-h-screen flex bg-surface">
+    <div dir="ltr" className="min-h-screen flex bg-surface text-left">
       {/* Sidebar */}
       <aside
         className={`fixed lg:sticky top-0 z-40 h-screen w-72 bg-card border-e border-border-default flex flex-col transition-transform ${
-          open ? "translate-x-0" : "-translate-x-full lg:translate-x-0 rtl:translate-x-full rtl:lg:translate-x-0"
+          open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
       >
         <div className="h-20 flex items-center justify-between px-5 border-b border-border-default">
@@ -88,7 +97,7 @@ function AdminLayout() {
             onClick={() => clearSession()}
             className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-on-surface-variant hover:bg-surface-container"
           >
-            <LogOut className="h-4 w-4" /> {t("logout")}
+            <LogOut className="h-4 w-4" /> Log out
           </Link>
         </div>
       </aside>
@@ -108,7 +117,6 @@ function AdminLayout() {
           <div className="flex-1" />
           
           <div className="flex items-center gap-2">
-            <LangToggle />
             <ThemeToggle />
             <div className="ms-2 h-9 w-9 rounded-full bg-status-error text-white grid place-items-center text-sm font-semibold shadow-soft">
               AD

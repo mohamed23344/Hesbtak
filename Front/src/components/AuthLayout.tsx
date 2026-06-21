@@ -117,7 +117,7 @@ export default function AuthLayout({
   subtitle?: string;
   children: ReactNode;
 }) {
-  const { dir } = useI18n();
+  const { dir, t } = useI18n();
   return (
     <div dir={dir} className="min-h-screen bg-gradient-hero grid lg:grid-cols-2">
       <div className="hidden lg:flex flex-col justify-between p-12 xl:p-16 bg-gradient-primary text-primary-foreground relative overflow-hidden">
@@ -131,10 +131,10 @@ export default function AuthLayout({
         
         <div className="relative z-10 my-auto py-12">
           <h2 className="max-w-2xl text-5xl xl:text-6xl font-bold leading-[1.08] tracking-tight">
-            Your finances, simplified — in English and العربية.
+            {t("authSideTitle")}
           </h2>
           <p className="mt-6 text-primary-foreground/80 max-w-xl text-lg leading-relaxed">
-            Join thousands of SMBs using Hesbetak.AI to automate their bookkeeping with bilingual artificial intelligence.
+            {t("authSideSubtitle")}
           </p>
         </div>
         

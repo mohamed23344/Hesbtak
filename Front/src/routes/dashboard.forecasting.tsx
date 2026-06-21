@@ -36,7 +36,8 @@ type MonthlyActual = {
 };
 
 type ChartDatum = {
-  m: string;
+  key: string;
+  label: string;
   revenueActual: number | null;
   revenueForecast: number | null;
   revenueUpper: number | null;
@@ -113,11 +114,12 @@ function Page() {
   const cash90 = data.slice(0, 3).reduce((sum, item) => sum + item.predictedCashflow, 0);
   const confidenceBandRatio = forecast ? Math.max(0.08, 1 - forecast.confidence.score / 100) : 0.2;
   const locale = lang === "ar" ? "ar-EG" : "en-US";
-  const todayLabel = firstForecast ? monthLabel(firstForecast.forecastMonth, locale) : "";
+  const todayKey = currentMonthKey();
 
   const chartData = useMemo(() => {
     const historical: ChartDatum[] = (forecast?.calculationDetails.monthlyActuals ?? []).slice(-4).map((item) => ({
-      m: monthLabel(item.month, locale),
+      key: monthKey(item.month),
+      label: monthLabel(item.month, locale),
       revenueActual: item.revenue,
       revenueForecast: null as number | null,
       revenueUpper: null as number | null,
@@ -129,19 +131,19 @@ function Page() {
       cashActual: item.revenue - item.expenses,
       cashForecast: null as number | null,
     }));
-    const lastActual = historical[historical.length - 1];
-    const forecastRows: ChartDatum[] = data.slice(0, 5).map((item, index) => ({
-      m: monthLabel(item.forecastMonth, locale),
+    const forecastRows: ChartDatum[] = data.slice(0, 5).map((item) => ({
+      key: monthKey(item.forecastMonth),
+      label: monthLabel(item.forecastMonth, locale),
       revenueActual: null as number | null,
-      revenueForecast: index === 0 && lastActual ? lastActual.revenueActual : item.predictedRevenue,
+      revenueForecast: item.predictedRevenue,
       revenueUpper: item.predictedRevenue * (1 + confidenceBandRatio),
       revenueLower: item.predictedRevenue * Math.max(0, 1 - confidenceBandRatio),
       expenseActual: null as number | null,
-      expenseForecast: index === 0 && lastActual ? lastActual.expenseActual : item.predictedExpense,
+      expenseForecast: item.predictedExpense,
       expenseUpper: item.predictedExpense * (1 + confidenceBandRatio),
       expenseLower: item.predictedExpense * Math.max(0, 1 - confidenceBandRatio),
       cashActual: null as number | null,
-      cashForecast: index === 0 && lastActual ? lastActual.cashActual : item.predictedCashflow,
+      cashForecast: item.predictedCashflow,
     }));
     return [...historical, ...forecastRows];
   }, [data, forecast, confidenceBandRatio, locale]);
@@ -255,7 +257,7 @@ function Page() {
           <ForecastSvgChart
             data={chartData}
             visibleSeries={visibleSeries}
-            todayLabel={todayLabel}
+            todayKey={todayKey}
             minValue={chartMin}
             maxValue={chartMax}
             todayText={l("Today")}
@@ -286,9 +288,9 @@ function Page() {
               </span>
             </div>
             <div className="grid md:grid-cols-3 gap-3 mt-5">
-              <AuditMethod title={l("Revenue")} method={l(forecast.method.revenue)} rate={forecast.calculationDetails.revenueGrowthRate} />
-              <AuditMethod title={l("Expenses")} method={l(forecast.method.expenses)} rate={forecast.calculationDetails.expenseGrowthRate} />
-              <AuditMethod title={l("Cash flow")} method={l(forecast.method.cashflow)} rate={null} />
+              <AuditMethod title={l("Revenue")} method={l(forecast.method.revenue)} rate={forecast.calculationDetails.revenueGrowthRate} appliedGrowthLabel={l("applied growth")} />
+              <AuditMethod title={l("Expenses")} method={l(forecast.method.expenses)} rate={forecast.calculationDetails.expenseGrowthRate} appliedGrowthLabel={l("applied growth")} />
+              <AuditMethod title={l("Cash flow")} method={l(forecast.method.cashflow)} rate={null} appliedGrowthLabel={l("applied growth")} />
             </div>
             <div className="mt-4 rounded-lg bg-surface-container px-4 py-3 space-y-2">
               {forecast.formulaUsed.map((formula) => (
@@ -304,7 +306,7 @@ function Page() {
                 {forecast.confidence.score}% {l("confidence")}
               </span>
             </div>
-            <p className="text-sm text-on-surface-variant mt-2 leading-relaxed">{l(forecast.confidence.explanation)}</p>
+            <p className="text-sm text-on-surface-variant mt-2 leading-relaxed">{formatConfidenceExplanation(forecast, l)}</p>
             <div className="space-y-3 mt-4">
               <ConfidenceRow label={l("Data availability")} value={forecast.confidence.factors.historicalDataAvailability} />
               <ConfidenceRow label={l("Low variance")} value={forecast.confidence.factors.historicalVariance} />
@@ -328,12 +330,12 @@ function Page() {
   );
 }
 
-function AuditMethod({ title, method, rate }: { title: string; method: string; rate: number | null }) {
+function AuditMethod({ title, method, rate, appliedGrowthLabel }: { title: string; method: string; rate: number | null; appliedGrowthLabel: string }) {
   return (
     <div className="rounded-lg border border-border-default p-3">
       <p className="text-xs text-on-surface-variant">{title}</p>
       <p className="text-sm font-medium mt-1 leading-snug">{method}</p>
-      {rate !== null && <p className="text-[11px] text-on-surface-variant mt-2">{formatPercent(rate)} applied growth</p>}
+      {rate !== null && <p className="text-[11px] text-on-surface-variant mt-2">{formatPercent(rate)} {appliedGrowthLabel}</p>}
     </div>
   );
 }
@@ -341,7 +343,7 @@ function AuditMethod({ title, method, rate }: { title: string; method: string; r
 function ForecastSvgChart({
   data,
   visibleSeries,
-  todayLabel,
+  todayKey,
   minValue,
   maxValue,
   todayText,
@@ -349,7 +351,7 @@ function ForecastSvgChart({
 }: {
   data: ChartDatum[];
   visibleSeries: { revenue: boolean; expenses: boolean; cashflow: boolean };
-  todayLabel: string;
+  todayKey: string;
   minValue: number;
   maxValue: number;
   todayText: string;
@@ -446,7 +448,7 @@ function ForecastSvgChart({
     ].join(" ");
   }
 
-  const todayIndex = data.findIndex((item) => item.m === todayLabel);
+  const todayIndex = data.findIndex((item) => item.key === todayKey);
   const todayX = todayIndex >= 0 ? scaleX(todayIndex) : null;
 
   return (
@@ -464,8 +466,8 @@ function ForecastSvgChart({
       })}
 
       {data.map((item, index) => (
-        <text key={`${item.m}-${index}`} x={scaleX(index)} y={height - 10} textAnchor="middle" fontSize="12" fill="#888780">
-          {item.m}
+        <text key={`${item.key}-${index}`} x={scaleX(index)} y={height - 10} textAnchor="middle" fontSize="12" fill="#888780">
+          {item.label}
         </text>
       ))}
 
@@ -584,8 +586,27 @@ function LegendItem({ color, label, dashed = false, block = false, band = false 
   );
 }
 
+function monthKey(date: string) {
+  return date.slice(0, 7);
+}
+
+function currentMonthKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function monthLabel(date: string, locale: string) {
-  return new Date(`${date.slice(0, 10)}T00:00:00.000Z`).toLocaleString(locale, { month: "short" });
+  return new Date(`${monthKey(date)}-01T00:00:00.000Z`).toLocaleString(locale, { month: "short", year: "2-digit" });
+}
+
+function formatConfidenceExplanation(forecast: ForecastResponse, l: (value: string) => string) {
+  const score = Math.round(forecast.confidence.score);
+  const periods = forecast.calculationDetails.historicalPeriodCount;
+  const variance = forecast.confidence.factors.historicalVariance.toFixed(4);
+  const seasonal = forecast.confidence.factors.seasonalConsistency.toFixed(4);
+  const completeness = forecast.confidence.factors.dataCompleteness.toFixed(4);
+
+  return `${l("Confidence is")} ${score}% ${l("based only on")} ${periods} ${l("tenant historical periods")}, ${variance} ${l("historical variance coefficient")}, ${seasonal} ${l("seasonal consistency")}, ${l("and")} ${completeness} ${l("data completeness")}.`;
 }
 
 function formatPercent(value: number) {
